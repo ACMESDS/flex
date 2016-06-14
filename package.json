@@ -1,0 +1,23 @@
+{
+  "name": "sql",
+  "version": "1.0.0",
+  "description": "SQL framework for geoNode",
+  "main": "sql.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@git.geointapps.org:geonode-dev-team/sql.git"
+  },
+  "keywords": [
+    "geoNode"
+  ],
+  "author": "brian.d.james@NGA Research",
+  "license": "ISC",
+  "dependencies": {
+    "jade": "^1.11.0",
+    "mysql": "^2.10.2"
+  },
+  "devDependencies": {}
+}
