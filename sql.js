@@ -43,7 +43,7 @@ var
  * 		flags	query flags
  * 		joins 	table joins
  * 
- * and req.ses parameters:
+ * and req parameters:
  * 
  * 		sql 	connection thread
  * 		client 	that is making this query 
@@ -56,27 +56,321 @@ var
  * @param {Object} res HTTP response
  * @param {Function} cb callback (typically SQL.close) that replies to client
  */
-function Crude(req,res,cb) {
+function Crude(req,res) {
+	
+	// Establish request flags
+	
+	setFlags(req);
+	
+	// Get req parameters
 	
 	var 
-		ses = req.ses,							// session
 		sql = this,								// sql connection
-		log = ses.log, 							// transaction log
-		client = log.Client, 						// client making request
-		//area = req.params.area, 					// DB table located in
+		log = req.log, 							// transaction log
+		client = req.client,
+		area = req.area,
+		table = (area ? area+DOT : "") + req.table,
+		action = req.action,  					// action requested
+		flags = req.flags || {}, 				// get flags
+		joins = req.joins || {}, 				// get left joins
+		//journal = req.journal,
+		//client = log.Client, 					// client making request
+		//area = req.params.area, 				// DB table located in
 		//table = ( area || SQL.DBTX[log.Table] || SQL.DB ) + DOT + log.Table,   // fully qualifed table name
-		area = req.ses.area,
-		table = (area ? area+DOT : "") + log.Table,
-		action = log.Action,  						// action requested
-		flags = req.flags, 						// get flags
-		joins = req.joins, 							// get left joins
 		//VTL = SQL.APP[action][log.Table],		// associated Virtual Table	Logic (engine)
 		lockID = table+DOT+log.RecID, 			// id of record lock
-		lock = ses.lock = LOCKS[lockID]; 			// record lock
+		lock = req.lock = LOCKS[lockID]; 			// record lock
 			
-	// Establish query flags
+	// Get query parameters
 	
-	if (file = flags.file) {		// Remap flags for file navigation request		
+	var	
+		//query = req.query,
+		query = req.query, 
+		set = req.set,
+		body = req.body,
+		builds = flags.build,
+		track = flags.track,
+		queue = flags.queue,
+		journal = [ req.journal ? "jou." + table : "" , log.Event, table, {ID: log.RecID} ],
+		locking = flags.lock ? true : false,
+		trace = req.flags.trace 
+			? function (q) {
+				console.log(q.sql);
+			}
+			: function () {};			
+		
+		//trace = action.toUpperCase() + " " + table,	
+		//parse = action.toUpperCase() + " " + table;
+
+	function setFlags(req) { 	// set and remap flags and joins from request query and body
+		var 
+			FLAGS = SQL.FLAGS,
+			strip = FLAGS.STRIP,
+			prefix = FLAGS.PREFIX,
+			lists = FLAGS.LISTS,
+			jsons = FLAGS.JSONS,
+			debug = FLAGS.DEBUG,
+			ID = FLAGS.ID;
+			
+		var
+			query = req.query || {},
+			body = req.body ||{},
+			flags = req.flags = {},
+			joins = req.joins = {};
+		
+		if (debug)
+			console.info({
+				i: "before",
+				a: req.action,
+				q: query,
+				b: body,
+				f: flags
+			});
+
+		for (var n in query) 		// remove bogus query parameters and remap query flags and joins
+			if ( n in strip ) 				// remove bogus
+				delete query[n];
+			else
+			if (n.charAt(0) == prefix) {  	// remap flag
+				flags[n.substr(1)] = query[n];
+				delete query[n];
+			}
+			else {							// remap join
+				var parts = n.split(DOT);
+				if (parts.length>1) {
+					joins[parts[0]] = n+"="+query[n];
+					delete query[n];
+				}
+			}	
+
+		for (var n in query) {		// unescape query parameters
+			var parm = query[n] = unescape(query[n]);
+
+			if ( parm.charAt(0) == "[") 
+				try { query[n] = JSON.parse(parm); } 
+				catch (err) { delete query[n]; }
+		}
+		
+		for (var n in body) 		// remap body flags
+			if (n.charAt(0) == prefix) {  
+				flags[n.substr(1)] = body[n];
+				delete body[n];
+			}
+		
+		if (ID in body) {  			// remap body record ID
+			query[ID] = body[ID];
+			delete body[ID];
+		}
+		
+		for (var n in flags) { 		// unescape flags
+			var parm = unescape(flags[n]);
+			
+			if (n in lists) 
+				flags[n] = parm ? parm.split(",") : "";
+			else
+			if (n in jsons)
+				try { flags[n] = JSON.parse(parm); } 
+				catch (err) { delete flags[n]; }
+			else
+				flags[n] = parm;
+		}
+
+		if (debug)
+			console.info({
+				i: "after",
+				a: req.action,
+				q: query,
+				b: body,
+				f: flags,
+				j: joins
+			});
+			
+		return(req);
+	}
+	
+	// journalling crude
+	
+	function SELECT(req,res) {
+
+		var 	
+			//client	= req.client,
+			//table 	= req.table,
+			//query 	= req.query, 
+			//flags 	= req.flags || {},
+			//joins	= req.joins || {},
+			sort 	= flags.sort,
+			page 	= flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
+			builds	= req.builds || "*",
+			search 	= flags.search,
+			
+			pivot	= flags.pivot,
+			browse	= flags.browse,
+			tree	= flags.tree,
+			
+			builds = flags.build || "*",
+
+			cmd = 
+				"SELECT SQL_CALC_FOUND_ROWS "
+				+ Builds( builds, search, flags )
+				+ ( tree 	? Tree( tree, query, flags ) : "" )			
+				+ ( browse 	? Browse( browse,  query, flags ) : "" )
+				+ ( pivot 	? Pivot( pivot,  query, flags ) : "" )
+				+ ( table 	? From( table, joins ) : "" )
+				+ Where( query, flags ) 
+				+ Having( flags.score )
+				+ ( flags.group ? Group( flags.group ) : "" )
+				+ ( sort 	? Order( sort ) : "" )
+				+ ( page 	? Page( page ) : "" );
+			
+		trace( sql.query(
+			cmd,
+			[table, Guard(query,true), page], function (err, recs) {
+							
+				res(err || recs);
+
+				if (search && !err) 
+					sql.spy(req,recs);
+		}));
+
+	}
+		
+	function DELETE(req,res) {
+		
+		var 
+			//query = req.query, 
+			//table = req.table,
+			//journal = req.journal,
+			//flags = req.flags,
+			queue = flags._queue;
+
+		var cmd = 
+			"DELETE " 
+			+ ( table ? From( table ) : "" )
+			+ Where( query, flags );
+		
+		if (false) 		// queue support (enable if useful)
+			sql.query("SELECT Name FROM ?? WHERE ?",[table,query])
+			.on("result", function (rec) {
+				sql.query("DELETE FROM queues WHERE least(?,1) AND Departed IS NULL", {
+					Client: "system",
+					Class: queue,
+					Job: rec.Name
+				});
+			});
+
+		sql.query( 			// attempt journal
+			"INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", 
+			journal)
+			
+		.on("end", function () {
+			trace( sql.query( 		// delete
+				cmd, [table, query, Guard(query,false)], function (err,info) {
+					res(err || info);
+			}));
+		});
+		
+		//if (journal) 
+		//else
+		//	sql.query( 			// delete
+		//		cmd, [table, query, Guard(query,false)], function (err,info) {
+		//			res(err || info);
+		//	}); 
+	}	
+	
+	function UPDATE(req,res) {
+		var 
+			//query = req.query, 
+			//table = req.table,
+			//journal = req.journal,
+			//flags = req.flags,
+			queue = flags._queue,
+			
+			cmd = Guard(set,false)
+				? "UPDATE ?? SET ? " + Where(Guard(query,false), flags)
+				: "#UPDATE IGNORED";
+			
+		sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
+		.on("end", function () {
+			
+			trace( sql.query(cmd, [table,set,query], function (err,info) { 	// update
+				
+				res( err || info );
+				
+				if (queue && set[queue])   						// queue support
+					sql.query("SELECT Name table ?? WHERE ?",[req.table,query])
+					.on("result", function (rec) {
+						sql.query("UPDATE queues SET ? WHERE least(?,1) AND Departed IS NULL", [{
+							Departed:new Date()
+						}, {
+							Client:"system",
+							Class:queue,
+							Job:rec.Name
+						}]);
+						
+						sql.query("INSERT INTO queues SET ?", {
+							Client:"system",
+							Class:queue,
+							Job:rec.Name,
+							State:req.set[queue],
+							Arrived:new Date(),
+							Notes:rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
+						});
+					});
+			
+				//sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)
+				//.on("end", function () {
+				//	sql.query( 								// insert
+				//		cmd, [table,set,query], function (err,info) {
+				//			res(err || info);
+				//	});
+				//});
+			}));
+
+		});
+		
+	}
+	
+	function INSERT(req,res) {
+
+		var 
+			//table = req.table,
+			//journal = req.journal,
+			//flags = req.flags,
+			//set = req.set,
+			queue = flags._queue,
+			
+			cmd = Guard(set,false)
+				? "INSERT INTO ?? SET ?" 
+				: "INSERT INTO ?? () VALUES ()";
+
+		trace( sql.query(  	// insert
+			cmd, [table,set], function (err,info) {
+			
+			res(err || info);
+			
+			if (false && queue)  // queue support (can enable but empty job name results)
+				sql.query("SELECT Name FROM ?? WHERE ?",[req.table,{ID:info.insertId}])
+				.on("result", function (rec) {
+					sql.query("INSERT INTO queues SET ?", {
+						Client	: "system",
+						Class	: queue,
+						Job	: rec.Name,
+						State	: set[queue],
+						Arrived	: new Date(),
+						Notes	: rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
+					});	
+				});
+		}));	
+
+	}
+	
+	function EXECUTE(req,res) {
+		res( new Error("Execute Reserved") );
+	}
+	
+	// Remap request flags if navigating folders
+
+	if (file = flags.file) {
 		var cmd = req.query.cmd;
 		var init = req.query.init;
 		var query = req.query = {
@@ -90,29 +384,19 @@ function Crude(req,res,cb) {
 		delete flags.pivot;
 	}
 							
-	// Get the flag parameters
-	
-	var	query = req.query,
-		body = req.body,
-		builds = flags.build,
-		track = flags.track,
-		queue = flags.queue,
-		journal = [ ses.journal ? "jou." + log.Table : "" , log.Event, table, {ID: log.RecID} ],
-		locking = flags.lock ? true : false,
-		trace = action.toUpperCase() + " " + table,	
-		parse = action.toUpperCase() + " " + table;
-
-	console.log((locking?"LOCK ":"FOR ")+"%s %s %s",
-		client,
-		(CLUSTER.isMaster ? "" : `CORE ${CLUSTER.worker.id}`),
-		parse.replace("SQL_CALC_FOUND_ROWS","").replace("??",table)
+	console.trace(
+		(locking?"LOCK ":"FOR ")
+		+ `${client} `
+		+ (CLUSTER.isMaster ? "" : `CORE ${CLUSTER.worker.id}`)
+		+ `${action} ${table}`
+		//+ parse.replace("SQL_CALC_FOUND_ROWS","").replace("??",table)
 	);
 
 	if (locking) 				// Execute query in a locked transaction thread
 		switch (action) {
 			case "select":
 
-				trace = sql.select({
+				SELECT({
 					client: client,
 					builds: builds,
 					query: query,
@@ -120,11 +404,12 @@ function Crude(req,res,cb) {
 					flags: flags
 				}, function (recs) {
 
-					var rec = (recs.constructor == Error) ? null : recs[0];
-
-					if (rec) {
+					if (recs.constructor == Error) 
+						res( recs );
+					else
+					if (rec = recs[0]) {
 						var lockID = table+DOT+rec.ID,			// record lock name	
-							lock = ses.lock = LOCKS[lockID]; 	// record lock
+							lock = req.lock = LOCKS[lockID]; 	// record lock
 
 						if (lock) {
 							if (false && SQL.notify)
@@ -140,19 +425,19 @@ function Crude(req,res,cb) {
 
 								lock.sql.query("COMMIT");
 								delete LOCKS[lockID];
-								ses.lock = null;
+								req.lock = null;
 								
-								cb(recs);
+								res(recs);
 							}
 							else {					// client does not own this transaction
 								lock.Hits++;
-								cb(new Error("locked by "+lock.Client));
+								res(new Error("locked by "+lock.Client));
 							}
 						}
 						else 
 							SQL.thread( function (txsql) {  	// reserve this thread for as long as it lives
 
-								var lock = ses.lock = LOCKS[lockID] = { 	// create a lock
+								var lock = req.lock = LOCKS[lockID] = { 	// create a lock
 									Table: table,
 									RecID: rec.ID,
 									Hits: 0,
@@ -171,56 +456,59 @@ function Crude(req,res,cb) {
 
 								txsql.query("START TRANSACTION", function (err) {  // queue this transaction
 
-									cb(recs);
+									res(recs);
 									
 								});
+								
+								// dont release txsql - timer being used
+								// to t/o if the client locks the record too long
 							});
 					}
 					else
-						cb(new Error("empty"));					
+						res(new Error("empty"));					
 				});
 						
 				break;
 			
 			case "delete":
 				
-				trace = sql.delete({
+				DELETE({
 					table: table,
 					query: query,
 					flags: flags,
 					journal: journal
-				}, cb);
+				}, res);
 				break;
 										
 			case "insert":
 
 				if (lock) 
 					if (lock.Client == client) {
-						trace = sql.insert({
+						INSERT({
 							table: table,
 							query: query,
 							flags: flags,
 							set: body,
 							journal: journal
-						}, cb);		
+						}, res);		
 
 						lock.sql.query("COMMIT", function (err) {
-							ses.lock = null;
+							req.lock = null;
 							delete LOCKS[lockID];
 						});
 					}
 					else {
 						lock.Hits++;
-						cb(new Error(lock.Client+" locked"));						
+						res(new Error(lock.Client+" locked"));						
 					}
 				else 
-					trace = sql.insert({
+					INSERT({
 						table: table,
 						query: query,
 						flags: flags,
 						set: body,
 						journal: journal
-					}, cb);
+					}, res);
 
 				break;
 				
@@ -228,116 +516,110 @@ function Crude(req,res,cb) {
 
 				if (lock) 
 					if (lock.Client == client) {
-						trace = sql.update({
+						UPDATE({
 							table: table,
 							query: query,
 							flags: flags,
 							set: body,
 							journal: journal
-						}, cb);		
+						}, res);		
 
 						lock.sql.query("COMMIT", function (err) {
-							ses.lock = null;
+							req.lock = null;
 							delete LOCKS[lockID];
 						});
 					}
 					else {
 						lock.Hits++;
-						cb(new Error(lock.Client+" locked"));						
+						res(new Error(lock.Client+" locked"));						
 					}
 				else 
-					trace = sql.update({
+					UPDATE({
 						table: table,
 						query: query,
 						flags: flags,
 						set: body,
 						journal: journal
-					}, cb);
+					}, res);
 
 				break;
 				
 			case "execute":
 				
-				cb(new Error("cant lock"));
+				res( new Error("cant lock") );
 				break;
 				
 			default:
 			
-				cb(new Error("invalid request"));
+				res( new Error("invalid request") );
 				break;
 		}
-	
-	/*
-	else
-	if (VTL) 					// Execute Virtual Table query in this sql thread (with cb)
-		return VTL(req, cb);
-	*/
 	
 	else 						// Execute non-locking query
 		switch (action) {
 			case "select": 		// No journalling needed
 
-				trace = sql.select({
+				SELECT({
 					client: client,
 					builds: builds,
 					query: query,
 					table: table,
 					flags: flags,
 					joins: joins
-				}, cb);
+				}, res);
 
 				break;
 
 			case "insert": 		// No journalling needed
 				
-				trace = sql.insert({
+				INSERT({
 					table: table,
 					query: query,
 					flags: flags,
 					set: body,
 					journal: journal
-				}, cb);
+				}, res);
 
 				break;
 
 			case "delete": 		// Journalling attempted
 				
-				trace = sql.delete({
+				DELETE({
 					table: table,
 					query: query,
 					flags: flags,
 					journal: journal
-				}, cb);
+				}, res);
 
 				break;
 
 			case "update":		// Journalling attempted
 			
-				trace = sql.update({
+				UPDATE({
 					table: table,
 					query: query,
 					flags: flags,
 					set: body,
 					journal: journal
-				}, cb);
+				}, res);
 
 				break;
 
 			case "execute": 	// Create-report table schema
 				
-				trace = sql.execute({
+				EXECUTE({
 					table: table,
 					query: query,
 					flags: flags,
 					set: body,
 					journal: journal
-				}, cb);
+				}, res);
 				
 				break;
 
 			default:
 				
-				cb(new Error("invalid request"));
+				res(new Error("invalid request"));
 				break;
 				
 		}	
@@ -350,7 +632,7 @@ function Crude(req,res,cb) {
 			Period: 0
 		})
 		.on("error", function (err) {
-			cb(err);
+			res(err);
 		})
 		.on("result", function (eng) {  // Get Virtual Table engine
 
@@ -359,7 +641,7 @@ function Crude(req,res,cb) {
 				
 				if (VTL) {
 					console.log("REGISTER "+eng.Engine+" ENGINE "+eng.Name);
-					VTL(req, cb);
+					VTL(req, res);
 				}
 			}
 			else 						// Query table (attempt journalling)
@@ -373,7 +655,7 @@ function Crude(req,res,cb) {
 							table: table,
 							flags: flags,
 							joins: joins
-						}, cb);
+						}, res);
 
 						break;
 
@@ -385,7 +667,7 @@ function Crude(req,res,cb) {
 							flags: flags,
 							set: body,
 							journal: journal
-						}, cb);
+						}, res);
 
 						break;
 
@@ -396,7 +678,7 @@ function Crude(req,res,cb) {
 							query: query,
 							flags: flags,
 							journal: journal
-						}, cb);
+						}, res);
 
 						break;
 
@@ -408,7 +690,7 @@ function Crude(req,res,cb) {
 							flags: flags,
 							set: body,
 							journal: journal
-						}, cb);
+						}, res);
 
 						break;
 
@@ -420,13 +702,13 @@ function Crude(req,res,cb) {
 							flags: flags,
 							set: body,
 							journal: journal
-						}, cb);
+						}, res);
 						
 						break;
 
 					default:
 						
-						cb(new Error("invalid request"));
+						res(new Error("invalid request"));
 						break;
 						
 				}
@@ -434,17 +716,18 @@ function Crude(req,res,cb) {
 		});
 	*/
 
-				// Notify clients of change.  Send originating client's client ID so client cant ignore its own changes.  
+	// Notify clients of change.  Send originating client's client ID so client cant ignore its own changes.  
 
-				if (!SQL.APP[log.Action][log.Table])  		// Dont broadcast SQL.APP calls
-					if (SQL.notify) 					// Clients are to be synched
-						SQL.notify( log.Action, { 		// Broadcast change to clients
-							table: log.Table, 
-							body: body, 
-							ID: log.RecID, 
-							client: log.Client, 
-							flag: flags.client
-						});
+	//if (!SQL.APP[log.Action][log.Table])  	// Dont broadcast SQL.APP calls
+	if (false)
+		if (SQL.notify) 					// Clients are to be synched
+			SQL.notify( log.Action, { 		// Broadcast change to clients
+				table: log.Table, 
+				body: body, 
+				ID: log.RecID, 
+				client: log.Client, 
+				flag: flags.client
+			});
 
 }
 
@@ -458,15 +741,14 @@ function Crude(req,res,cb) {
  * @param {Array} recs SQL data or status.
  * @param {Function} cb callback(Object).
  */
-function Norm(req,res,recs,cb) {	
+function _Norm(req,res,recs,cb) {	
 	var 
 		sql = this,
-		ses = req.ses,
-		log = ses.log,
+		log = req.log,
 		query = req.query,
 		body = req.body,
 		flags = req.flags,
-		ok = flags._lock ? (ses.lock ? "locked" : "unlocked") : "ok";
+		ok = flags._lock ? (req.lock ? "locked" : "unlocked") : "ok";
 
 	if (recs)
 		switch (recs.constructor) {
@@ -519,9 +801,9 @@ function Norm(req,res,recs,cb) {
 							+ rows.indent("#table",{dims:"'[800,400]'"}).indent("");
 
 //console.log(jade);
-					htmlgen = SQL.RENDER.compile(jade, ses) || function (ses) { return "Bad Jade"; }; 
+					htmlgen = SQL.RENDER.compile(jade, req) || function (req) { return "Bad Jade"; }; 
 
-					cb( htmlgen(ses) );
+					cb( htmlgen(req) );
 				}
 				
 				else
@@ -1004,7 +1286,7 @@ console.log("NAVIGATE Recs="+recs.length+" NodeID="+flags.NodeID+" Nodes="+Nodes
 
 /**
  * @method submit
- * Submit the crude query define by req.ses (see SQLCON.crude), then reply to the client 
+ * Submit the crude query define by req.req (see SQLCON.crude), then reply to the client 
  * with a normalized response hash when the query completes.
  *
  * @param {Object} req HTTP requests 
@@ -1037,26 +1319,26 @@ function Submit(req,res,cb) {
  * @param {Object} res HTTP response
  * @param {Object} rtn hash to send
  */	
+ /*
 function Reply(res,rtn) {
 	var sql = this;
 	
 	res.send(rtn);
 	sql.release();
-}
+}*/
 
 // CRUDE interface
 
 function Select(req,res) {
 
-	var 
-		sql = this,
-		log = req.log,
-		query = req.query,
-		body = req.body,
-		flags = req.flags,
-		ok = flags._lock ? (req.lock ? "locked" : "unlocked") : "ok";
-
-	sql.crude(req, function (recs) {
+	this.crude(req, function (recs) {
+		
+		var
+			flags = req.flags;
+			//log = req.log,
+			//ok = flags._lock ? (req.lock ? "locked" : "unlocked") : "ok";
+		
+		console.log(flags);
 		
 		if (flag = flags.jade) { 			// jadeify records  
 
@@ -1488,7 +1770,7 @@ console.log("NAVIGATE Recs="+recs.length+" NodeID="+flags.NodeID+" Nodes="+Nodes
 			
 		else 								// Return number of records scanned in table
 			res(recs);
-
+		
 	});
 }
 
@@ -1528,20 +1810,20 @@ function Select(args,cb) {
 
 		cmd = 
 			"SELECT SQL_CALC_FOUND_ROWS "
-			+ SQL.builds( builds, search, flags )
-			+ ( tree 	? SQL.tree( tree, query, flags ) : "" )			
-			+ ( browse 	? SQL.browse( browse,  query, flags ) : "" )
-			+ ( pivot 	? SQL.pivot( pivot,  query, flags ) : "" )
-			+ ( table 	? SQL.from( table, joins ) : "" )
-			+ SQL.where( query, flags ) 
-			+ SQL.having( flags.score )
-			+ ( flags.group ? SQL.group( flags.group ) : "" )
-			+ ( sort 	? SQL.order( sort ) : "" )
-			+ ( page 	? SQL.page( page ) : "" );
+			+ Builds( builds, search, flags )
+			+ ( tree 	? Tree( tree, query, flags ) : "" )			
+			+ ( browse 	? Browse( browse,  query, flags ) : "" )
+			+ ( pivot 	? Pivot( pivot,  query, flags ) : "" )
+			+ ( table 	? From( table, joins ) : "" )
+			+ Where( query, flags ) 
+			+ Having( flags.score )
+			+ ( flags.group ? Group( flags.group ) : "" )
+			+ ( sort 	? Order( sort ) : "" )
+			+ ( page 	? Page( page ) : "" );
 		
 	var q = sql.query(
 		cmd,
-		[table, sql.guard(query,true), page], function (err, recs) {
+		[table, Guard(query,true), page], function (err, recs) {
 						
 			cb(err || recs);
 
@@ -1568,8 +1850,8 @@ function Delete(args,cb) {
 
 	var cmd = 
 		"DELETE " 
-		+ ( table ? SQL.from( table ) : "" )
-		+ SQL.where( query, flags );
+		+ ( table ? From( table ) : "" )
+		+ Where( query, flags );
 	
 	if (false) 		// queue support (enable if useful)
 		sql.query("SELECT Name FROM ?? WHERE ?",[table,query])
@@ -1587,7 +1869,7 @@ function Delete(args,cb) {
 		
 	.on("end", function () {
 		sql.query( 		// delete
-			cmd, [table, query, sql.guard(query,false)], function (err,info) {
+			cmd, [table, query, Guard(query,false)], function (err,info) {
 				cb(err || info);
 		});
 	});
@@ -1595,7 +1877,7 @@ function Delete(args,cb) {
 	//if (journal) 
 	//else
 	//	sql.query( 			// delete
-	//		cmd, [table, query, sql.guard(query,false)], function (err,info) {
+	//		cmd, [table, query, Guard(query,false)], function (err,info) {
 	//			cb(err || info);
 	//	}); 
 
@@ -1614,8 +1896,8 @@ function Update(args,cb) {
 		flags = args.flags,
 		queue = flags._queue,
 		
-		cmd = sql.guard(set,false)
-			? "UPDATE ?? SET ? " + SQL.where(sql.guard(query,false), flags)
+		cmd = Guard(set,false)
+			? "UPDATE ?? SET ? " + Where(Guard(query,false), flags)
 			: "#UPDATE IGNORED";
 		
 	sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
@@ -1672,7 +1954,7 @@ function Insert(args,cb) {
 		flags = args.flags,
 		queue = flags._queue,
 		
-		cmd = sql.guard(set,false)
+		cmd = Guard(set,false)
 			? "INSERT INTO ?? SET ?" 
 			: "INSERT INTO ?? () VALUES ()";
 
@@ -1804,7 +2086,7 @@ function Flatten(flags, catalog, limits, cb) {
 		
 	flatten( sql, rtns, 0, SQL.listify(catalog), catalog, limits, cb, function (search) {
 
-		return SQL.builds( "", search, flags);
+		return Builds( "", search, flags);
 
 	});
 }
@@ -1852,6 +2134,31 @@ SQL.config = function (opts,cb) {
 	SQL.copy(opts,SQL);
 	
 	if (cb) cb(SQL);
+	
+	if (SQL.thread)
+		SQL.thread( function (sql) {
+			
+			console.trace("EXTENDING SQL CONNECTOR");
+			SQL.extend(sql.constructor, {
+				crude: Crude,
+				//guard: Guard,
+				//norm: Norm,
+				//submit: Submit,
+				//reply: Reply,
+				select: Select,
+				delete: Delete,
+				update: Update,
+				insert: Insert,
+				execute: Execute,
+				flatten: Flatten,
+				spy: Spy,
+				Each: Each
+			});
+		
+			sql.release();
+		});		
+	
+	return SQL;
 };
 		
 SQL.config({
@@ -1901,214 +2208,211 @@ SQL.config({
 		d: "date",
 		f: "varchar(255)"
 	},
-
-	search: function (flags) {
-		var	search = flags.search || "FullSearch";
-
-		if ( find = flags.find = flags.has ) 
-			return ( search.enclose("CONCAT") + "," + JSON.stringify(find) ).enclose("INSTR");
-
-		else
-		if ( find = flags.find = flags.pat ) 
-			return search + " LIKE " + JSON.stringify(find);
-
-		else
-			return "";
-	},
-
-	page: function ( page ) {
-		return " LIMIT ?";
-	},
 	
-	having: function ( having ) {
-		if (having)
-			return " HAVING Score>"+having;
-		else
-			return "";
-	},
-	
-	order: function ( sorts ) {
-		return " ORDER BY " + SQL.joinify( sorts, LIST, function (n,sort) {
-			
-			if (sort.constructor == Object) 
-				return "`" + sort.property + "` " + sort.direction;
-				
-			else
-				return sort;
-				
-		});
-	},
-
-	group: function (group) { 
-		return " GROUP BY " + group;
-	},
-
-	where: function (query, flags) {
-		var search = SQL.search(flags);
-		var rtn = " WHERE least(?,1)";
+	FLAGS: {						//< Properties for request flags
+		STRIP:	 					//< Flags to strip from request
+			{"":1, "_":1, leaf:1, _dc:1, id:1, "=":1, "?":1}, 		
 		
-		if (search) rtn += " AND "+search;
-
-		SQL.each( query, function (n, arg) {
-			if (arg.constructor == Array) {
-				delete query[n];
-				
-				rtn += " AND " + n;
-				
-				switch (arg.length) {
-					case 0:
-						rtn += " IS NULL ";
-						break;
-					case 1:
-						rtn += arg[0];
-						break;							
-					case 2: 
-						rtn += " BETWEEN " + arg[0] + " AND " + arg[1];
-						break;
-					case 3:
-					default:
-				}
-			}
-		});
+		JSONS: {
+			sort: 1,
+			build: 1
+		},
 		
-		return rtn;
-	},
-	
-	from: function (from, joins) {
-		var rtn = [" FROM ??"];
-
-		SQL.each( joins, function (join,on) {
-			rtn.push( "LEFT JOIN "+join+" ON "+on );
-		});
+		LISTS: { 					//< Array list flags
+			pivot: 1,
+			browse: 1,
+			index: 1,
+			file: 1,
+			tree: 1,
+			jade: 1,
+			json: 1
+		},
 		
-		return rtn.join(" ");
-	},
-
-	pivot: function (pivot, query, flags) {
-		var	NodeID = query.NodeID || "root",
-			nodes = (NodeID == "root") ? [] : NodeID.split(LIST);
-		
-		flags.group = nodes.length ? "" : pivot.join();
-
-		if (flags.group) {  		// at the root
-			var rtn = 
-				  ", " + (pivot.join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
-				+ ", " + SQL.RECID.enclose("count") + " as NodeCount"	
-				+ ", false as leaf, true as expandable, false as expanded";
-	//			+ ", 'root' as parentId";
-		}
-		else {  					// requesting all nodes under a specific node
-			var rtn = 
-				  ", " + SQL.RECID + " as NodeID"
-	//			  ", " + SQL.RECID + " as ID"
-				+ ", 1 as NodeCount"
-				+ ", true as leaf, true as expandable, false as expanded";
-	//				+ ", '" + NodeID + "' as parentId";
-			
-			nodes.each( function (n,node) {
-				query[ pivot[n] ] = node;
-			});		
-		}
-
-		// Convert NodeID to a flag 
-
-		flags.NodeID = NodeID;
-		delete query.NodeID;
-		
-		return rtn;
-	},
-	
-	tree: function (tree, query, flags) {
-		flags.group = tree.join();
-		return "";
-	},
-	
-	browse: function (browse, query, flags) {
-		var	NodeID = query.NodeID,	
-			nodes = NodeID ? NodeID.split(LIST) : [];
-		
-		flags.group = (nodes.length<browse.length) ? browse[nodes.length] : "";
-
-		if (flags.group) { 
-			var rtn = 
-				  ", " + (browse.slice(0,nodes.length+1).join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
-				+ ", " + SQL.RECID.enclose("count") + " as NodeCount"	
-				+ ", false as leaf, true as expandable, false as expanded";
-				
-			nodes.each( function (n,node) {
-				query[ browse[n] ] = node;
-			});
-		}
-		else  {
-			var rtn = 
-				  ", " + (browse.concat([SQL.RECID]).join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
-				+ ", 1 as NodeCount"	
-				+ ", true as leaf, false as expandable, true as expanded";
-				
-			nodes.each( function (n,node) {
-				query[(n >= browse.length) ? SQL.RECID : browse[n]] = node;
-			});
-		}
-		
-		// Convert NodeID to a flag 
-		
-		flags.NodeID = NodeID;
-		delete query.NodeID;
-		
-		return rtn;
-	},
-	
-	builds: function (builds, search, flags) {
-		var find = "";
-		
-		if (builds.constructor == String) builds = builds ? [ builds ] : [];
-		
-		if ( find = flags.find = flags.nlp ) {
-			flags.score = flags.score || 0.1;		
-			builds.push( search.enclose("MATCH") + " " + JSON.stringify(find).enclose("AGAINST") + " AS Score" );	
-		}
-		else
-		if ( find = flags.find = flags.bin ) {
-			flags.score = flags.score || 0.1;		
-			builds.push( search.enclose("MATCH") + " " + (JSON.stringify(find)+" IN BOOLEAN MODE").enclose("AGAINST") + " AS Score" );
-		}
-		else
-		if ( find = flags.find = flags.exp ) {
-			flags.score = flags.score || 0.1;		
-			builds.push( search.enclose("MATCH") + " " + (JSON.stringify(find)+" WITH QUERY EXPANSION").enclose("AGAINST") + " AS Score" );
-		}
-
-		return builds.join(LIST);
-
+		ID: "ID", 					//< SQL record ID
+		PREFIX: "_",				//< Prefix that indicates a field is a flag
+		DEBUG: true 				//< Echo flags before and after parse
 	}
 
-}, function(opts) {
-
-	SQL.copy(opts,SQL);
-
-	if (SQL.thread)
-		SQL.thread( function (sql) {
-			
-console.log("Extend sql");
-			SQL.extend(sql.constructor, {
-				crude: Crude,
-				//guard: Guard,
-				//norm: Norm,
-				//submit: Submit,
-				//reply: Reply,
-				select: Select,
-				delete: Delete,
-				update: Update,
-				insert: Insert,
-				execute: Execute,
-				flatten: Flatten,
-				spy: Spy,
-				Each: Each
-			});
-		
-		});		
-	
-	return SQL;
 });
+
+function Search( flags ) {
+	var	search = flags.search || "FullSearch";
+
+	if ( find = flags.find = flags.has ) 
+		return ( search.enclose("CONCAT") + "," + JSON.stringify(find) ).enclose("INSTR");
+
+	else
+	if ( find = flags.find = flags.pat ) 
+		return search + " LIKE " + JSON.stringify(find);
+
+	else
+		return "";
+}
+
+function Page( page ) {
+	return " LIMIT ?";
+}
+
+function Having( having ) {
+	if (having)
+		return " HAVING Score>"+having;
+	else
+		return "";
+}
+
+function Order( sorts ) {
+	return " ORDER BY " + SQL.joinify( sorts, LIST, function (n,sort) {
+		
+		if (sort.constructor == Object) 
+			return "`" + sort.property + "` " + sort.direction;
+			
+		else
+			return sort;
+			
+	});
+}
+
+function Group( group ) { 
+	return " GROUP BY " + group;
+}
+
+function Where(query, flags) {
+	var search = Search(flags);
+	var rtn = " WHERE least(?,1)";
+	
+	if (search) rtn += " AND "+search;
+
+	SQL.each( query, function (n, arg) {
+		if (arg.constructor == Array) {
+			delete query[n];
+			
+			rtn += " AND " + n;
+			
+			switch (arg.length) {
+				case 0:
+					rtn += " IS NULL ";
+					break;
+				case 1:
+					rtn += arg[0];
+					break;							
+				case 2: 
+					rtn += " BETWEEN " + arg[0] + " AND " + arg[1];
+					break;
+				case 3:
+				default:
+			}
+		}
+	});
+	
+	return rtn;
+}
+
+function From(from, joins) {
+	var rtn = [" FROM ??"];
+
+	SQL.each( joins, function (join,on) {
+		rtn.push( "LEFT JOIN "+join+" ON "+on );
+	});
+	
+	return rtn.join(" ");
+}
+
+function Pivot(pivot, query, flags) {
+	var	NodeID = query.NodeID || "root",
+		nodes = (NodeID == "root") ? [] : NodeID.split(LIST);
+	
+	flags.group = nodes.length ? "" : pivot.join();
+
+	if (flags.group) {  		// at the root
+		var rtn = 
+			  ", " + (pivot.join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
+			+ ", " + SQL.RECID.enclose("count") + " as NodeCount"	
+			+ ", false as leaf, true as expandable, false as expanded";
+//			+ ", 'root' as parentId";
+	}
+	else {  					// requesting all nodes under a specific node
+		var rtn = 
+			  ", " + SQL.RECID + " as NodeID"
+//			  ", " + SQL.RECID + " as ID"
+			+ ", 1 as NodeCount"
+			+ ", true as leaf, true as expandable, false as expanded";
+//				+ ", '" + NodeID + "' as parentId";
+		
+		nodes.each( function (n,node) {
+			query[ pivot[n] ] = node;
+		});		
+	}
+
+	// Convert NodeID to a flag 
+
+	flags.NodeID = NodeID;
+	delete query.NodeID;
+	
+	return rtn;
+}
+
+function Tree(tree, query, flags) {
+	flags.group = tree.join();
+	return "";
+}
+
+function Browse(browse, query, flags) {
+	var	NodeID = query.NodeID,	
+		nodes = NodeID ? NodeID.split(LIST) : [];
+	
+	flags.group = (nodes.length<browse.length) ? browse[nodes.length] : "";
+
+	if (flags.group) { 
+		var rtn = 
+			  ", " + (browse.slice(0,nodes.length+1).join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
+			+ ", " + SQL.RECID.enclose("count") + " as NodeCount"	
+			+ ", false as leaf, true as expandable, false as expanded";
+			
+		nodes.each( function (n,node) {
+			query[ browse[n] ] = node;
+		});
+	}
+	else  {
+		var rtn = 
+			  ", " + (browse.concat([SQL.RECID]).join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
+			+ ", 1 as NodeCount"	
+			+ ", true as leaf, false as expandable, true as expanded";
+			
+		nodes.each( function (n,node) {
+			query[(n >= browse.length) ? SQL.RECID : browse[n]] = node;
+		});
+	}
+	
+	// Convert NodeID to a flag 
+	
+	flags.NodeID = NodeID;
+	delete query.NodeID;
+	
+	return rtn;
+}
+
+function Builds(builds, search, flags) {
+	var find = "";
+	
+	if (builds.constructor == String) builds = builds ? [ builds ] : [];
+	
+	if ( find = flags.find = flags.nlp ) {
+		flags.score = flags.score || 0.1;		
+		builds.push( search.enclose("MATCH") + " " + JSON.stringify(find).enclose("AGAINST") + " AS Score" );	
+	}
+	else
+	if ( find = flags.find = flags.bin ) {
+		flags.score = flags.score || 0.1;		
+		builds.push( search.enclose("MATCH") + " " + (JSON.stringify(find)+" IN BOOLEAN MODE").enclose("AGAINST") + " AS Score" );
+	}
+	else
+	if ( find = flags.find = flags.exp ) {
+		flags.score = flags.score || 0.1;		
+		builds.push( search.enclose("MATCH") + " " + (JSON.stringify(find)+" WITH QUERY EXPANSION").enclose("AGAINST") + " AS Score" );
+	}
+
+	return builds.join(LIST);
+
+}
 
 // UNCLASSIFIED
