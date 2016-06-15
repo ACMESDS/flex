@@ -33,6 +33,52 @@ var
 	DOT = ".", 									// table.type etc separator
 	LOCKS = {};									// database locks
 
+SQL.RecID = "ID";
+
+/**
+ * @method config
+ * 
+ * Configure module with spcified options, then callback the
+ * initializer.  
+ * */
+SQL.config = function (opts,cb) {
+	
+	SQL.copy(opts,SQL);
+	
+	if (cb) cb(SQL);
+	
+	if (SQL.thread)
+		SQL.thread( function (sql) {
+			
+			console.trace("EXTENDING SQL CONNECTOR");
+			SQL.extend(sql.constructor, {
+				crude: Crude,
+				//guard: Guard,
+				//norm: Norm,
+				//submit: Submit,
+				//reply: Reply,
+				select: Select,
+				delete: Delete,
+				update: Update,
+				insert: Insert,
+				execute: Execute,
+				flatten: Flatten,
+				spy: Spy,
+				Each: Each
+			});
+		
+			sql.release();
+		});		
+	
+	return SQL;
+};
+		
+/**
+ * @private
+ * 
+ * Private functions
+ * */		
+
 /**
  * @method crude
  * Execute a query, log transaction stats, broadcast query event to other clients, then
@@ -66,7 +112,7 @@ function Crude(req,res) {
 	
 	var 
 		sql = this,								// sql connection
-		log = req.log, 							// transaction log
+		log = req.log||{RecID:0}, 							// transaction log
 		client = req.client,
 		area = req.area,
 		table = (area ? area+DOT : "") + req.table,
@@ -78,7 +124,7 @@ function Crude(req,res) {
 		//area = req.params.area, 				// DB table located in
 		//table = ( area || SQL.DBTX[log.Table] || SQL.DB ) + DOT + log.Table,   // fully qualifed table name
 		//VTL = SQL.APP[action][log.Table],		// associated Virtual Table	Logic (engine)
-		lockID = table+DOT+log.RecID, 			// id of record lock
+		lockID = `${table}.${log.RecID}`, 			// id of record lock
 		lock = req.lock = LOCKS[lockID]; 			// record lock
 			
 	// Get query parameters
@@ -229,7 +275,7 @@ function Crude(req,res) {
 				res(err || recs);
 
 				if (search && !err) 
-					sql.spy(req,recs);
+					this.spy(req,recs);
 		}));
 
 	}
@@ -1319,7 +1365,7 @@ function Submit(req,res,cb) {
  * @param {Object} res HTTP response
  * @param {Object} rtn hash to send
  */	
- /*
+/*
 function Reply(res,rtn) {
 	var sql = this;
 	
@@ -1335,10 +1381,6 @@ function Select(req,res) {
 		
 		var
 			flags = req.flags;
-			//log = req.log,
-			//ok = flags._lock ? (req.lock ? "locked" : "unlocked") : "ok";
-		
-		console.log(flags);
 		
 		if (flag = flags.jade) { 			// jadeify records  
 
@@ -1828,7 +1870,7 @@ function Select(args,cb) {
 			cb(err || recs);
 
 			if (search && !err) 
-				sql.spy(args,recs);
+				Spy(args,recs);
 	});
 
 	if (args.trace)  console.log(q.sql);
@@ -2096,19 +2138,20 @@ function Guard(query, def) {
 	return def;
 }
 
-function Spy(args,recs) {
-	var sql = this;
+function Spy(req,recs) {
+	var sql = this,
+		flags = req.flags || {};
 	
-	console.log("SPY ON "+args.client);
+	console.log("SPY ON "+req.client);
 	
-	if (find = args.flags.find)
+	if (find = flags.find)
 		sql.query("INSERT INTO searches SET ? ON DUPLICATE KEY UPDATE Count=Count+1", {
 			Made: new Date(),
 			Searching: find.replace(/ /g,""),
-			Tokens: args.table + DOT + args.flags.search,
+			Tokens: req.table + DOT + req.flags.search,
 			Returned: recs.length,
 			Count: 1,
-			Client: args.client
+			Client: req.client
 		});
 }
 
@@ -2122,118 +2165,6 @@ function Each(query, args, cb) {
 	else
 		this.query(query,args);
 }
-
-/**
- * @method config
- * 
- * Configure module with spcified options, then callback the
- * initializer.  
- * */
-SQL.config = function (opts,cb) {
-	
-	SQL.copy(opts,SQL);
-	
-	if (cb) cb(SQL);
-	
-	if (SQL.thread)
-		SQL.thread( function (sql) {
-			
-			console.trace("EXTENDING SQL CONNECTOR");
-			SQL.extend(sql.constructor, {
-				crude: Crude,
-				//guard: Guard,
-				//norm: Norm,
-				//submit: Submit,
-				//reply: Reply,
-				select: Select,
-				delete: Delete,
-				update: Update,
-				insert: Insert,
-				execute: Execute,
-				flatten: Flatten,
-				spy: Spy,
-				Each: Each
-			});
-		
-			sql.release();
-		});		
-	
-	return SQL;
-};
-		
-SQL.config({
-
-	/**
-	* Specifies database connection parameters for EXAPP.
-	*/
-	//DB: "none", 					// Default database
-	notify: null,		 			// Emitter to sync clients
-	RENDER : null, 					// Jade renderer
-	APP : null,	 					// Default virtual table logic
-	POOL : null, 					// No pool until SQB configured
-	BIT : null,						// No BIT-mode until set to a SYNC hash
-	TRACE : false,					// Trace SQL querys to the console
-	//USER : ENV.DB_USER,				// SQL client account (safe login for production)
-	//PASS : ENV.DB_PASS,				// Passphrase to the SQL DB 
-	//SESSIONS : 2,					// Maxmimum number of simultaneous sessions
-	DBTX : {						// Table to database translator
-		issues: "openv",
-		tta: "openv",
-		standards: "openv",
-		milestones: "openv",
-		txstatus: "openv",
-		apps: "openv",
-		trades: "openv",
-		hwreqts: "openv",
-		options: "openv",
-		swreqts: "openv",
-		aspreqts: "openv",
-		ispreqts: "openv" },
-	RESET : 12,	 					// mysql connection pool timer (hours)
-	RECID : "ID",					// DB key field
-	NODENAV : {						// specs for folder navigation
-		ROOT : "", 					// Root node ID
-		JOIN : ",'"+LIST+"',"				// Node joiner (embed same slash value above)
-	},
-	DEFTYPES : {
-		"#": "varchar(32)",
-		"_": "varchar(1)",
-		a: "float unique auto_increment",
-		t: "varchar(64)",
-		n: "float",
-		x: "mediumtext",
-		h: "mediumtext",
-		i: "int(11)",
-		c: "int(11)",
-		d: "date",
-		f: "varchar(255)"
-	},
-	
-	FLAGS: {						//< Properties for request flags
-		STRIP:	 					//< Flags to strip from request
-			{"":1, "_":1, leaf:1, _dc:1, id:1, "=":1, "?":1}, 		
-		
-		JSONS: {
-			sort: 1,
-			build: 1
-		},
-		
-		LISTS: { 					//< Array list flags
-			pivot: 1,
-			browse: 1,
-			index: 1,
-			file: 1,
-			tree: 1,
-			jade: 1,
-			json: 1
-		},
-		
-		ID: "ID", 					//< SQL record ID
-		PREFIX: "_",				//< Prefix that indicates a field is a flag
-		DEBUG: true 				//< Echo flags before and after parse
-	}
-
-});
 
 function Search( flags ) {
 	var	search = flags.search || "FullSearch";
@@ -2414,5 +2345,81 @@ function Builds(builds, search, flags) {
 	return builds.join(LIST);
 
 }
+
+// Initialize
+
+SQL.config({
+
+	/**
+	* Specifies database connection parameters for EXAPP.
+	*/
+	//DB: "none", 					// Default database
+	notify: null,		 			// Emitter to sync clients
+	RENDER : null, 					// Jade renderer
+	APP : null,	 					// Default virtual table logic
+	POOL : null, 					// No pool until SQB configured
+	BIT : null,						// No BIT-mode until set to a SYNC hash
+	TRACE : false,					// Trace SQL querys to the console
+	//USER : ENV.DB_USER,				// SQL client account (safe login for production)
+	//PASS : ENV.DB_PASS,				// Passphrase to the SQL DB 
+	//SESSIONS : 2,					// Maxmimum number of simultaneous sessions
+	DBTX : {						// Table to database translator
+		issues: "openv",
+		tta: "openv",
+		standards: "openv",
+		milestones: "openv",
+		txstatus: "openv",
+		apps: "openv",
+		trades: "openv",
+		hwreqts: "openv",
+		options: "openv",
+		swreqts: "openv",
+		aspreqts: "openv",
+		ispreqts: "openv" },
+	RESET : 12,	 					// mysql connection pool timer (hours)
+	RECID : "ID",					// DB key field
+	NODENAV : {						// specs for folder navigation
+		ROOT : "", 					// Root node ID
+		JOIN : ",'"+LIST+"',"				// Node joiner (embed same slash value above)
+	},
+	DEFTYPES : {
+		"#": "varchar(32)",
+		"_": "varchar(1)",
+		a: "float unique auto_increment",
+		t: "varchar(64)",
+		n: "float",
+		x: "mediumtext",
+		h: "mediumtext",
+		i: "int(11)",
+		c: "int(11)",
+		d: "date",
+		f: "varchar(255)"
+	},
+	
+	FLAGS: {						//< Properties for request flags
+		STRIP:	 					//< Flags to strip from request
+			{"":1, "_":1, leaf:1, _dc:1, id:1, "=":1, "?":1}, 		
+		
+		JSONS: {
+			sort: 1,
+			build: 1
+		},
+		
+		LISTS: { 					//< Array list flags
+			pivot: 1,
+			browse: 1,
+			index: 1,
+			file: 1,
+			tree: 1,
+			jade: 1,
+			json: 1
+		},
+		
+		ID: "ID", 					//< SQL record ID
+		PREFIX: "_",				//< Prefix that indicates a field is a flag
+		DEBUG: true 				//< Echo flags before and after parse
+	}
+
+});
 
 // UNCLASSIFIED
