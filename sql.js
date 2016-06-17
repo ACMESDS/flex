@@ -119,7 +119,7 @@ function Crude(req,res) {
 		action = req.action,  					// action requested
 		flags = req.flags || {}, 				// get flags
 		joins = req.joins || {}, 				// get left joins
-		//journal = req.journal,
+		journal = req.journal,
 		//client = log.Client, 					// client making request
 		//area = req.params.area, 				// DB table located in
 		//table = ( area || SQL.DBTX[log.Table] || SQL.DB ) + DOT + log.Table,   // fully qualifed table name
@@ -458,12 +458,12 @@ function Crude(req,res) {
 							lock = req.lock = LOCKS[lockID]; 	// record lock
 
 						if (lock) {
-							if (false && SQL.notify)
-								SQL.notify( "update",  {
+							if (false && SQL.emitter)
+								SQL.emitter( "update",  {
 									table: lock.Table,
 									body: {_Locked: true},
 									ID: lock.RecID,
-									client: lock.Client,
+									from: lock.Client,
 									flag: flags.client 
 								});
 
@@ -491,12 +491,12 @@ function Crude(req,res) {
 									Client: client
 								};
 
-								if (false && SQL.notify)     // may prove useful to enable
-									SQL.notify( "update",  {
+								if (false && SQL.emitter)     // may prove useful to enable
+									SQL.emitter( "update",  {
 										table: lock.Table,
 										body: {_Locked: false},
 										ID: lock.RecID,
-										client: lock.Client,
+										from: lock.Client,
 										flag: flags.client 
 									});
 
@@ -765,15 +765,14 @@ function Crude(req,res) {
 	// Notify clients of change.  Send originating client's client ID so client cant ignore its own changes.  
 
 	//if (!SQL.APP[log.Action][log.Table])  	// Dont broadcast SQL.APP calls
-	if (false)
-		if (SQL.notify) 					// Clients are to be synched
-			SQL.notify( log.Action, { 		// Broadcast change to clients
-				table: log.Table, 
-				body: body, 
-				ID: log.RecID, 
-				client: log.Client, 
-				flag: flags.client
-			});
+	if (SQL.emitter)
+		SQL.emitter( req.action, { 		// Broadcast change to clients
+			table: req.table, 
+			body: body, 
+			ID: log.RecID, 
+			from: req.client, 
+			flag: flags.client
+		});
 
 }
 
@@ -1296,13 +1295,12 @@ console.log("NAVIGATE Recs="+recs.length+" NodeID="+flags.NodeID+" Nodes="+Nodes
 
 				// Notify clients of change.  Send originating client's client ID so client cant ignore its own changes.  
 
-				if (!SQL.APP[log.Action][log.Table])  		// Dont broadcast SQL.APP calls
-					if (SQL.notify) 					// Clients are to be synched
-						SQL.notify( log.Action, { 		// Broadcast change to clients
-							table: log.Table, 
+				if (!SQL.APP[log.Action][log.Table] && SQL.emitter)  		// Dont broadcast SQL.APP calls
+						SQL.emitter( req.action, { 		// Broadcast change to clients
+							table: req.table, 
 							body: body, 
 							ID: log.RecID, 
-							client: log.Client, 
+							from: req.client, 
 							flag: flags.client
 						});
 
@@ -2354,7 +2352,8 @@ SQL.config({
 	* Specifies database connection parameters for EXAPP.
 	*/
 	//DB: "none", 					// Default database
-	notify: null,		 			// Emitter to sync clients
+	emitter: null,		 			// Emitter to sync clients
+	thread: null, 					// SQL connection threader
 	RENDER : null, 					// Jade renderer
 	APP : null,	 					// Default virtual table logic
 	POOL : null, 					// No pool until SQB configured
