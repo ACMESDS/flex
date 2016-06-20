@@ -13,6 +13,11 @@
  * 
  * Interface with mysql database and job service via a crude protocol.
  * */
+var 											// globals
+	ENV = process.env, 							// external variables
+	LIST = ",",									// list separator
+	DOT = ".", 									// table.type etc separator
+	LOCKS = {};									// database locks
 
 var 											// nodejs bindings
 	FS = require("fs"), 						// file system resources
@@ -20,59 +25,56 @@ var 											// nodejs bindings
 	CP = require("child_process"), 				// Process spawning
 	CLUSTER = require('cluster'); 				// Work cluster manager
 
-var
-	SQL = module.exports = 
-		require("../base").config(
-			require("../enum").config( 
-				require("mysql") 
-		));
+var												// 3rd party bindings
+	MYSQL = require("mysql");
+
+var 											// geonode bindings
+	BASE = require("../base"),
+	Copy = BASE.copy,
+	Each = BASE.each;
 
 var
-	ENV = process.env, 							// external variables
-	LIST = ",",									// list separator
-	DOT = ".", 									// table.type etc separator
-	LOCKS = {};									// database locks
-
-SQL.RecID = "ID";
-
-/**
- * @method config
- * 
- * Configure module with spcified options, then callback the
- * initializer.  
- * */
-SQL.config = function (opts,cb) {
-	
-	SQL.copy(opts,SQL);
-	
-	if (cb) cb(SQL);
-	
-	if (SQL.thread)
-		SQL.thread( function (sql) {
+	SQL = module.exports = {
+		
+		RecID: "ID",
+		
+		/**
+		 * @method config
+		 * 
+		 * Configure module with spcified options, then callback the
+		 * initializer.  
+		 * */
+		config: function (opts) {
 			
-			console.trace("EXTENDING SQL CONNECTOR");
-			SQL.extend(sql.constructor, {
-				crude: Crude,
-				//guard: Guard,
-				//norm: Norm,
-				//submit: Submit,
-				//reply: Reply,
-				select: Select,
-				delete: Delete,
-				update: Update,
-				insert: Insert,
-				execute: Execute,
-				flatten: Flatten,
-				spy: Spy,
-				Each: Each
-			});
-		
-			sql.release();
-		});		
-	
-	return SQL;
+			if (opts) Copy(opts,SQL);
+			
+			if (SQL.thread)
+				SQL.thread( function (sql) {
+					
+					console.trace("EXTENDING SQL CONNECTOR");
+					BASE.extend(sql.constructor, {
+						crude: Crude,
+						//guard: Guard,
+						//norm: Norm,
+						//submit: Submit,
+						//reply: Reply,
+						flatten: Flatten,
+						spy: Spy,
+						Each: Each
+					});
+				
+					sql.release();
+				});		
+		},
+
+		// CRUDE interface
+		select: Select,
+		delete: Delete,
+		update: Update,
+		insert: Insert,
+		execute: Execute,
 };
-		
+
 /**
  * @private
  * 
@@ -2211,7 +2213,7 @@ function Where(query, flags) {
 	
 	if (search) rtn += " AND "+search;
 
-	SQL.each( query, function (n, arg) {
+	Each( query, function (n, arg) {
 		if (arg.constructor == Array) {
 			delete query[n];
 			
@@ -2239,7 +2241,7 @@ function Where(query, flags) {
 function From(from, joins) {
 	var rtn = [" FROM ??"];
 
-	SQL.each( joins, function (join,on) {
+	Each( joins, function (join,on) {
 		rtn.push( "LEFT JOIN "+join+" ON "+on );
 	});
 	
