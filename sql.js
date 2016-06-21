@@ -2126,7 +2126,7 @@ function Flatten(flags, catalog, limits, cb) {
 			//pivots: flags._pivot || ""
 		};
 		
-	flatten( sql, rtns, 0, SQL.listify(catalog), catalog, limits, cb, function (search) {
+	flatten( sql, rtns, 0, BASE.listify(catalog), catalog, limits, cb, function (search) {
 
 		return Builds( "", search, flags);
 
@@ -2192,7 +2192,7 @@ function Having( having ) {
 }
 
 function Order( sorts ) {
-	return " ORDER BY " + SQL.joinify( sorts, LIST, function (n,sort) {
+	return " ORDER BY " + BASE.joinify( sorts, LIST, function (n,sort) {
 		
 		if (sort.constructor == Object) 
 			return "`" + sort.property + "` " + sort.direction;
