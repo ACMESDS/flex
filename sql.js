@@ -43,11 +43,19 @@ var
 		insert: Insert,
 		execute: Execute,
 
+		jobs: {
+			select: selectJobs,
+			delete: deleteJobs,
+			update: updateJobs,
+			insert: insertJobs,
+			execute: executeJobs
+		},
+		
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
 		thread: null, 					// SQL connection threader
 		RENDER : null, 					// Jade renderer
-		TRACE : false,					// sqlTrace SQL querys to the console
+		TRACE : true,					// Trace SQL querys to the console
 		//BIT : null,					// No BIT-mode until set to a SYNC hash
 		//POOL : null, 					// No pool until SQB configured
 		//DB: "none", 					// Default database
@@ -253,7 +261,7 @@ function sqlCrude(req,res) {
 				j: joins
 			});
 			
-		return(req.flags);
+		return(flags);
 	}
 	
 	var 
@@ -443,7 +451,8 @@ function sqlCrude(req,res) {
 			}
 		};	
 		
-		
+	//console.log(req);
+	
 	// Remap request flags if navigating folders
 
 	if (file = flags.file) {
@@ -461,7 +470,7 @@ function sqlCrude(req,res) {
 	}
 							
 	if (SQL.TRACE)
-		console.log(`${locking?"lock":""} ${action} ${table} for ${client} on ${CLUSTER.isMaster ? "0" : CLUSTER.worker.id}`);
+		console.log(`${locking?"lock":""} ${action} ${table} for ${client} on ${CLUSTER.isMaster ? "master" : "worker"+CLUSTER.worker.id}`);
 
 	if (locking) 				// Execute query in a locked transaction thread
 		switch (action) {
@@ -1582,6 +1591,219 @@ function sqlTrace(sql) {
 	
 	if (SQL.TRACE)
 		console.log(sql.sql);
+}
+
+/**
+ * Job queue interface.
+ * 
+ * select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
+ * execute(client,job,cb): create detector-trainging job for client with callback to cb(job) when completed.
+ * update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
+ * delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
+ * insert(job,cb): add job and route to callback cb(job) when executed.
+ * */
+
+SQL.queues = [ null, {
+		timer: 0,
+		batch: {},
+		rate: 10e3
+	}, {
+		timer: 0,
+		batch: {},
+		rate: 8e3
+	}, {
+		timer: 0,
+		batch: {},
+		rate: 4e3
+	}, {
+		timer: 0,
+		batch: {},
+		rate: 2e3
+	}, {
+		timer: 0,
+		batch: {},
+		rate: 1e3
+	}];
+	
+function selectJobs(req, cb) { 
+
+	// route valid jobs matching sql-where clause to its assigned callback cb(req).
+	
+	sql.query(
+		req.where
+		? `SELECT *, datediff(now(),Arrived) AS Age,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE NOT Hold AND Departed IS NULL AND NOT profiles.Banned AND (${req.where}) ORDER BY QoS,Priority`
+		: `SELECT *, datediff(now(),Arrived) AS Age,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE NOT Hold AND Departed IS NULL AND NOT profiles.Banned ORDER BY QoS,Priority`
+	)
+	.on("error", function (err) {
+		console.log(err);
+	})
+	.on("result", function (rec) {
+		try {
+			if (cb) cb( APP.queues[rec.QoS].batch[rec.ID] );
+		}
+		catch (err) {
+			console.log("LOST job "+[rec.ID,rec.QoS]);
+		}
+	});	
+}
+
+function updateJobs(req, exe) { 
+	// adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
+		
+	selectJobs(req, function (job) {
+		
+		exe(job.req, function (ack) {
+
+			if (req.qos)
+				sql.query("UPDATE queues SET ? WHERE ?", [{
+					QoS: req.qos,
+					Notes: ack}, {ID:job.ID}]);
+			else
+			if (req.inc)
+				sql.query("UPDATE queues SET ?,Priority=max(0,min(5,Priority+?)) WHERE ?", [{
+					Notes: ack}, req.inc, {ID:job.ID}]);
+			
+			if (req.qos) {  // move req to another qos queue
+				delete APP.queues[job.qos].batch[job.ID];
+				job.qos = req.qos;
+				APP.queues[qos].batch[job.ID] = job;
+			}
+			
+			if (req.pid)
+				CP.exec(`renice ${req.inc} -p ${job.pid}`);				
+				
+		});
+	});
+}
+		
+function deleteJobs(req, exe) { 
+	selectJobs(req, function (job) {
+		
+		exe(job.req, function (ack) {
+			sql.query("UPDATE queues SET ? WHERE ?", [{
+				Departed: new Date(),
+				Notes:ack}, {ID:job.ID}]);
+
+			delete APP.queues[job.qos].batch[job.ID];
+			
+			if (job.pid) CP.exec("kill "+job.pid); 	// kill a spawned req
+		});
+	});
+}
+
+function insertJobs(job, exe) { 
+	function util() {				// compute cpu utils and return avg util
+		var avgUtil = 0;
+		var cpus = OS.cpus();
+		
+		cpus.each(function (n,cpu) {
+			idle = cpu.times.idle;
+			busy = cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.user;
+			avgUtil += busy / (busy + idle);
+		});
+		return avgUtil / cpus.length;
+	}
+	
+	function regulate(job,cb) {		// regulate job and spawn if job.cmd provided
+			
+		job.cb = cb;
+		var queue = SQL.queues[job.qos];
+		
+		if (queue) { 				// regulated job
+			queue.batch[job.ID] = job;
+			
+			if (!queue.timer) 		// add job to idle queue
+				queue.timer = setInterval(function (queue) {
+					
+					var batch = queue.batch;
+					
+					if (batch.length) { // queue is non empty
+						
+						var pop = {priority: -1};
+						batch.each( function (ID,job) {
+							if (job.priority > pop.priority) pop = job;
+						});
+														
+console.log(">>>> queue depth="+batch.length+" pop,qos,rate="+[pop.name,pop.qos,queue.rate]);
+
+						if (pop.cmd)	// spawn pop and return its pid
+							pop.pid = CP.exec(pop.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
+								console.log(err + stdout + stderr);
+								
+								if (pop.cb)
+									APP.thread( function (sql) {
+										pop.cb( err ? err + stdout + stderr : null );
+									});
+							});
+						else  			// execute pop cb on new sql thread
+						if (pop.cb) 
+							SQL.thread( function (sql) {
+								pop.job.sql = sql;  // give job this fresh sql connector								
+								pop.cb(sql,pop);
+							});
+
+						delete batch[pop.ID];
+					} 
+					else {	// queue is empty
+						clearInterval(queue.timer);
+						queue.timer = null;
+					}
+
+				}, queue.rate, queue);
+		}
+		else 						// unregulated job - stay on request sql thread
+		if (cb) cb( job.job.sql, job );
+	}
+
+	//console.log( "QUEUE " + (job.cmd || job.name));
+
+	var rec = {
+		Client	: job.client,
+		Class	: job.class,
+		State	: 0,
+		Arrived	: new Date(),
+		Departed: null,
+		Mark	: 0,
+		Job		: job.name,
+		RunTime	: 0,
+		Classif : "",
+		Util	: util(),
+		Priority: 1,
+		Notes	: "queued",
+		QoS		: job.qos,
+		Work 	: 1
+	};
+
+	sql.query("INSERT INTO queues SET ?", rec, function (err,info) {
+		
+		if (err) 
+			console.log(err);
+			
+		else {
+			job.ID = info.insertId;
+			regulate(job, function (sql,job) {
+				
+				exe(job.req, function (ack) {
+
+					var Departed = new Date();
+
+					sql.query("UPDATE queues SET ? WHERE ?", [{
+						Departed: Departed,
+						RunTime: (Departed - rec.Arrived)/3.6e6,
+						Util: util(),
+						Notes: ack
+					}, {ID:job.ID}
+					]);
+
+					console.log("job="+ack);
+				}); 
+			
+			});
+		}
+	});
+}
+	
+function executeJobs(req, exe) {
 }
 
 // UNCLASSIFIED
