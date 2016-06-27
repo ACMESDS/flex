@@ -42,15 +42,7 @@ var
 		update: Update,
 		insert: Insert,
 		execute: Execute,
-
-		jobs: {
-			select: selectJobs,
-			delete: deleteJobs,
-			update: updateJobs,
-			insert: insertJobs,
-			execute: executeJobs
-		},
-		
+	
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
 		thread: null, 					// SQL connection threader
@@ -130,26 +122,22 @@ var
 			
 			if (opts) Copy(opts,SQL);
 			
-			if (false) //SQL.thread)
-				SQL.thread( function (sql) {
-					
-					sqlTrace("EXTENDING SQL CONNECTOR");
-					
-					if (0)
-					BASE.extend(sql.constructor, {
-						//crude: sqlCrude,
-						//guard: Guard,
-						//norm: Norm,
-						//submit: Submit,
-						//reply: Reply,
-						//flatten: sqlFlatten,
-						//spy: sqlSpy,
-						//Each: sqlEach
-					});
+			if (SQL.thread)
+			SQL.thread( function (sql) {
 				
-					sql.release();
-				});		
-		},
+console.log("EXTENDING SQL CONNECTOR");
+				
+				BASE.extend(sql.constructor, {
+					selectJobs: selectJobs,
+					deleteJobs: deleteJobs,
+					updateJobs: updateJobs,
+					insertJobs: insertJobs,
+					executeJobs: executeJobs
+				});
+
+				sql.release();
+			});		
+		}
 
 };
 
@@ -350,9 +338,7 @@ function sqlCrude(req,res) {
 				.on("end", function () {
 					
 					sqlTrace( sql.query( 		// delete
-						"DELETE " 
-							+ ( table ? From( table ) : "" )
-							+ Where( query, flags ), 
+						"DELETE FROM ?? WHERE least(?,1)" ,
 					
 						[table, query, Guard(query,false)], function (err,info) {
 							
@@ -377,10 +363,10 @@ function sqlCrude(req,res) {
 					sqlTrace( sql.query(
 					
 						Guard(body,false)
-						? "UPDATE ?? SET ? " + Where(Guard(query,false), flags)
+						? "UPDATE ?? SET ? WHERE least(?,1)"
 						: "#UPDATE IGNORED", 
 						
-						[table,body,query], function (err,info) { 	// update
+						[table,body,Guard(query,false)], function (err,info) { 	// update
 						
 						res( err || info );
 						
@@ -1589,8 +1575,10 @@ function Guard(query, def) {
 
 function sqlTrace(sql) {
 	
-	if (SQL.TRACE)
+	//if (SQL.TRACE)
 		console.log(sql.sql);
+		
+	return sql;
 }
 
 /**
@@ -1605,22 +1593,27 @@ function sqlTrace(sql) {
 
 SQL.queues = [ null, {
 		timer: 0,
+		depth: 0,
 		batch: {},
 		rate: 10e3
 	}, {
 		timer: 0,
+		depth: 0,
 		batch: {},
 		rate: 8e3
 	}, {
 		timer: 0,
+		depth: 0,
 		batch: {},
 		rate: 4e3
 	}, {
 		timer: 0,
+		depth: 0,
 		batch: {},
 		rate: 2e3
 	}, {
 		timer: 0,
+		depth: 0,
 		batch: {},
 		rate: 1e3
 	}];
@@ -1628,6 +1621,7 @@ SQL.queues = [ null, {
 function selectJobs(req, cb) { 
 
 	// route valid jobs matching sql-where clause to its assigned callback cb(req).
+	var sql = this;
 	
 	sql.query(
 		req.where
@@ -1649,8 +1643,10 @@ function selectJobs(req, cb) {
 
 function updateJobs(req, exe) { 
 	// adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
-		
-	selectJobs(req, function (job) {
+	
+	var sql = this;
+	
+	sql.selectJobs(req, function (job) {
 		
 		exe(job.req, function (ack) {
 
@@ -1677,7 +1673,9 @@ function updateJobs(req, exe) {
 }
 		
 function deleteJobs(req, exe) { 
-	selectJobs(req, function (job) {
+	
+	var sql = this;
+	sql.selectJobs(req, function (job) {
 		
 		exe(job.req, function (ack) {
 			sql.query("UPDATE queues SET ? WHERE ?", [{
@@ -1710,41 +1708,43 @@ function insertJobs(job, exe) {
 		var queue = SQL.queues[job.qos];
 		
 		if (queue) { 				// regulated job
-			queue.batch[job.ID] = job;
+			queue.batch[job.ID] = job;  // add job to queue
+			queue.depth++;
 			
-			if (!queue.timer) 		// add job to idle queue
+//console.log(queue);
+
+			if (!queue.timer) 		// restart idle queue
 				queue.timer = setInterval(function (queue) {
 					
 					var batch = queue.batch;
-					
-					if (batch.length) { // queue is non empty
-						
-						var pop = {priority: -1};
-						batch.each( function (ID,job) {
-							if (job.priority > pop.priority) pop = job;
+
+					var pop = {priority: -1}; 
+					Each( batch, function (ID,job) {
+						if (job.priority > pop.priority) pop = job;
+					});
+									
+					delete batch[pop.ID];
+					queue.depth--;
+				
+//console.log("pop depth="+queue.depth+" pop="+[pop.name,pop.qos]);
+
+					if (pop.cmd)	// spawn pop and return its pid
+						pop.pid = CP.exec(pop.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
+							console.log(err + stdout + stderr);
+							
+							if (pop.cb)
+								APP.thread( function (sql) {
+									pop.cb( err ? err + stdout + stderr : null );
+								});
 						});
-														
-console.log(">>>> queue depth="+batch.length+" pop,qos,rate="+[pop.name,pop.qos,queue.rate]);
-
-						if (pop.cmd)	// spawn pop and return its pid
-							pop.pid = CP.exec(pop.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
-								console.log(err + stdout + stderr);
-								
-								if (pop.cb)
-									APP.thread( function (sql) {
-										pop.cb( err ? err + stdout + stderr : null );
-									});
-							});
-						else  			// execute pop cb on new sql thread
-						if (pop.cb) 
-							SQL.thread( function (sql) {
-								pop.job.sql = sql;  // give job this fresh sql connector								
-								pop.cb(sql,pop);
-							});
-
-						delete batch[pop.ID];
-					} 
-					else {	// queue is empty
+					else  			// execute pop cb on new sql thread
+					if (pop.cb) 
+						SQL.thread( function (sql) {
+							pop.req.sql = sql;  // give job this fresh sql connector								
+							pop.cb(sql,pop);
+						});
+				
+					if (!queue.depth) { 	// empty queue goes idle
 						clearInterval(queue.timer);
 						queue.timer = null;
 					}
@@ -1752,10 +1752,8 @@ console.log(">>>> queue depth="+batch.length+" pop,qos,rate="+[pop.name,pop.qos,
 				}, queue.rate, queue);
 		}
 		else 						// unregulated job - stay on request sql thread
-		if (cb) cb( job.job.sql, job );
+		if (cb) cb( job.req.sql, job );
 	}
-
-	//console.log( "QUEUE " + (job.cmd || job.name));
 
 	var rec = {
 		Client	: job.client,
@@ -1774,6 +1772,7 @@ console.log(">>>> queue depth="+batch.length+" pop,qos,rate="+[pop.name,pop.qos,
 		Work 	: 1
 	};
 
+	var sql = this;
 	sql.query("INSERT INTO queues SET ?", rec, function (err,info) {
 		
 		if (err) 
@@ -1795,7 +1794,7 @@ console.log(">>>> queue depth="+batch.length+" pop,qos,rate="+[pop.name,pop.qos,
 					}, {ID:job.ID}
 					]);
 
-					console.log("job="+ack);
+console.log("job returns: "+ack);
 				}); 
 			
 			});
