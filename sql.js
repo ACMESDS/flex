@@ -88,30 +88,6 @@ var
 			f: "varchar(255)"
 		},
 		
-		FLAGS: {						//< Properties for request flags
-			STRIP:	 					//< Flags to strip from request
-				{"":1, "_":1, leaf:1, _dc:1, id:1, "=":1, "?":1}, 		
-			
-			JSONS: {
-				sort: 1,
-				build: 1
-			},
-			
-			LISTS: { 					//< Array list flags
-				pivot: 1,
-				browse: 1,
-				index: 1,
-				file: 1,
-				tree: 1,
-				jade: 1,
-				json: 1
-			},
-			
-			ID: "ID", 					//< SQL record ID
-			PREFIX: "_",				//< Prefix that indicates a field is a flag
-			TRACE: "trace" 				//< Echo flags before and after parse
-		},
-		
 		/**
 		 * @method config
 		 * 
@@ -132,7 +108,11 @@ console.log("EXTENDING SQL CONNECTOR");
 					deleteJobs: deleteJobs,
 					updateJobs: updateJobs,
 					insertJobs: insertJobs,
-					executeJobs: executeJobs
+					executeJobs: executeJobs,
+					
+					spy: monitorSearch,
+					flatten: flattenCatalog
+					
 				});
 
 				sql.release();
@@ -166,91 +146,6 @@ console.log("EXTENDING SQL CONNECTOR");
  */
 function sqlCrude(req,res) {
 	
-	function setFlags(req) { 	// set and remap flags and joins from request query and body
-		var 
-			FLAGS = SQL.FLAGS,
-			strip = FLAGS.STRIP,
-			prefix = FLAGS.PREFIX,
-			lists = FLAGS.LISTS,
-			jsons = FLAGS.JSONS,
-			ID = FLAGS.ID;
-			
-		var
-			query = req.query || {},
-			body = req.body || {},
-			flags = req.flags = {},
-			trace = query[FLAGS.TRACE] ? true : false,
-			joins = req.joins = {};
-		
-		if (trace)
-			console.info({
-				i: "before",
-				a: req.action,
-				q: query,
-				b: body,
-				f: flags
-			});
-
-		for (var n in query) 		// remove bogus query parameters and remap query flags and joins
-			if ( n in strip ) 				// remove bogus
-				delete query[n];
-			else
-			if (n.charAt(0) == prefix) {  	// remap flag
-				flags[n.substr(1)] = query[n];
-				delete query[n];
-			}
-			else {							// remap join
-				var parts = n.split(DOT);
-				if (parts.length>1) {
-					joins[parts[0]] = n+"="+query[n];
-					delete query[n];
-				}
-			}	
-
-		for (var n in query) {		// unescape query parameters
-			var parm = query[n] = unescape(query[n]);
-
-			if ( parm.charAt(0) == "[") 
-				try { query[n] = JSON.parse(parm); } 
-				catch (err) { delete query[n]; }
-		}
-		
-		for (var n in body) 		// remap body flags
-			if (n.charAt(0) == prefix) {  
-				flags[n.substr(1)] = body[n];
-				delete body[n];
-			}
-		
-		if (ID in body) {  			// remap body record ID
-			query[ID] = body[ID];
-			delete body[ID];
-		}
-		
-		for (var n in flags) { 		// unescape flags
-			var parm = unescape(flags[n]);
-			
-			if (n in lists) 
-				flags[n] = parm ? parm.split(",") : "";
-			else
-			if (n in jsons)
-				try { flags[n] = JSON.parse(parm); } 
-				catch (err) { delete flags[n]; }
-			else
-				flags[n] = parm;
-		}
-
-		if (trace)
-			console.info({
-				i: "after",
-				a: req.action,
-				q: query,
-				b: body,
-				f: flags,
-				j: joins
-			});
-			
-		return(flags);
-	}
 	
 	var 
 		sql = req.sql,								// sql connection
@@ -271,7 +166,7 @@ function sqlCrude(req,res) {
 
 		// flag parameters
 		
-		flags = setFlags(req),
+		flags = req.flags, //setFlags(req),
 		builds = flags.build,
 		track = flags.track,
 		queue = flags.queue,
@@ -312,7 +207,7 @@ function sqlCrude(req,res) {
 						res(err || recs);
 
 						if (search && !err) 
-							sqlSpy(req,recs);
+							monitorSearch(req,recs);
 				}));
 
 			},
@@ -1277,11 +1172,11 @@ function Execute(args,cb) {
 */
 
 /**
- * @method sqlFlatten
+ * @method flattenCatalog
  * 
  * Flatten entire database for searching the catalog
  * */
-function sqlFlatten(flags, catalog, limits, cb) {
+function flattenCatalog(flags, catalog, limits, cb) {
 	
 	function flatten( sql, rtns, depth, order, catalog, limits, returncb, matchcb) {
 		var table = order[depth];
@@ -1360,7 +1255,7 @@ function sqlFlatten(flags, catalog, limits, cb) {
 	});
 }
 
-function sqlSpy(req,recs) {
+function monitorSearch(req,recs) {
 	var sql = this,
 		flags = req.flags || {};
 	
