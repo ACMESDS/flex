@@ -199,10 +199,6 @@ function sqlCrude(req,res) {
 		// CRUDE response interface
 		function sqlSelect(res) {
 
-console.log("crude select");
-console.log(flags);
-console.log([browse,tree,builds,lockID,lock]);
-
 			sqlTrace( sql.query(
 
 				"SELECT SQL_CALC_FOUND_ROWS "
