@@ -145,28 +145,39 @@ console.log("EXTENDING SQL CONNECTOR");
  * @param {Function} cb callback (typically SQL.close) that replies to client
  */
 function sqlCrude(req,res) {
-	
-	
-	var 
-		sql = req.sql,								// sql connection
 		
-		// request parameters
-		log = req.log||{RECID:0}, 				// transaction log
-		client = req.client,
-		area = req.area,
+	var 
+		sql = req.sql,							// sql connection
+		log = req.log||{RecID:0}, 				// transaction log
+		client = req.client, 					// client info
+		area = req.area, 	
 		table = SQL.DBTX[req.table] || req.table,
 		action = req.action,  					// action requested				
 		joins = req.joins || {}, 				// get left joins
-		journal = [ req.journal ? "jou." + table : "" , log.Event, table, {ID: log.RECID} ],
+		journal = [ req.journal ? "jou." + table : "" , log.Event, table, {ID: log.RecID} ],
 
-		// query and body parameters
+		// query, body and flags parameters
 		
 		query = req.query, 
 		body = req.body,
-
-		// flag parameters
+		flags = req.flags; //setFlags(req);
 		
-		flags = req.flags, //setFlags(req),
+	if (file = flags.file) {   // Remap request flags if navigating folders
+		var cmd = req.query.cmd;
+		var init = req.query.init;
+		var query = req.query = {
+			NodeID: init 
+				? SQL.NODENAV.ROOT 
+				: (req.query.target || SQL.NODENAV.ROOT)
+		};
+		
+		flags.NodeID = query.NodeID;
+		flags.browse = file;
+		flags.file = cmd;
+		delete flags.pivot;
+	}
+								
+	var
 		builds = flags.build,
 		track = flags.track,
 		queue = flags.queue,
@@ -181,175 +192,162 @@ function sqlCrude(req,res) {
 		
 		// record locking parameters
 
-		lockID = `${table}.${log.RECID}`, 			// id of record lock
+		lockID = `${table}.${log.RecID}`, 			// id of record lock
 		lock = req.lock = LOCKS[lockID], 			// record lock
-		locking = flags.lock ? true : false,
+		locking = flags.lock ? true : false;
 		
-		crude = {  									// CRUDE response interface
-			select: function(res) {
+		// CRUDE response interface
+		function sqlSelect(res) {
 
-				sqlTrace( sql.query(
+console.log("crude select");
+console.log(flags);
+console.log([browse,tree,builds,lockID,lock]);
 
-					"SELECT SQL_CALC_FOUND_ROWS "
-						+ Builds( builds, search, flags )
-						+ ( tree 	? Tree( tree, query, flags ) : "" )			
-						+ ( browse 	? Browse( browse,  query, flags ) : "" )
-						+ ( pivot 	? Pivot( pivot,  query, flags ) : "" )
-						+ ( table 	? From( table, joins ) : "" )
-						+ Where( query, flags ) 
-						+ Having( flags.score )
-						+ ( flags.group ? Group( flags.group ) : "" )
-						+ ( sort 	? Order( sort ) : "" )
-						+ ( page 	? Page( page ) : "" ),
+			sqlTrace( sql.query(
 
-					[table, Guard(query,true), page], function (err, recs) {
-									
-						res(err || recs);
+				"SELECT SQL_CALC_FOUND_ROWS "
+					+ Builds( builds, search, flags )
+					+ ( tree 	? Tree( tree, query, flags ) : "" )			
+					+ ( browse 	? Browse( browse,  query, flags ) : "" )
+					+ ( pivot 	? Pivot( pivot,  query, flags ) : "" )
+					+ ( table 	? From( table, joins ) : "" )
+					+ Where( query, flags ) 
+					+ Having( flags.score )
+					+ ( flags.group ? Group( flags.group ) : "" )
+					+ ( sort 	? Order( sort ) : "" )
+					+ ( page 	? Page( page ) : "" ),
 
-						if (search && !err) 
-							monitorSearch(req,recs);
-				}));
+				[table, Guard(query,true), page], function (err, recs) {
+							
+					res(err || recs);
 
-			},
-			
-			delete: function(res) {
+					/*if (search && !err) 
+						monitorSearch(req,recs);*/
+			}));
+
+		}
+		
+		function sqlDelete(res) {
 				
-				if (false) 		// queue support (enable if useful)
-					sql.query("SELECT Name FROM ?? WHERE ?",[table,query])
-					.on("result", function (rec) {
+			if (false) 		// queue support (enable if useful)
+				sql.query("SELECT Name FROM ?? WHERE ?",[table,query])
+				.on("result", function (rec) {
 
-						sql.query("DELETE FROM queues WHERE least(?,1) AND Departed IS NULL", {
-							Client: "system",
-							Class: queue,
-							Job: rec.Name
-						});
-
+					sql.query("DELETE FROM queues WHERE least(?,1) AND Departed IS NULL", {
+						Client: "system",
+						Class: queue,
+						Job: rec.Name
 					});
 
-				sql.query( 						// attempt journal
-					"INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", 
-					journal)
-					
-				.on("end", function () {
-					
-					sqlTrace( sql.query( 		// delete
-						"DELETE FROM ?? WHERE least(?,1)" ,
-					
-						[table, query, Guard(query,false)], function (err,info) {
-							
-							res(err || info);					
-					}));
-					
 				});
+
+			sql.query( 						// attempt journal
+				"INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", 
+				journal)
 				
-				//if (journal) 
-				//else
-				//	sql.query( 			// delete
-				//		cmd, [table, query, Guard(query,false)], function (err,info) {
-				//			res(err || info);
-				//	}); 
-			},
-			
-			update: function(res) {
-
-				sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
-				.on("end", function () {
-					
-					sqlTrace( sql.query(
-					
-						Guard(body,false)
-						? "UPDATE ?? SET ? WHERE least(?,1)"
-						: "#UPDATE IGNORED", 
-						
-						[table,body,Guard(query,false)], function (err,info) { 	// update
-						
-						res( err || info );
-						
-						if (queue && body[queue])   						// queue support
-							sql.query("SELECT Name table ?? WHERE ?",[req.table,query])
-							.on("result", function (rec) {
-								sql.query("UPDATE queues SET ? WHERE least(?,1) AND Departed IS NULL", [{
-									Departed:new Date()
-								}, {
-									Client:"system",
-									Class:queue,
-									Job:rec.Name
-								}]);
-								
-								sql.query("INSERT INTO queues SET ?", {
-									Client:"system",
-									Class:queue,
-									Job:rec.Name,
-									State:req.body[queue],
-									Arrived:new Date(),
-									Notes:rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
-								});
-							});
-					
-						//sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)
-						//.on("end", function () {
-						//	sql.query( 								// insert
-						//		cmd, [table,body,query], function (err,info) {
-						//			res(err || info);
-						//	});
-						//});
-					}));
-
-				});
+			.on("end", function () {
 				
-			},
+				sqlTrace( sql.query( 		// sqlDelete
+					"DELETE FROM ?? WHERE least(?,1)" ,
+				
+					[table, query, Guard(query,false)], function (err,info) {
+						
+						res(err || info);					
+				}));
+				
+			});
 			
-			insert: function(res) {
+			//if (journal) 
+			//else
+			//	sql.query( 			// sqlDelete
+			//		cmd, [table, query, Guard(query,false)], function (err,info) {
+			//			res(err || info);
+			//	}); 
+		}
+			
+		function sqlUpdate(res) {
 
-				sqlTrace( sql.query(  	// insert
+			sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
+			.on("end", function () {
+				
+				sqlTrace( sql.query(
 				
 					Guard(body,false)
-						? "INSERT INTO ?? SET ?" 
-						: "INSERT INTO ?? () VALUES ()", 
-						
-					[table,body], function (err,info) {
+					? "UPDATE ?? SET ? WHERE least(?,1)"
+					: "#UPDATE IGNORED", 
 					
-					res(err || info);
+					[table,body,Guard(query,false)], function (err,info) { 	// sqlUpdate
 					
-					if (false && queue)  // queue support (can enable but empty job name results)
-						sql.query("SELECT Name FROM ?? WHERE ?",[req.table,{ID:info.insertId}])
+					res( err || info );
+					
+					if (queue && body[queue])   						// queue support
+						sql.query("SELECT Name table ?? WHERE ?",[req.table,query])
 						.on("result", function (rec) {
+							sql.query("UPDATE queues SET ? WHERE least(?,1) AND Departed IS NULL", [{
+								Departed:new Date()
+							}, {
+								Client:"system",
+								Class:queue,
+								Job:rec.Name
+							}]);
+							
 							sql.query("INSERT INTO queues SET ?", {
-								Client	: "system",
-								Class	: queue,
-								Job	: rec.Name,
-								State	: body[queue],
-								Arrived	: new Date(),
-								Notes	: rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
-							});	
+								Client:"system",
+								Class:queue,
+								Job:rec.Name,
+								State:req.body[queue],
+								Arrived:new Date(),
+								Notes:rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
+							});
 						});
-				}));	
+				
+					//sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)
+					//.on("end", function () {
+					//	sql.query( 								// sqlInsert
+					//		cmd, [table,body,query], function (err,info) {
+					//			res(err || info);
+					//	});
+					//});
+				}));
 
-			},
+			});
 			
-			execute: function(res) {
-				res( new Error("Execute Reserved") );
-			}
-		};	
+		}
+			
+		function sqlInsert(res) {
+
+			sqlTrace( sql.query(  	// sqlInsert
+			
+				Guard(body,false)
+					? "INSERT INTO ?? SET ?" 
+					: "INSERT INTO ?? () VALUES ()", 
+					
+				[table,body], function (err,info) {
+				
+				res(err || info);
+				
+				if (false && queue)  // queue support (can enable but empty job name results)
+					sql.query("SELECT Name FROM ?? WHERE ?",[req.table,{ID:info.insertId}])
+					.on("result", function (rec) {
+						sql.query("INSERT INTO queues SET ?", {
+							Client	: "system",
+							Class	: queue,
+							Job	: rec.Name,
+							State	: body[queue],
+							Arrived	: new Date(),
+							Notes	: rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
+						});	
+					});
+			}));	
+
+		}
+		
+		function sqlExecute(res) {
+			res( new Error("Execute Reserved") );
+		}
 		
 	//console.log(req);
 	
-	// Remap request flags if navigating folders
-
-	if (file = flags.file) {
-		var cmd = req.query.cmd;
-		var init = req.query.init;
-		var query = req.query = {
-			NodeID: init 
-				? SQL.NODENAV.ROOT 
-				: (req.query.target || SQL.NODENAV.ROOT)
-		};
-		
-		flags.browse = file;
-		flags.file = cmd;
-		delete flags.pivot;
-	}
-							
 	if (SQL.TRACE)
 		console.log(`${locking?"lock":""} ${action} ${table} for ${client} on ${CLUSTER.isMaster ? "master" : "worker"+CLUSTER.worker.id}`);
 
@@ -357,7 +355,7 @@ function sqlCrude(req,res) {
 		switch (action) {
 			case "select":
 
-				crude.select( function (recs) {
+				sqlSelect( function (recs) {
 
 					if (recs.constructor == Error) 
 						res( recs+"" );
@@ -427,14 +425,14 @@ function sqlCrude(req,res) {
 			
 			case "delete":
 				
-				crude.delete( res );
+				sqlDelete( res );
 				break;
 										
 			case "insert":
 
 				if (lock) 
 					if (lock.Client == client) {
-						crude.insert( res );		
+						sqlInsert( res );		
 
 						lock.sql.query("COMMIT", function (err) {
 							req.lock = null;
@@ -446,7 +444,7 @@ function sqlCrude(req,res) {
 						res( "locked by "+lock.Client );
 					}
 				else 
-					crude.insert( res );
+					sqlInsert( res );
 
 				break;
 				
@@ -454,7 +452,7 @@ function sqlCrude(req,res) {
 
 				if (lock) 
 					if (lock.Client == client) {
-						crude.update(res);		
+						sqlUpdate(res);		
 
 						lock.sql.query("COMMIT", function (err) {
 							req.lock = null;
@@ -466,7 +464,7 @@ function sqlCrude(req,res) {
 						res( "locked by "+lock.Client );
 					}
 				else 
-					crude.update(res);
+					sqlUpdate(res);
 
 				break;
 				
@@ -482,13 +480,19 @@ function sqlCrude(req,res) {
 		}
 	
 	else 						// Execute non-locking query
-		crude[action](res);
+		switch (action) {
+			case "select": sqlSelect(res); break;
+			case "update": sqlUpdate(res); break;
+			case "delete": sqlDelete(res); break;
+			case "insert": sqlInsert(res); break;
+			case "execute": sqlExecute(res); break;
+		}
 	
-	if (false && SQL.emit) 				// Notify clients of change.  
+	if (false && SQL.emit) 		// Notify clients of change.  
 		SQL.emit( req.action, {
 			table: req.table, 
 			body: body, 
-			ID: log.RECID, 
+			ID: log.RecID, 
 			from: req.client,   // Send originating client's ID so they cant ignore its own changes.
 			flag: flags.client
 		});
@@ -501,6 +505,9 @@ function Select(req,res) {
 
 	sqlCrude(req, function (recs) {
 		
+		if (recs.constructor == Error) 
+			return res(recs);
+
 		var
 			flags = req.flags;
 		
@@ -585,6 +592,8 @@ append ${framework}.body`
 
 		else
 		if (flag = flags.file) { 			// navigate records via pivot folders
+
+console.log(flags);
 
 			var browse = flags.browse; 
 				Root   = flags.NodeID == SQL.NODENAV.ROOT,
@@ -1405,6 +1414,7 @@ function Tree(tree, query, flags) {
 }
 
 function Browse(browse, query, flags) {
+
 	var	NodeID = query.NodeID,	
 		nodes = NodeID ? NodeID.split(LIST) : [];
 	
