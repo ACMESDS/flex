@@ -46,7 +46,7 @@ var
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
 		thread: null, 					// SQL connection threader
-		RENDER : null, 					// Jade renderer
+		skinner : null, 					// Jade renderer
 		TRACE : true,					// Trace SQL querys to the console
 		//BIT : null,					// No BIT-mode until set to a SYNC hash
 		//POOL : null, 					// No pool until SQB configured
@@ -66,6 +66,7 @@ var
 			hwreqts: "openv.hwreqts",
 			options: "openv.options",
 			swreqts: "openv.swreqts",
+			FAQs: "openv.FAQs",
 			aspreqts: "openv.aspreqts",
 			ispreqts: "openv.ispreqts" },
 		RESET : 12,	 					// mysql connection pool timer (hours)
@@ -178,9 +179,9 @@ function sqlCrude(req,res) {
 	}
 								
 	var
-		builds = flags.build,
-		track = flags.track,
-		queue = flags.queue,
+		builds 	= flags.build,
+		track 	= flags.track,
+		queue 	= flags.queue,
 		sort 	= flags.sort,
 		page 	= flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
 		builds	= req.builds || "*",
@@ -188,7 +189,7 @@ function sqlCrude(req,res) {
 		pivot	= flags.pivot,
 		browse	= flags.browse,
 		tree	= flags.tree,
-		builds = flags.build || "*",
+		builds 	= flags.build || "*",
 		
 		// record locking parameters
 
@@ -198,6 +199,9 @@ function sqlCrude(req,res) {
 		
 		// CRUDE response interface
 		function sqlSelect(res) {
+
+console.log(query);
+console.log(body);
 
 			sqlTrace( sql.query(
 
@@ -499,15 +503,28 @@ function sqlCrude(req,res) {
 
 function Select(req,res) {
 
+	function render(jade, req, res) {
+//console.log("jade="+jade);
+
+		try {
+			var gen = SQL.skinner.compile(jade,req);
+			
+			res( gen ? gen(req) : new Error("Bad skin") );
+		}
+		catch (err) {
+			res( new Error(`Bad skin - ${err}`) );
+		}
+	}
+
 	sqlCrude(req, function (recs) {
 		
-		if (recs.constructor == Error) 
-			return res(recs);
-
 		var
 			flags = req.flags;
 		
-		if (flag = false && flags.jade) { 			// jadeify records  
+		if (recs.constructor == Error) 
+			res(recs);
+		else
+		if ((flag = flags.jade) && SQL.skinner) { 		// jadeify records  
 
 			var	framework = flag.shift() || "extjs",
 				rows = "";
@@ -522,15 +539,16 @@ function Select(req,res) {
 				rows += cols + "\n";
 			});
 			
-			var jade = 
-`extends ${framework}
-append ${framework}.body`
-				+ rows.indent("#table",{dims:"'[800,400]'"}).indent("");
+			render(
 
-//console.log(jade);
-			gen = SQL.RENDER.compile(jade, req);
-			
-			res( gen ? gen(req) : "Bad Jade");
+`extends ${framework}
+append ${framework}.body
+` + rows
+.indent("#table",{dims:"'[800,400]'"})
+.indent(""),
+
+				req, res );
+
 		}
 		
 		else
@@ -588,8 +606,6 @@ append ${framework}.body`
 
 		else
 		if (flag = flags.file) { 			// navigate records via pivot folders
-
-console.log(flags);
 
 			var browse = flags.browse; 
 				Root   = flags.NodeID == SQL.NODENAV.ROOT,
@@ -942,7 +958,6 @@ console.log("NAVIGATE Recs="+recs.length+" NodeID="+flags.NodeID+" Nodes="+Nodes
 		
 	});
 }
-
 function Update(req,res) {	
 	sqlCrude(req,res);
 }
@@ -955,226 +970,6 @@ function Delete(req,res) {
 function Execute(req,res) {	
 	sqlCrude(req,res);
 }
-
-/*
-function Select(args,cb) {
-
-	var 	
-		sql 	= this,
-		client	= args.client,
-		query 	= args.query, 
-		table 	= args.table,
-		flags 	= args.flags || {},
-		joins	= args.joins || {},
-		sort 	= flags.sort,
-		page 	= flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-		builds	= args.builds || "*",
-		search 	= flags.search,
-		
-		pivot	= flags.pivot,
-		browse	= flags.browse,
-		tree	= flags.tree,
-		
-		builds = flags.build || "*",
-
-		cmd = 
-			"SELECT SQL_CALC_FOUND_ROWS "
-			+ Builds( builds, search, flags )
-			+ ( tree 	? Tree( tree, query, flags ) : "" )			
-			+ ( browse 	? Browse( browse,  query, flags ) : "" )
-			+ ( pivot 	? Pivot( pivot,  query, flags ) : "" )
-			+ ( table 	? From( table, joins ) : "" )
-			+ Where( query, flags ) 
-			+ Having( flags.score )
-			+ ( flags.group ? Group( flags.group ) : "" )
-			+ ( sort 	? Order( sort ) : "" )
-			+ ( page 	? Page( page ) : "" );
-		
-	var q = sql.query(
-		cmd,
-		[table, Guard(query,true), page], function (err, recs) {
-						
-			cb(err || recs);
-
-			if (search && !err) 
-				Spy(args,recs);
-	});
-
-	if (args.trace)  console.log(q.sql);
-		
-	return cmd;
-}
-*/
-
-/*
-function Delete(args,cb) {
-	
-	var 
-		sql = this,
-		query = args.query, 
-		table = args.table,
-		journal = args.journal,
-		flags = args.flags,
-		queue = flags._queue;
-
-	var cmd = 
-		"DELETE " 
-		+ ( table ? From( table ) : "" )
-		+ Where( query, flags );
-	
-	if (false) 		// queue support (enable if useful)
-		sql.query("SELECT Name FROM ?? WHERE ?",[table,query])
-		.on("result", function (rec) {
-			sql.query("DELETE FROM queues WHERE least(?,1) AND Departed IS NULL", {
-				Client: "system",
-				Class: queue,
-				Job: rec.Name
-			});
-		});
-
-	sql.query( 			// attempt journal
-		"INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", 
-		journal)
-		
-	.on("end", function () {
-		sql.query( 		// delete
-			cmd, [table, query, Guard(query,false)], function (err,info) {
-				cb(err || info);
-		});
-	});
-	
-	//if (journal) 
-	//else
-	//	sql.query( 			// delete
-	//		cmd, [table, query, Guard(query,false)], function (err,info) {
-	//			cb(err || info);
-	//	}); 
-
-	return cmd;
-}
-*/
-
-/*
-function Update(args,cb) {
-	var 
-		sql = this,
-		query = args.query, 
-		table = args.table,
-		set = args.set,
-		journal = args.journal,
-		flags = args.flags,
-		queue = flags._queue,
-		
-		cmd = Guard(set,false)
-			? "UPDATE ?? SET ? " + Where(Guard(query,false), flags)
-			: "#UPDATE IGNORED";
-		
-	sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
-	.on("end", function () {
-		
-		sql.query(cmd, [table,set,query], function (err,info) { 	// update
-			
-			cb( err || info );
-			
-			if (queue && set[queue])   						// queue support
-				sql.query("SELECT Name table ?? WHERE ?",[args.table,query])
-				.on("result", function (rec) {
-					sql.query("UPDATE queues SET ? WHERE least(?,1) AND Departed IS NULL", [{
-						Departed:new Date()
-					}, {
-						Client:"system",
-						Class:queue,
-						Job:rec.Name
-					}]);
-					
-					sql.query("INSERT INTO queues SET ?", {
-						Client:"system",
-						Class:queue,
-						Job:rec.Name,
-						State:args.set[queue],
-						Arrived:new Date(),
-						Notes:rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
-					});
-				});
-		
-			//sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)
-			//.on("end", function () {
-			//	sql.query( 								// insert
-			//		cmd, [table,set,query], function (err,info) {
-			//			cb(err || info);
-			//	});
-			//});
-		});
-		
-	});
-	
-	return cmd;
-}
-*/
-
-/*
-function Insert(args,cb) {
-
-	var 
-		sql = this,
-		table = args.table,
-		set = args.set,
-		journal = args.journal,
-		flags = args.flags,
-		queue = flags._queue,
-		
-		cmd = Guard(set,false)
-			? "INSERT INTO ?? SET ?" 
-			: "INSERT INTO ?? () VALUES ()";
-
-	sql.query(  	// insert
-		cmd, [table,set], function (err,info) {
-		
-		cb(err || info);
-		
-		if (false && queue)  // queue support (can enable but empty job name results)
-			sql.query("SELECT Name FROM ?? WHERE ?",[args.table,{ID:info.insertId}])
-			.on("result", function (rec) {
-				sql.query("INSERT INTO queues SET ?", {
-					Client	: "system",
-					Class	: queue,
-					Job	: rec.Name,
-					State	: set[queue],
-					Arrived	: new Date(),
-					Notes	: rec.Name.tag("a",{href:"/intake.view?name="+rec.Name})
-				});	
-			});
-	});	
-
-	return cmd;
-}
-*/
-
-/*
-function Execute(args,cb) {
-
-	var 
-		sql = this,
-		table = args.table,
-		journal = args.journal,
-		flags = args.flags,
-		queue = flags._queue,		
-		cmd = "EXECUTE "+table;
-
-	if (false) {
-		sql.query("CREATE ("+args.set+") ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8", {}, function (err,recs) {
-			cb(err || recs);
-		});
-		sql.query(args.query.replace("REPORT","SHOW CREATE"), function (err,recs) {
-			cb(err ? err : recs[0]["Create Table"].split("\n").slice(1,-1));
-		});
-	}
-	else
-		cb(new Error("unsupported action"));
-	
-	return cmd;
-}
-*/
 
 /**
  * @method flattenCatalog
