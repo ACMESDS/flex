@@ -200,9 +200,6 @@ function sqlCrude(req,res) {
 		// CRUDE response interface
 		function sqlSelect(res) {
 
-console.log(query);
-console.log(body);
-
 			sqlTrace( sql.query(
 
 				"SELECT SQL_CALC_FOUND_ROWS "
@@ -346,8 +343,6 @@ console.log(body);
 			res( new Error("Execute Reserved") );
 		}
 		
-	//console.log(req);
-	
 	if (SQL.TRACE)
 		console.log(`${locking?"lock":""} ${action} ${table} for ${client} on ${CLUSTER.isMaster ? "master" : "worker"+CLUSTER.worker.id}`);
 
