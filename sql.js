@@ -62,13 +62,15 @@ var
 			milestones: "openv.milestones",
 			txstatus: "openv.txstatus",
 			apps: "openv.apps",
+			profiles: "openv.profiles",
 			trades: "openv.trades",
 			hwreqts: "openv.hwreqts",
 			options: "openv.options",
 			swreqts: "openv.swreqts",
 			FAQs: "openv.FAQs",
 			aspreqts: "openv.aspreqts",
-			ispreqts: "openv.ispreqts" },
+			ispreqts: "openv.ispreqts" 
+		},
 		RESET : 12,	 					// mysql connection pool timer (hours)
 		RECID : "ID",					// DB key field
 		NODENAV : {						// specs for folder navigation
@@ -356,7 +358,7 @@ function sqlCrude(req,res) {
 						res( recs+"" );
 					else
 					if (rec = recs[0]) {
-						var lockID = table+DOT+rec.ID,			// record lock name	
+						var lockID = `${table}.${rec.ID}`,		// record lock name	
 							lock = req.lock = LOCKS[lockID]; 	// record lock
 
 						if (lock) {
@@ -444,6 +446,9 @@ function sqlCrude(req,res) {
 				break;
 				
 			case "update":
+
+console.log(query);
+console.log(body);
 
 				if (lock) 
 					if (lock.Client == client) {
