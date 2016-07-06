@@ -346,7 +346,7 @@ function sqlCrude(req,res) {
 		}
 		
 	if (SQL.TRACE)
-		console.log(`${locking?"lock":""} ${action} ${table} for ${client} on ${CLUSTER.isMaster ? "master" : "worker"+CLUSTER.worker.id}`);
+		console.log(`${locking?"LOCK":""} ${action} FROM ${table} FOR ${client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`);
 
 	if (locking) 				// Execute query in a locked transaction thread
 		switch (action) {
