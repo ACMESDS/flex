@@ -112,9 +112,8 @@ console.log("EXTENDING SQL CONNECTOR");
 					updateJobs: updateJobs,
 					insertJobs: insertJobs,
 					executeJobs: executeJobs,
-					
-					spy: monitorSearch,
-					flatten: flattenCatalog
+					hawkCatalog: hawkCatalog,
+					flattenCatalog: flattenCatalog
 					
 				});
 
@@ -220,8 +219,8 @@ function sqlCrude(req,res) {
 							
 					res(err || recs);
 
-					/*if (search && !err) 
-						monitorSearch(req,recs);*/
+					//if (flags.find && !err && (table=="CATALOG")) 
+						//hawkCatalog(req,res);
 			}));
 
 		}
@@ -1055,21 +1054,40 @@ function flattenCatalog(flags, catalog, limits, cb) {
 	});
 }
 
-function monitorSearch(req,recs) {
+function hawkCatalog(req,res) {
 	var sql = this,
-		flags = req.flags || {};
+		flags = req.flags;
 	
-	console.log("SPY ON "+req.client);
+	function queueExe(cls,name,exe) {
+		
+		sql.insertJobs({
+			class: cls,
+			client: req.client,
+			qos: req.profile.QoS,
+			priority: 0,
+			key: name,
+			req: Copy(req,{}),
+			name: "new "+name
+		}, exe);
+	}
 	
-	if (find = flags.find)
-		sql.query("INSERT INTO searches SET ? ON DUPLICATE KEY UPDATE Count=Count+1", {
+	console.log("HAWK CATALOG FOR "+req.client+" find="+flags.has);
+	
+	if (has = flags.has)
+		queueExe("detector", has, function (req,res) {
+			console.log("create detector "+req.has);
+			res("See "+"jobs queue".tag("a",{href:"/jobs.view"}));  
+		});
+		
+	/*
+		sql.query("INSERT INTO queues SET ? ON DUPLICATE KEY UPDATE Count=Count+1", {
 			Made: new Date(),
 			Searching: find.replace(/ /g,""),
 			Tokens: req.table + DOT + req.flags.search,
 			Returned: recs.length,
 			Count: 1,
 			Client: req.client
-		});
+		});*/
 }
 
 function sqlEach(query, args, cb) {
@@ -1418,7 +1436,7 @@ function insertJobs(job, exe) {
 					Each( batch, function (ID,job) {
 						if (job.priority > pop.priority) pop = job;
 					});
-									
+
 					delete batch[pop.ID];
 					queue.depth--;
 				
@@ -1463,16 +1481,18 @@ function insertJobs(job, exe) {
 		Classif : "",
 		Util	: util(),
 		Priority: 1,
+		KeyID	: job.key || "",
 		Notes	: "queued",
 		QoS		: job.qos,
 		Work 	: 1
 	};
 
 	var sql = this;
+	
 	sql.query("INSERT INTO queues SET ?", rec, function (err,info) {
 		
 		if (err) 
-			console.log(err);
+			console.log("DROPPED JOB: "+err);
 			
 		else {
 			job.ID = info.insertId;
@@ -1490,7 +1510,7 @@ function insertJobs(job, exe) {
 					}, {ID:job.ID}
 					]);
 
-console.log("job returns: "+ack);
+console.log("COMPLETED JOB: "+ack);
 				}); 
 			
 			});
