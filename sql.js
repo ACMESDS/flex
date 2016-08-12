@@ -28,8 +28,8 @@ var 											// nodejs bindings
 var												// 3rd party bindings
 	MYSQL = require("mysql");
 
-var 											// geonode bindings
-	BASE = require("../base"),
+var 											// totem bindings
+	BASE = require("base"),
 	Copy = BASE.copy,
 	Each = BASE.each;
 

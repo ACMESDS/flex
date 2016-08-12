@@ -1,19 +1,19 @@
 {
   "name": "sql",
   "version": "1.0.0",
-  "description": "SQL framework for geoNode",
+  "description": "SQL framework for totem",
   "main": "sql.js",
   "scripts": {
     "test": "node test.js"
   },
   "repository": {
     "type": "git",
-    "url": "git@git.geointapps.org:geonode-dev-team/sql.git"
+    "url": "git@git.geointapps.org:acme/sql.git"
   },
   "keywords": [
     "geoNode"
   ],
-  "author": "brian.d.james@NGA Research",
+  "author": "ACME Software Disposal Service",
   "license": "ISC",
   "dependencies": {
     "jade": "^1.11.0",
