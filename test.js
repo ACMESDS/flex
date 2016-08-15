@@ -12,18 +12,14 @@
 
 require("../enum").test({
 
-	N0: function () {
-		var TOTEM = require("../totem").extend({ name:"app1", mysql: { host: "localhost", user: "root", pass: "NGA" }});
-	},
-			
 	N1: function () {
 		
 		var TOTEM = require("../totem");
 
 		console.log({
-			test: "I am simply the default Totem interface",
-			default_fetcher_endpts: TOTEM.fetcher,
-			default_protect_mode: TOTEM.protected,
+			test: "Im simply the default Totem interface so Im not running any service",
+			default_fetcher_endpts: TOTEM.reader,
+			default_protect_mode: TOTEM.nofaults,
 			default_cores_used: TOTEM.cores
 		});
 	},
@@ -32,12 +28,12 @@ require("../enum").test({
 		
 		console.log({
 			test:
-`I **will be** a Totem client running in protected mode, 
+`I **will be** a Totem client running in fault protection mode, 
 with 2 cores and default routes`
 		});
 
 		var TOTEM = require("../totem").start({
-			protected: true,
+			nofaults: true,
 			cores: 2
 		});
 		
@@ -56,7 +52,7 @@ with 2 cores and default routes`
 				
 				console.log({
 					test:
-`I **have become** a Totem client, with no cores, unprotected, but 
+`I **have become** a Totem client, with no cores, but 
 I do have mysql database from which I've derived my site parms`,
 
 					mysql_derived_parms: TOTEM.site
@@ -75,14 +71,14 @@ I do have mysql database from which I've derived my site parms`,
 				user: "root",
 				pass: "NGA"
 			},
-			fetcher: {
+			reader: {
 				dothis: function dothis(req,res) {  //< named handlers are shown in trace in console
 					res( "123" );
 					
 					console.log({
 						test:		
-`PKI-encrypted Totem service, 2 cores, unprotected, with a mysql database, and add routes\n
-to (dothis,orthis) endpoints.  If the servers client.pfx does not exists, Totem will\n
+`PKI-encrypted Totem service, 2 cores, unprotected, with a mysql database, and \n
+(dothis,orthis) endpoints.  If the servers client.pfx does not exists, Totem will\n
 create the client.pfx and associated pems (public client.crt and private client.key).` ,
 
 						do_query: req.query
@@ -97,7 +93,7 @@ create the client.pfx and associated pems (public client.crt and private client.
 						res( new Error("We have a problem huston") );
 						
 					console.log({
-						test: `Like dothis, but need an x=value query`,
+						test: `Like dothis, but needs an ?x=value query`,
 						or_query: req.query,
 						or_user: [req.client,req.group]
 					});
@@ -106,8 +102,8 @@ create the client.pfx and associated pems (public client.crt and private client.
 			
 			init: function () {
 				console.log({
-					test: "try one of my **encrypted** data fetcher endpoints",
-					added_fetchers: TOTEM.fetcher
+					test: "try my **encrypted** (dothis,orthis) endpoints",
+					my_endpoints: TOTEM.reader
 				});
 			}
 		});
@@ -115,7 +111,26 @@ create the client.pfx and associated pems (public client.crt and private client.
 	},
 	
 	N5: function () {
-		console.log({test:"reserved"});
+		var TOTEM = require("../totem").start({
+			mysql: {
+				host: "localhost",
+				user: "root",
+				pass: "NGA"
+			},
+	
+			riddles: 10,
+			
+			init: function () {
+				
+				console.log({
+					test:
+`I am Totem client, with no cores but I do have mysql database and\n
+I have anti-bot protection`,
+
+					mysql_derived_parms: TOTEM.site
+				});
+			}
+		});
 	},
 	
 	E1: function () {
