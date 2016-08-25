@@ -46,7 +46,7 @@ var
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
 		thread: null, 					// SQL connection threader
-		skinner : null, 					// Jade renderer
+		skin : null, 					// Jade renderer
 		TRACE : true,					// Trace SQL querys to the console
 		//BIT : null,					// No BIT-mode until set to a SYNC hash
 		//POOL : null, 					// No pool until SQB configured
@@ -65,7 +65,7 @@ var
 			profiles: "openv.profiles",
 			trades: "openv.trades",
 			hwreqts: "openv.hwreqts",
-			options: "openv.options",
+			oplimits: "openv.oplimits",
 			swreqts: "openv.swreqts",
 			FAQs: "openv.FAQs",
 			aspreqts: "openv.aspreqts",
@@ -502,16 +502,30 @@ console.log(body);
 
 function Select(req,res) {
 
+	/*
 	function render(jade, req, res) {
-//console.log("jade="+jade);
+console.log("jade="+jade);
 
 		try {
-			var gen = SQL.skinner.compile(jade,req);
+			var gen = SQL.skin.compile(jade,req);
 			
 			res( gen ? gen(req) : new Error("Bad skin") );
 		}
 		catch (err) {
 			res( new Error(`Bad skin - ${err}`) );
+		}
+	}*/
+
+	function render(jade, req) {
+//console.log("jade="+jade);
+
+		try {
+			var gen = SQL.skin.compile(jade,req);
+			
+			return gen ? gen(req) : "Bad skin";
+		}
+		catch (err) {
+			return err+"";
 		}
 	}
 
@@ -522,9 +536,11 @@ function Select(req,res) {
 		
 		if (recs.constructor == Error) 
 			res(recs);
-		else
-		if ((flag = flags.jade) && SQL.skinner) { 		// jadeify records  
 
+		else
+		if ((flag = flags.jade) && SQL.skin) { 		// jadeify records  
+
+			/*
 			var	framework = flag.shift() || "extjs",
 				rows = "";
 
@@ -543,11 +559,58 @@ function Select(req,res) {
 `extends ${framework}
 append ${framework}.body
 ` + rows
-.indent("#table",{dims:"'[800,400]'"})
+.indent("#table",{dims:"'800,400'"})
 .indent(""),
 
 				req, res );
+				* */
 
+			recs.each( function (n, rec) {
+
+				flag.each( function (m, idx) {
+					
+					try {
+						var skin = 
+`extends layout
+append layout.body
+` + rec[idx].indent("");
+
+						rec[idx] = render(skin,req);
+					}
+					catch (err) {
+					}
+
+				});
+
+			});
+			
+			res(recs);			
+		}
+		
+		else
+		if ((flag = flags.mark) && SQL.skin) { 		// jadeify records  
+
+			recs.each( function (n, rec) {
+
+				flag.each( function (m, idx) {
+					
+					try {
+						var skin = 
+`extends layout
+append layout.body
+	:markdown
+` + rec[idx].indent("").indent("");
+
+						rec[idx] = render(skin,req);
+					}
+					catch (err) {
+					}
+
+				});
+
+			});
+			
+			res(recs);			
 		}
 		
 		else

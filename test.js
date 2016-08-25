@@ -10,6 +10,8 @@
  * with CONFIG = N0, N1, ... and APP = app1
  * */
 
+var ENV = process.env;
+
 require("../enum").test({
 
 	N1: function () {
@@ -43,9 +45,9 @@ with 2 cores and default routes`
 		
 		var TOTEM = require("../totem").start({
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			},
 			
 			init: function () {
@@ -67,9 +69,9 @@ I do have mysql database from which I've derived my site parms`,
 		var TOTEM = require("../totem").start({
 			encrypt: "test",
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			},
 			reader: {
 				dothis: function dothis(req,res) {  //< named handlers are shown in trace in console
@@ -113,9 +115,9 @@ create the client.pfx and associated pems (public client.crt and private client.
 	N5: function () {
 		var TOTEM = require("../totem").start({
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			},
 	
 			riddles: 10,
@@ -183,9 +185,9 @@ I have anti-bot protection`,
 			},
 			
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			}
 			
 		});
@@ -212,9 +214,9 @@ I have anti-bot protection`,
 			},				
 			
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			},
 			
 			init: function () {
@@ -238,9 +240,9 @@ I have anti-bot protection`,
 			//encrypt: "test",
 			
 			mysql: {
-				host: "localhost",
-				user: "root",
-				pass: "NGA"
+				host: ENV.MYSQL_HOST,
+				user: ENV.MYSQL_USER,
+				pass: ENV.MYSQL_PASS
 			},
 			
 			init: function () {

@@ -157,7 +157,7 @@ startup.)		# status and start dependent services
 
 config.)		# configure apps
 	echo -e "use the OpEnv db to config the operating env for all apps\nuse the appN db to config the appN service"
-	mysql -u$SECRETS_DB_USER -p$SECRETS_DB_PASS
+	mysql -u$MYSQL_USER -p$MYSQL_PASS
 	;;
 
 restyle.)
@@ -202,10 +202,10 @@ checkpoint.)  # export db to admins
 	echo "Exporting sqldb to admins/db"
 
 	cd $ADMIN/db
-		mysqldump -u$DB_USER -p$DB_PASS openv >openv.sql
-		mysqldump -u$DB_USER -p$DB_PASS app1 >app1.sql
-		#mysqldump -u$DB_USER -p$DB_PASS --events mysql >mysql.sql
-		#mysqldump -u$DB_USER -p$DB_PASS jou >jou.sql
+		mysqldump -u$MYSQL_USER -p$MYSQL_PASS openv >openv.sql
+		mysqldump -u$MYSQL_USER -p$MYSQL_PASS app1 >app1.sql
+		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS --events mysql >mysql.sql
+		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS jou >jou.sql
 
 		#sudo zip -r /media/sf_archives/sqldb.zip $ADMINS/db
 		git commit -am $2
@@ -221,18 +221,18 @@ archive.) 		# archive geonode to factory archive area
 	;;
 	
 sync.)   # special forced code syncs
-	#rsync $CHIPS/forecasts/* $SWAG02:$CHIPS/forecasts
-	rsync $HOME/*.jpg $SWAG02:$HOME
+	#rsync $CHIPS/forecasts/* $GPU_HOST:$CHIPS/forecasts
+	rsync $HOME/*.jpg $GPU_HOST:$HOME
 
-	# rsync -r $NODEPATH/swag $SWAG01:$NODEPATH
-	# rsync -r $NODEPATH/tauif $SWAG01:$NODEPATH
-	# rsync -r $HERE/start.sh $SWAG01:/base/geonode
-	# rsync -r $HERE/public/dets $SWAG02:$PUBLIC
-	# rsync -r $HERE/public/dbs $SWAG02:$PUBLIC
-	# rsync -r /base/sqldb/* $SWAG01:/base/sqldb	
-	# rsync -r $PUBLIC/python/exccaffe.py $SWAG01:$PUBLIC/python
-	# rsync -r $NODEPATH/caffe $SWAG01:$NODEPATH
-	# rsync $DNN/cuda/lib64/libcudnn.* $SWAG02:/base/cuDNN/cuda/lib64   # make caffe creates the so.7 libs
+	# rsync -r $NODEPATH/swag $GPU_HOST:$NODEPATH
+	# rsync -r $NODEPATH/tauif $GPU_HOST:$NODEPATH
+	# rsync -r $HERE/start.sh $GPU_HOST:/base/geonode
+	# rsync -r $HERE/public/dets $GPU_HOST:$PUBLIC
+	# rsync -r $HERE/public/dbs $GPU_HOST:$PUBLIC
+	# rsync -r /base/sqldb/* $GPU_HOST:/base/sqldb	
+	# rsync -r $PUBLIC/python/exccaffe.py $GPU_HOST:$PUBLIC/python
+	# rsync -r $NODEPATH/caffe $GPU_HOST:$NODEPATH
+	# rsync $DNN/cuda/lib64/libcudnn.* $GPU_HOST:/base/cuDNN/cuda/lib64   # make caffe creates the so.7 libs
 	
 	;;
 		
