@@ -12,14 +12,21 @@
 
 var ENV = process.env;
 
+function Trace(msg,arg) {
+	
+	console.log("U>"+msg);
+
+	if (arg) console.log(arg);
+}
+
 require("../enum").test({
 
 	N1: function () {
 		
 		var TOTEM = require("../totem");
 
-		console.log({
-			test: "Im simply the default Totem interface so Im not running any service",
+		Trace(
+			"Im simply the default Totem interface so Im not running any service", {
 			default_fetcher_endpts: TOTEM.reader,
 			default_protect_mode: TOTEM.nofaults,
 			default_cores_used: TOTEM.cores
@@ -28,11 +35,9 @@ require("../enum").test({
 	
 	N2: function () {
 		
-		console.log({
-			test:
+		Trace(
 `I **will be** a Totem client running in fault protection mode, 
-with 2 cores and default routes`
-		});
+with 2 cores and default routes` );
 
 		var TOTEM = require("../totem").start({
 			nofaults: true,
@@ -50,12 +55,10 @@ with 2 cores and default routes`
 				pass: ENV.MYSQL_PASS
 			},
 			
-			init: function () {
-				
-				console.log({
-					test:
+			init: function () {				
+				Trace(
 `I **have become** a Totem client, with no cores, but 
-I do have mysql database from which I've derived my site parms`,
+I do have mysql database from which I've derived my site parms`, {
 
 					mysql_derived_parms: TOTEM.site
 				});
@@ -77,11 +80,10 @@ I do have mysql database from which I've derived my site parms`,
 				dothis: function dothis(req,res) {  //< named handlers are shown in trace in console
 					res( "123" );
 					
-					console.log({
-						test:		
+					Trace(		
 `PKI-encrypted Totem service, 2 cores, unprotected, with a mysql database, and \n
 (dothis,orthis) endpoints.  If the servers client.pfx does not exists, Totem will\n
-create the client.pfx and associated pems (public client.crt and private client.key).` ,
+create the client.pfx and associated pems (public client.crt and private client.key).` , {
 
 						do_query: req.query
 					});
@@ -94,8 +96,8 @@ create the client.pfx and associated pems (public client.crt and private client.
 					else
 						res( new Error("We have a problem huston") );
 						
-					console.log({
-						test: `Like dothis, but needs an ?x=value query`,
+					Trace(
+`Like dothis, but needs an ?x=value query`, {
 						or_query: req.query,
 						or_user: [req.client,req.group]
 					});
@@ -103,8 +105,8 @@ create the client.pfx and associated pems (public client.crt and private client.
 			},
 			
 			init: function () {
-				console.log({
-					test: "try my **encrypted** (dothis,orthis) endpoints",
+				Trace(
+					"try my **encrypted** (dothis,orthis) endpoints", {
 					my_endpoints: TOTEM.reader
 				});
 			}
@@ -124,11 +126,9 @@ create the client.pfx and associated pems (public client.crt and private client.
 			
 			init: function () {
 				
-				console.log({
-					test:
+				Trace(
 `I am Totem client, with no cores but I do have mysql database and\n
-I have anti-bot protection`,
-
+I have anti-bot protection`, {
 					mysql_derived_parms: TOTEM.site
 				});
 			}
@@ -140,8 +140,7 @@ I have anti-bot protection`,
 		var ENGINE = require("../engine");
 		var TOTEM = require("../totem");
 
-		console.log({
-			test: "A default Totem client",
+		Trace( "A default Totem client", {
 			a_tau_template: ENGINE.tau("somejob.pdf"),
 			engine_errors: ENGINE.error,
 			get_endpts: TOTEM.reader,
@@ -158,9 +157,7 @@ I have anti-bot protection`,
 			
 			init: function () {
 
-				console.log({
-					test: "Totem being powered down"
-				});
+				Trace( "Totem being powered down" );
 				
 				TOTEM.stop();
 			}
@@ -196,9 +193,7 @@ I have anti-bot protection`,
 			thread: TOTEM.thread
 		});
 
-		console.log({
-			test: "Starting a trivial Totem with a chipper fetcher and a database"
-		});
+		Trace( "Starting a trivial Totem with a chipper fetcher and a database" );
 
 	},
 	
@@ -221,8 +216,7 @@ I have anti-bot protection`,
 			
 			init: function () {
 
-				console.log({
-					test: "Test my default endpoints",
+				Trace( "Test my default endpoints", {
 					my_readers: TOTEM.reader
 				});
 			}
@@ -247,11 +241,9 @@ I have anti-bot protection`,
 			
 			init: function () {
 
-				console.log({
-					test: "Encrypted Totem client with a database"
-					//debe_mysql:TOTEM.mysql,
-					//debe_site: TOTEM.site
-				});
+				Trace( "Encrypted Totem client with a database" );
+				//debe_mysql:TOTEM.mysql,
+				//debe_site: TOTEM.site
 				
 			}
 			

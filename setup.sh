@@ -202,10 +202,10 @@ checkpoint.)  # export db to admins
 	echo "Exporting sqldb to admins/db"
 
 	cd $ADMIN/db
-		mysqldump -u$MYSQL_USER -p$MYSQL_PASS openv >openv.sql
-		mysqldump -u$MYSQL_USER -p$MYSQL_PASS app1 >app1.sql
-		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS --events mysql >mysql.sql
-		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS jou >jou.sql
+		mysqldump -u$MYSQL_USER -p$MYSQL_PASS openv >admins/db/openv.sql
+		mysqldump -u$MYSQL_USER -p$MYSQL_PASS app1 >admins/db/app1.sql
+		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS --events mysql >admins/db/mysql.sql
+		#mysqldump -u$MYSQL_USER -p$MYSQL_PASS jou >admins/db/jou.sql
 
 		#sudo zip -r /media/sf_archives/sqldb.zip $ADMINS/db
 		git commit -am $2
@@ -216,23 +216,23 @@ checkpoint.)  # export db to admins
 
 archive.) 		# archive geonode to factory archive area
 
-	echo "Archiving geonode to /media/sf_archives"
-	sudo zip -r /media/sf_archives/geonode-N.zip $HERE
+	echo "Archiving to /media/sf_archives"
+	sudo zip -r /media/sf_archives/totem-N.zip $HERE -x \*.zip -x dbs/ -x clients/ -x captcha/ -x .git/
 	;;
 	
 sync.)   # special forced code syncs
-	#rsync $CHIPS/forecasts/* $GPU_HOST:$CHIPS/forecasts
-	rsync $HOME/*.jpg $GPU_HOST:$HOME
+	#rsync $CHIPS/forecasts/* $GPUHOST:$CHIPS/forecasts
+	rsync $HOME/*.jpg $GPUHOST:$HOME
 
-	# rsync -r $NODEPATH/swag $GPU_HOST:$NODEPATH
-	# rsync -r $NODEPATH/tauif $GPU_HOST:$NODEPATH
-	# rsync -r $HERE/start.sh $GPU_HOST:/base/geonode
-	# rsync -r $HERE/public/dets $GPU_HOST:$PUBLIC
-	# rsync -r $HERE/public/dbs $GPU_HOST:$PUBLIC
-	# rsync -r /base/sqldb/* $GPU_HOST:/base/sqldb	
-	# rsync -r $PUBLIC/python/exccaffe.py $GPU_HOST:$PUBLIC/python
-	# rsync -r $NODEPATH/caffe $GPU_HOST:$NODEPATH
-	# rsync $DNN/cuda/lib64/libcudnn.* $GPU_HOST:/base/cuDNN/cuda/lib64   # make caffe creates the so.7 libs
+	# rsync -r $NODEPATH/swag $GPUHOST:$NODEPATH
+	# rsync -r $NODEPATH/tauif $GPUHOST:$NODEPATH
+	# rsync -r $HERE/start.sh $GPUHOST:/base/geonode
+	# rsync -r $HERE/public/dets $GPUHOST:$PUBLIC
+	# rsync -r $HERE/public/dbs $GPUHOST:$PUBLIC
+	# rsync -r /base/sqldb/* $GPUHOST:/base/sqldb	
+	# rsync -r $PUBLIC/python/exccaffe.py $GPUHOST:$PUBLIC/python
+	# rsync -r $NODEPATH/caffe $GPUHOST:$NODEPATH
+	# rsync $DNN/cuda/lib64/libcudnn.* $GPUHOST:/base/cuDNN/cuda/lib64   # make caffe creates the so.7 libs
 	
 	;;
 		
@@ -265,7 +265,7 @@ docker.)
 	
 *)  	# start specified geonode client
 
-	node test.js app1 $1 $2 $3 $4 $5
+	node test.js app1 $1 $2 $3 $4 $5 
 	;;
 
 esac

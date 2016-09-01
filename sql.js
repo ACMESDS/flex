@@ -5,7 +5,6 @@
  * @public
  * @requires base
  * @requires mysql
- * @requires enum
  * @requires os
  * @requires fs
  * @requires cluster
@@ -29,19 +28,89 @@ var												// 3rd party bindings
 	MYSQL = require("mysql");
 
 var 											// totem bindings
-	BASE = require("base"),
-	Copy = BASE.copy,
-	Each = BASE.each;
+	ENUM = require("enum").extend({
+		Array: [
+			function escape() {
+				var q = "`";
+				
+				if (this)
+					return (q+this.join(`${q},${q}`)+q).split(",").join(",");
+					
+				else
+					return "";
+			}
+		]
+	}),
+	Copy = ENUM.copy,
+	Each = ENUM.each;
+
+function Trace(msg,arg) {
+	
+	if (msg.constructor == String)
+		console.log("S>"+msg);
+	else
+		console.log("S>"+msg.sql);
+
+	if (arg) console.log(arg);
+		
+	return msg;
+}
 
 var
 	SQL = module.exports = {
 		
+		joinify: function (hash, list, cb) {
+			switch (hash.constructor) {
+				case Array:
+					if (cb) {
+						var rtn = [];
+
+						for (var n=0, N=hash.length; n<N; n++) 
+							rtn.push( cb( n, hash[n]) );
+							
+						return rtn.join(list);
+					}
+					else
+						return hash.join(list);
+						
+				case Object:
+					var rtn = [];
+
+					for (var n in hash) 
+						if (hash.hasOwnProperty(n)) 
+							rtn.push( cb ? cb(n,hash[n]) : n + "=" + hash[n] );
+
+					return rtn.join(list);
+					
+				default:	
+
+					return hash;
+			}
+		},
+
+		listify: function (hash, idxkey, valkey) {
+			var list = [];
+			var n = 0;
+			
+			if (idxkey)
+				for (var idx in hash) {
+					rec = hash[idx];
+					rec[idxkey] = n++;
+					list.push( rec );
+				}	
+			else
+				for (var idx in hash) 
+					list.push(idx);
+					
+			return list;
+		},
+		
 		// CRUDE interface
-		select: Select,
-		delete: Delete,
-		update: Update,
-		insert: Insert,
-		execute: Execute,
+		select: sqlCrude,
+		delete: sqlCrude,
+		update: sqlCrude,
+		insert: sqlCrude,
+		execute: sqlCrude,
 	
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
@@ -75,7 +144,7 @@ var
 		RECID : "ID",					// DB key field
 		NODENAV : {						// specs for folder navigation
 			ROOT : "", 					// Root node ID
-			JOIN : ",'"+LIST+"',"				// Node joiner (embed same slash value above)
+			JOIN : ",',',"				// Node joiner (embed same slash value above)
 		},
 		DEFTYPES : {
 			"#": "varchar(32)",
@@ -104,18 +173,17 @@ var
 			if (SQL.thread)
 			SQL.thread( function (sql) {
 				
-console.log("EXTENDING SQL CONNECTOR");
+				Trace("EXTENDING SQL CONNECTOR");
 				
-				BASE.extend(sql.constructor, {
-					selectJobs: selectJobs,
-					deleteJobs: deleteJobs,
-					updateJobs: updateJobs,
-					insertJobs: insertJobs,
-					executeJobs: executeJobs,
-					hawkCatalog: hawkCatalog,
-					flattenCatalog: flattenCatalog
-					
-				});
+				ENUM.extend(sql.constructor, [
+					selectJobs,
+					deleteJobs,
+					updateJobs,
+					insertJobs,
+					executeJobs,
+					hawkCatalog,
+					flattenCatalog
+				]);
 
 				sql.release();
 			});		
@@ -164,21 +232,6 @@ function sqlCrude(req,res) {
 		body = req.body,
 		flags = req.flags; //setFlags(req);
 		
-	if (file = flags.file) {   // Remap request flags if navigating folders
-		var cmd = req.query.cmd;
-		var init = req.query.init;
-		var query = req.query = {
-			NodeID: init 
-				? SQL.NODENAV.ROOT 
-				: (req.query.target || SQL.NODENAV.ROOT)
-		};
-		
-		flags.NodeID = query.NodeID;
-		flags.browse = file;
-		flags.file = cmd;
-		delete flags.pivot;
-	}
-								
 	var
 		builds 	= flags.build,
 		track 	= flags.track,
@@ -201,7 +254,7 @@ function sqlCrude(req,res) {
 		// CRUDE response interface
 		function sqlSelect(res) {
 
-			sqlTrace( sql.query(
+			Trace( sql.query(
 
 				"SELECT SQL_CALC_FOUND_ROWS "
 					+ Builds( builds, search, flags )
@@ -245,7 +298,7 @@ function sqlCrude(req,res) {
 				
 			.on("end", function () {
 				
-				sqlTrace( sql.query( 		// sqlDelete
+				Trace( sql.query( 		// sqlDelete
 					"DELETE FROM ?? WHERE least(?,1)" ,
 				
 					[table, query, Guard(query,false)], function (err,info) {
@@ -268,7 +321,7 @@ function sqlCrude(req,res) {
 			sql.query("INSERT INTO ?? SELECT *,? as j_ID FROM ?? WHERE ?", journal)  // attempt journal
 			.on("end", function () {
 				
-				sqlTrace( sql.query(
+				Trace( sql.query(
 				
 					Guard(body,false)
 					? "UPDATE ?? SET ? WHERE least(?,1)"
@@ -314,7 +367,7 @@ function sqlCrude(req,res) {
 			
 		function sqlInsert(res) {
 
-			sqlTrace( sql.query(  	// sqlInsert
+			Trace( sql.query(  	// sqlInsert
 			
 				Guard(body,false)
 					? "INSERT INTO ?? SET ?" 
@@ -344,8 +397,7 @@ function sqlCrude(req,res) {
 			res( new Error("Execute Reserved") );
 		}
 		
-	if (SQL.TRACE)
-		console.log(`${locking?"LOCK":""} ${action} FROM ${table} FOR ${client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`);
+	Trace(`${locking?"LOCK":""} ${action} FROM ${table} FOR ${client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`);
 
 	if (locking) 				// Execute query in a locked transaction thread
 		switch (action) {
@@ -500,525 +552,9 @@ console.log(body);
 
 // CRUDE interface
 
+/*
 function Select(req,res) {
-
-	/*
-	function render(jade, req, res) {
-console.log("jade="+jade);
-
-		try {
-			var gen = SQL.skin.compile(jade,req);
-			
-			res( gen ? gen(req) : new Error("Bad skin") );
-		}
-		catch (err) {
-			res( new Error(`Bad skin - ${err}`) );
-		}
-	}*/
-
-	function render(jade, req) {
-//console.log("jade="+jade);
-
-		try {
-			var gen = SQL.skin.compile(jade,req);
-			
-			return gen ? gen(req) : "Bad skin";
-		}
-		catch (err) {
-			return err+"";
-		}
-	}
-
-	sqlCrude(req, function (recs) {
-		
-		var
-			flags = req.flags;
-		
-		if (recs.constructor == Error) 
-			res(recs);
-
-		else
-		if ((flag = flags.jade) && SQL.skin) { 		// jadeify records  
-
-			/*
-			var	framework = flag.shift() || "extjs",
-				rows = "";
-
-			recs.each( function (n, rec) {
-
-				var cols = "";
-				flag.each( function (idx, jade) {
-					if ( rec[jade] ) cols += rec[jade].indent("#fit") + "\n";
-				});
-
-				rows += cols + "\n";
-			});
-			
-			render(
-
-`extends ${framework}
-append ${framework}.body
-` + rows
-.indent("#table",{dims:"'800,400'"})
-.indent(""),
-
-				req, res );
-				* */
-
-			recs.each( function (n, rec) {
-
-				flag.each( function (m, idx) {
-					
-					try {
-						var skin = 
-`extends layout
-append layout.body
-` + rec[idx].indent("");
-
-						rec[idx] = render(skin,req);
-					}
-					catch (err) {
-					}
-
-				});
-
-			});
-			
-			res(recs);			
-		}
-		
-		else
-		if ((flag = flags.mark) && SQL.skin) { 		// jadeify records  
-
-			recs.each( function (n, rec) {
-
-				flag.each( function (m, idx) {
-					
-					try {
-						var skin = 
-`extends layout
-append layout.body
-	:markdown
-` + rec[idx].indent("").indent("");
-
-						rec[idx] = render(skin,req);
-					}
-					catch (err) {
-					}
-
-				});
-
-			});
-			
-			res(recs);			
-		}
-		
-		else
-		if (flag = flags.tree)  			// treeify records 
-			res( recs.treeify(0,recs.length,0,flag,"size") );
-			
-		else
-		if (flag = flags.json) {			// parse specified field 
-			recs.each( function (n,rec) {
-				flag.each( function (i,n) {
-					try {
-						rec[n] = JSON.parse(rec[n]);
-					}
-					catch (err) {
-					}
-				});
-			});
-			res(recs);
-		}
-		
-		else
-		if (flag = flags.index) {     		// index records
-			
-			var group = flag[2],
-				x = flag[0],
-				y = flag[1];
-			
-			var rtn = group ? {} : {group: []};
-			recs.each( function (n,rec) {
-				var xy = group ? rtn[rec[group]] : rtn.group;
-				if (!xy) xy = rtn[rec[group]] = [];
-				xy.push([rec[x], rec[y]]);
-			});
-			
-			res( [rtn] );			
-		}
-
-		/*
-		else
-		if (flag = flags.pair) {		// pair records
-			var rtn = {};
-			recs.each( function (n,rec) {
-				var xy = rtn[flag[2]];
-				if (!xy) xy = rtn[flag[2]] = [];
-				xy.push([rec[flag[0]], rec[flag[1]]]);
-			});
-			
-			res({  
-				success: true,
-				msg: ok,
-				count: 1,
-				data: [rtn]
-			});
-		}*/
-
-		else
-		if (flag = flags.file) { 			// navigate records via pivot folders
-
-			var browse = flags.browse; 
-				Root   = flags.NodeID == SQL.NODENAV.ROOT,
-				Parent = !Root ? flags.NodeID : "$",  // Parent hash must be kept nonempty
-				Nodes  = !Root ? flags.NodeID.split(LIST) : [],					
-				Folder = (Nodes.length<browse.length) ? browse[Nodes.length] : "",
-				Files  = [];
-
-console.log("NAVIGATE Recs="+recs.length+" NodeID="+flags.NodeID+" Nodes="+Nodes+" browse="+browse+" Folder="+Folder+" Client="+Parent+" Flag="+flag);
-			
-			if (Folder) {   	// at branch
-				Files.push({	// prime the side tree area
-					mime:"directory",
-					ts:1334071677,
-					read:1,
-					write:0,
-					size:999,
-					hash: Parent,
-					volumeid:"tbd",
-					//phash: Back,	// cant do this for some reason
-					name: Folder,
-					locked:1,
-					dirs:1
-				});
-			
-				recs.each( function (n,rec) {
-//console.log("rec "+n+" path="+rec.NodeID+" name="+Folder+":"+rec[Folder]);
-					
-					Files.push({
-						mime: "directory",	// mime type
-						ts:1310252178,		// time stamp format?
-						read:1,				// read state
-						write:0,			// write state
-						size:666,			// size
-						hash:rec.NodeID,	// hash name
-						name:Folder+":"+rec[Folder], // flag name
-						phash:Parent, 		// parent hash name
-						locked:0,			// lock state
-						volumeid:"tbd",
-						dirs: 1 			// place in side tree too
-					});
-				});
-			}
-			else {				// at leaf
-				Files.push({	// prime the side tree area
-					mime:"directory",
-					ts:1334071677,
-					read:1,
-					write:0,
-					size:999,
-					hash: Parent,
-					volumeid:"tbd",
-					//phash: Back,	// cant do this for some reason
-					name: "Name",
-					locked:1,
-					dirs:1
-				});
-
-				recs.each( function (n,rec) {  // at leafs
-					Files.push({
-						mime: "application/tbd", //"application/x-genesis-rom",	//"image/jpg", // mime type
-						ts:1310252178,		// time stamp format?
-						read:1,				// read state
-						write:0,			// write state
-						size:111,			// size
-						hash:rec.NodeID,		// hash name
-						name:rec.Name || ("record "+n),			// flag name
-						phash:Parent,		// parent hash name
-						volumeid:"tbd",
-						locked:0			// lock state
-					});						
-				});
-			}
-			
-			switch (flag) {  	// Handle flag nav
-				case "test":	// canonical test case for debugging					
-					res({  //root -> "l1_Lw"
-						"cwd": { 
-							"mime":"directory",
-							"ts":1334071677,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash": "root",
-							"volumeid":"l1_",
-							"name":"Demo",
-							"locked":1,
-							"dirs":1},
-							
-						/*"options":{
-							"path":"", //"Demo",
-							"url":"", //"http:\/\/elfinder.org\/files\/demo\/",
-							"tmbUrl":"", //"http:\/\/elfinder.org\/files\/demo\/.tmb\/",
-							"disabled":["extract"],
-							"separator":"\/",
-							"copyOverwrite":1,
-							"archivers": {
-								"create":["application\/x-tar", "application\/x-gzip"],
-								"extract":[] }
-						},*/
-						
-						"files": [
-							{
-							"mime":"directory",
-							"ts":1334071677,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash":"root",
-							"volumeid":"l1_",
-							"name":"Junk", //"Demo",
-							"locked":1,
-							"dirs":1},
-						
-							/*{
-							"mime":"directory",
-							"ts":1334071677,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash":"root",
-							"volumeid":"l1_",
-							"name":"Demo",
-							"locked":1,
-							"dirs":1},*/
-							
-							{
-							"mime":"directory",
-							"ts":1340114567,
-							"read":0,
-							"write":0,
-							"size":0,
-							"hash":"l1_QmFja3Vw",
-							"name":"Backup",
-							"phash":"root",
-							"locked":1},
-							
-							{
-							"mime":"directory",
-							"ts":1310252178,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash":"l1_SW1hZ2Vz",
-							"name":"Images",
-							"phash":"root",
-							"locked":1},
-							
-							{
-							"mime":"directory",
-							"ts":1310250758,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash":"l1_TUlNRS10eXBlcw",
-							"name":"MIME-types",
-							"phash":"root",
-							"locked":1},
-							
-							{
-							"mime":"directory",
-							"ts":1268269762,
-							"read":1,
-							"write":0,
-							"size":0,
-							"hash":"l1_V2VsY29tZQ",
-							"name":"Welcome",
-							"phash":"root",
-							"locked":1,
-							"dirs":1},
-							
-							{
-							"mime":"directory",
-							"ts":1390785037,
-							"read":1,
-							"write":1,
-							"size":0,
-							"hash":"l2_Lw",
-							"volumeid":"l2_",
-							"name":"Test here",
-							"locked":1},
-							
-							{
-							"mime":"application\/x-genesis-rom",
-							"ts":1310347586,"read":1,
-							"write":0,
-							"size":3683,
-							"hash":"l1_UkVBRE1FLm1k",
-							"name":"README.md",
-							"phash":"root",
-							"locked":1}
-						],
-						
-						"api":"2.0","uplMaxSize":"16M","netDrivers":[],
-						
-						"debug":{
-							"connector":"php",
-							"phpver":"5.3.26-1~dotdeb.0",
-							"time":0.016080856323242,
-							"memory":"1307Kb \/ 1173Kb \/ 128M",
-							"upload":"",
-							"volumes":[
-								{	"id":"l1_",
-									"name":"localfilesystem",
-									"mimeDetect":"internal",
-									"imgLib":"imagick"},
-						
-								{	"id":"l2_",
-									"name":"localfilesystem",
-									"mimeDetect":"internal",
-									"imgLib":"gd"}],
-						
-							"mountErrors":[]}
-					});
-					break;
-					
-				case "tree": 	// not sure when requested
-					res({
-						tree: Files,
-
-						debug: {
-							connector:"php",
-							phpver:"5.3.26-1~dotdeb.0",
-							time:0.016080856323242,
-							memory:"1307Kb \/ 1173Kb \/ 128M",
-							upload:"",
-							volumes:[{	id:"l1_",
-										name:"localfilesystem",
-										mimeDetect:"internal",
-										imgLib:"imagick"},
-
-									{	id:"l2_",
-										name:"localfilesystem",
-										mimeDetect:"internal",
-										imgLib:"gd"}],
-
-							mountErrors:[]
-						}		
-					});	
-					break;
-					
-				case "size": 	// on directory info
-					res({
-						size: 222
-					});
-					break;
-					
-				case "parents": // not sure when requested
-				case "rename":  // on rename with name=newname
-				case "flag": 	// on open via put, on download=1 via get
-					res({
-						message: "TBD"
-					});
-					break;
-				
-				case "open":	// on double-click to follow			
-					res({
-						cwd: Files[0], /*{ 
-							mime:"directory",
-							ts:1334071677,
-							read:1,
-							write:0,
-							size:999,
-							hash: flags.NodeID,
-							phash: "", //cwdBack,
-							volumeid:"tbd", //"l1_",
-							name: Folder,
-							locked:0,
-							dirs:1},*/
-							
-						options: {
-							path:"/", //cwdPath,
-							url:"/", //"/root/",
-							tmbUrl:"/root/.tmb/",
-							disabled:["extract"],
-							separator:"/",
-							copyOverwrite:1,
-							archivers: {
-								create:["application/x-tar", "application/x-gzip"],
-								extract:[] }
-						},
-						
-						files: Files,
-						
-						api:"2.0",
-						uplMaxSize:"16M",
-						netDrivers:[],
-
-						debug: {
-							connector:"php",
-							phpver:"5.3.26-1~dotdeb.0",
-							time:0.016080856323242,
-							memory:"1307Kb \/ 1173Kb \/ 128M",
-							upload:"",
-							volumes:[{	id:"l1_",
-										name:"localfilesystem",
-										mimeDetect:"internal",
-										imgLib:"imagick"},
-
-									{	id:"l2_",
-										name:"localfilesystem",
-										mimeDetect:"internal",
-										imgLib:"gd"}],
-
-							mountErrors:[]
-						}		
-					});
-					break;
-					
-				default:
-					res({
-						message: "bad flag navigation command"
-					});
-			}
-		}
-			
-		else
-		if (flag = flags.encap) {  			// encapsulate records into a hash
-			var encap = {};
-			encap[flag] = recs;
-			res(encap);
-		}
-
-		/*
-		else
-		if (SQL.APP[log.Action][log.Table])	// Return number of records returned by virtual table
-			res({  
-				success: true,
-				msg: ok,
-				count: recs.length,
-				data: recs
-			});
-		*/
-		
-		/*
-		else
-		if (flag = flags.pivot)
-			sql.query("select found_rows()")
-			.on('result', function (stat) {
-				res({  
-					success: true,
-					msg: ok,
-					count: stat["found_rows()"],
-					data: recs
-				});
-			});*/
-			
-		else 								// Return number of records scanned in table
-			res(recs);
-		
-	});
+	sqlCrude(req, res);
 }
 function Update(req,res) {	
 	sqlCrude(req,res);
@@ -1032,6 +568,7 @@ function Delete(req,res) {
 function Execute(req,res) {	
 	sqlCrude(req,res);
 }
+*/
 
 /**
  * @method flattenCatalog
@@ -1049,7 +586,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 			
 			var qual = " using "+ (selects ? selects : "open")  + " search limit " + limits.records;
 			
-			console.log("CATALOG ("+table+qual+") HAS "+rtns.length);
+			Trace("CATALOG ("+table+qual+") HAS "+rtns.length);
 		
 			var query = selects 
 					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + selects + " FROM ?? HAVING Score>? LIMIT 0,?"
@@ -1110,7 +647,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 			//pivots: flags._pivot || ""
 		};
 		
-	flatten( sql, rtns, 0, BASE.listify(catalog), catalog, limits, cb, function (search) {
+	flatten( sql, rtns, 0, ENUM.listify(catalog), catalog, limits, cb, function (search) {
 
 		return Builds( "", search, flags);
 
@@ -1134,11 +671,11 @@ function hawkCatalog(req,res) {
 		}, exe);
 	}
 	
-	console.log("HAWK CATALOG FOR "+req.client+" find="+flags.has);
+	Trace("HAWK CATALOG FOR "+req.client+" find="+flags.has);
 	
 	if (has = flags.has)
 		queueExe("detector", has, function (req,res) {
-			console.log("create detector "+req.has);
+			//console.log("create detector "+req.has);
 			res("See "+"jobs queue".tag("a",{href:"/jobs.view"}));  
 		});
 		
@@ -1190,7 +727,7 @@ function Having( having ) {
 }
 
 function Order( sorts ) {
-	return " ORDER BY " + BASE.joinify( sorts, LIST, function (n,sort) {
+	return " ORDER BY " + ENUM.joinify( sorts, LIST, function (n,sort) {
 		
 		if (sort.constructor == Object) 
 			return "`" + sort.property + "` " + sort.direction;
@@ -1250,11 +787,11 @@ function Pivot(pivot, query, flags) {
 	var	NodeID = query.NodeID || "root",
 		nodes = (NodeID == "root") ? [] : NodeID.split(LIST);
 	
-	flags.group = nodes.length ? "" : pivot.join();
+	var group = flags.group = nodes.length ? "" : pivot.escape();
 
-	if (flags.group) {  		// at the root
+	if (group) {  		// at the root
 		var rtn = 
-			  ", " + (pivot.join(SQL.NODENAV.JOIN).enclose("concat")+" as char").enclose("cast") + " as NodeID"
+			  ", " + (group.enclose("concat")+" as char").enclose("cast") + " as NodeID"
 			+ ", " + SQL.RECID.enclose("count") + " as NodeCount"	
 			+ ", false as leaf, true as expandable, false as expanded";
 //			+ ", 'root' as parentId";
@@ -1350,14 +887,6 @@ function Guard(query, def) {
 	return def;
 }
 
-function sqlTrace(sql) {
-	
-	//if (SQL.TRACE)
-		console.log(sql.sql);
-		
-	return sql;
-}
-
 /**
  * Job queue interface.
  * 
@@ -1413,7 +942,7 @@ function selectJobs(req, cb) {
 			if (cb) cb( APP.queues[rec.QoS].batch[rec.ID] );
 		}
 		catch (err) {
-			console.log("LOST job "+[rec.ID,rec.QoS]);
+			Trace("LOST job "+[rec.ID,rec.QoS]);
 		}
 	});	
 }
@@ -1507,7 +1036,7 @@ function insertJobs(job, exe) {
 
 					if (pop.cmd)	// spawn pop and return its pid
 						pop.pid = CP.exec(pop.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
-							console.log(err + stdout + stderr);
+							Trace(err + stdout + stderr);
 							
 							if (pop.cb)
 								APP.thread( function (sql) {
@@ -1555,7 +1084,7 @@ function insertJobs(job, exe) {
 	sql.query("INSERT INTO queues SET ?", rec, function (err,info) {
 		
 		if (err) 
-			console.log("DROPPED JOB: "+err);
+			Trace("DROPPED JOB: "+err);
 			
 		else {
 			job.ID = info.insertId;
@@ -1573,7 +1102,7 @@ function insertJobs(job, exe) {
 					}, {ID:job.ID}
 					]);
 
-console.log("COMPLETED JOB: "+ack);
+					Trace("COMPLETED JOB: "+ack);
 				}); 
 			
 			});
