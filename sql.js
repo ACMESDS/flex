@@ -59,35 +59,6 @@ function Trace(msg,arg) {
 var
 	SQL = module.exports = {
 		
-		joinify: function (hash, list, cb) {
-			switch (hash.constructor) {
-				case Array:
-					if (cb) {
-						var rtn = [];
-
-						for (var n=0, N=hash.length; n<N; n++) 
-							rtn.push( cb( n, hash[n]) );
-							
-						return rtn.join(list);
-					}
-					else
-						return hash.join(list);
-						
-				case Object:
-					var rtn = [];
-
-					for (var n in hash) 
-						if (hash.hasOwnProperty(n)) 
-							rtn.push( cb ? cb(n,hash[n]) : n + "=" + hash[n] );
-
-					return rtn.join(list);
-					
-				default:	
-
-					return hash;
-			}
-		},
-
 		listify: function (hash, idxkey, valkey) {
 			var list = [];
 			var n = 0;
@@ -272,8 +243,6 @@ function sqlCrude(req,res) {
 							
 					res(err || recs);
 
-					//if (flags.find && !err && (table=="CATALOG")) 
-						//hawkCatalog(req,res);
 			}));
 
 		}
@@ -550,26 +519,6 @@ console.log(body);
 
 }
 
-// CRUDE interface
-
-/*
-function Select(req,res) {
-	sqlCrude(req, res);
-}
-function Update(req,res) {	
-	sqlCrude(req,res);
-}
-function Insert(req,res) {	
-	sqlCrude(req,res);
-}
-function Delete(req,res) {	
-	sqlCrude(req,res);
-}
-function Execute(req,res) {	
-	sqlCrude(req,res);
-}
-*/
-
 /**
  * @method flattenCatalog
  * 
@@ -647,7 +596,8 @@ function flattenCatalog(flags, catalog, limits, cb) {
 			//pivots: flags._pivot || ""
 		};
 		
-	flatten( sql, rtns, 0, ENUM.listify(catalog), catalog, limits, cb, function (search) {
+	//$$$$
+	flatten( sql, rtns, 0, SQL.listify(catalog), catalog, limits, cb, function (search) {
 
 		return Builds( "", search, flags);
 
@@ -727,7 +677,7 @@ function Having( having ) {
 }
 
 function Order( sorts ) {
-	return " ORDER BY " + ENUM.joinify( sorts, LIST, function (n,sort) {
+	return " ORDER BY " + sorts.joinify( function (sort) {  //$$$$
 		
 		if (sort.constructor == Object) 
 			return "`" + sort.property + "` " + sort.direction;
