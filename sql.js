@@ -77,11 +77,11 @@ var
 		},
 		
 		// CRUDE interface
-		select: sqlCrude,
-		delete: sqlCrude,
-		update: sqlCrude,
-		insert: sqlCrude,
-		execute: sqlCrude,
+		select: crude, //sqlCrude,
+		delete: crude, //sqlCrude,
+		update: crude, //sqlCrude,
+		insert: crude, //sqlCrude,
+		execute: crude, //sqlCrude,
 	
 		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
@@ -153,6 +153,8 @@ var
 					insertJobs,
 					executeJobs,
 					hawkCatalog,
+					context, //$$$$
+					crude, //$$$$
 					flattenCatalog
 				]);
 
@@ -185,6 +187,7 @@ var
  * @param {Object} res HTTP response
  * @param {Function} cb callback (typically SQL.close) that replies to client
  */
+/*
 function sqlCrude(req,res) {
 		
 	var 
@@ -518,6 +521,7 @@ console.log(body);
 		});
 
 }
+*/
 
 /**
  * @method flattenCatalog
@@ -640,6 +644,7 @@ function hawkCatalog(req,res) {
 		});*/
 }
 
+/*
 function sqlEach(query, args, cb) {
 	
 	if (cb)
@@ -836,6 +841,7 @@ function Guard(query, def) {
 	for (var n in query) return query;
 	return def;
 }
+*/
 
 /**
  * Job queue interface.
@@ -847,64 +853,38 @@ function Guard(query, def) {
  * insert(job,cb): add job and route to callback cb(job) when executed.
  * */
 
-SQL.queues = [ null, {
-		timer: 0,
-		depth: 0,
-		batch: {},
-		rate: 10e3
-	}, {
-		timer: 0,
-		depth: 0,
-		batch: {},
-		rate: 8e3
-	}, {
-		timer: 0,
-		depth: 0,
-		batch: {},
-		rate: 4e3
-	}, {
-		timer: 0,
-		depth: 0,
-		batch: {},
-		rate: 2e3
-	}, {
-		timer: 0,
-		depth: 0,
-		batch: {},
-		rate: 1e3
-	}];
+SQL.queues = {};
 	
-function selectJobs(req, cb) { 
+/*
+ * callsback cb(rec) for each queuing rec matching the where clause.
+ */
+ 
+function selectJobs(where, cb) { 
 
 	// route valid jobs matching sql-where clause to its assigned callback cb(req).
 	var sql = this;
 	
 	sql.query(
-		req.where
-		? `SELECT *, datediff(now(),Arrived) AS Age,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE NOT Hold AND Departed IS NULL AND NOT profiles.Banned AND (${req.where}) ORDER BY QoS,Priority`
-		: `SELECT *, datediff(now(),Arrived) AS Age,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE NOT Hold AND Departed IS NULL AND NOT profiles.Banned ORDER BY QoS,Priority`
+		where
+		? `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE ${where} ORDER BY QoS,Priority`
+		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
 	)
 	.on("error", function (err) {
 		console.log(err);
 	})
 	.on("result", function (rec) {
-		try {
-			if (cb) cb( APP.queues[rec.QoS].batch[rec.ID] );
-		}
-		catch (err) {
-			Trace("LOST job "+[rec.ID,rec.QoS]);
-		}
+		cb(rec);
 	});	
 }
 
-function updateJobs(req, exe) { 
+function updateJobs(req, cb) { 
 	// adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
 	
 	var sql = this;
 	
 	sql.selectJobs(req, function (job) {
 		
-		exe(job.req, function (ack) {
+		cb(job.req, function (ack) {
 
 			if (req.qos)
 				sql.query("UPDATE queues SET ? WHERE ?", [{
@@ -928,15 +908,17 @@ function updateJobs(req, exe) {
 	});
 }
 		
-function deleteJobs(req, exe) { 
+function deleteJobs(req, cb) { 
 	
 	var sql = this;
 	sql.selectJobs(req, function (job) {
 		
-		exe(job.req, function (ack) {
+		cb(sql,job, function (ack) {
 			sql.query("UPDATE queues SET ? WHERE ?", [{
 				Departed: new Date(),
-				Notes:ack}, {ID:job.ID}]);
+				RunTime: (new Date() - rec.Arrived)/3.6e6,
+				Util: util(),
+				Notes:"stopped"}, {Name:job.Name}]);
 
 			delete APP.queues[job.qos].batch[job.ID];
 			
@@ -945,7 +927,14 @@ function deleteJobs(req, exe) {
 	});
 }
 
-function insertJobs(job, exe) { 
+/*
+ * Adds job to requested job.qos, job.priority queue and updates its
+ * associated queue record by its unique job.name.  Executes the
+ * supplied callsback cb(job) with the next job ready for service, or
+ * spawns the job if job.cmd provided.
+ */
+
+function insertJobs(job, cb) { 
 	function util() {				// compute cpu utils and return avg util
 		var avgUtil = 0;
 		var cpus = OS.cpus();
@@ -960,107 +949,689 @@ function insertJobs(job, exe) {
 	
 	function regulate(job,cb) {		// regulate job and spawn if job.cmd provided
 			
-		job.cb = cb;
 		var queue = SQL.queues[job.qos];
 		
-		if (queue) { 				// regulated job
-			queue.batch[job.ID] = job;  // add job to queue
-			queue.depth++;
+		if (!queue)
+			queue = SQL.queues[job.qos] = {
+				timer: 0,
+				batch: {},
+				rate: 2e3*(10-job.qos)
+			};
 			
-//console.log(queue);
-
+		if (queue.rate > 0) { 				// regulated job
+			var batch = queue.batch[job.priority];
+			if (!batch) batch = queue.batch[job.priority] = [];
+			
+			batch.push( Copy(job, {cb:cb}) );
+			
 			if (!queue.timer) 		// restart idle queue
 				queue.timer = setInterval(function (queue) {
 					
-					var batch = queue.batch;
+					var job = null;
+					for (var batch in queue.batch) {
+						job = batch.pop();
+						
+						if (job) {
+//console.log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-					var pop = {priority: -1}; 
-					Each( batch, function (ID,job) {
-						if (job.priority > pop.priority) pop = job;
-					});
-
-					delete batch[pop.ID];
-					queue.depth--;
-				
-//console.log("pop depth="+queue.depth+" pop="+[pop.name,pop.qos]);
-
-					if (pop.cmd)	// spawn pop and return its pid
-						pop.pid = CP.exec(pop.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
-							Trace(err + stdout + stderr);
-							
-							if (pop.cb)
-								APP.thread( function (sql) {
-									pop.cb( err ? err + stdout + stderr : null );
+							if (job.cmd)	// spawn job and return its pid
+								job.pid = CP.exec(job.cmd, {cwd: "./public/dets", env:process.env}, function (err,stdout,stderr) {
+									Trace(err + stdout + stderr);
+									
+									if (job.cb)
+										APP.thread( function (sql) {
+											job.cb( err ? err + stdout + stderr : null );
+										});
 								});
-						});
-					else  			// execute pop cb on new sql thread
-					if (pop.cb) 
-						SQL.thread( function (sql) {
-							pop.req.sql = sql;  // give job this fresh sql connector								
-							pop.cb(sql,pop);
-						});
-				
-					if (!queue.depth) { 	// empty queue goes idle
+							else  			// execute job cb on new sql thread
+							if (job.cb) 
+								SQL.thread( function (sql) {
+									job.cb(sql,job);
+								});
+						
+							break;
+						}
+					}
+						
+					if (!job) { 	// empty queue goes idle
 						clearInterval(queue.timer);
 						queue.timer = null;
 					}
 
 				}, queue.rate, queue);
+				
+			return true;
 		}
-		else 						// unregulated job - stay on request sql thread
-		if (cb) cb( job.req.sql, job );
+		else 						// unregulated job
+			return false;
 	}
 
-	var rec = {
-		Client	: job.client,
-		Class	: job.class,
-		State	: 0,
-		Arrived	: new Date(),
-		Departed: null,
-		Mark	: 0,
-		Job		: job.name,
-		RunTime	: 0,
-		Classif : "",
-		Util	: util(),
-		Priority: 1,
-		KeyID	: job.key || "",
-		Notes	: "queued",
-		QoS		: job.qos,
-		Work 	: 1
-	};
-
-	var sql = this;
+	var sql = this,
+		jobID = {Name:job.name};
 	
-	sql.query("INSERT INTO queues SET ?", rec, function (err,info) {
-		
-		if (err) 
-			Trace("DROPPED JOB: "+err);
-			
-		else {
-			job.ID = info.insertId;
-			regulate(job, function (sql,job) {
+	var
+		regulated = regulate(job, function (sql,job) {
 				
-				exe(job.req, function (ack) {
-
-					var Departed = new Date();
-
-					sql.query("UPDATE queues SET ? WHERE ?", [{
-						Departed: Departed,
-						RunTime: (Departed - rec.Arrived)/3.6e6,
-						Util: util(),
-						Notes: ack
-					}, {ID:job.ID}
-					]);
-
-					Trace("COMPLETED JOB: "+ack);
-				}); 
+			cb(sql, job);
 			
-			});
-		}
-	});
+			sql.query(
+				"UPDATE queues SET ?,Age=datediff(now(),Arrived),Done=Done+1,State=Done/Work*100 WHERE ?", [
+				{Util: util()}, jobID 
+			]);
+			
+			sql.query(
+				"UPDATE queues SET Departed=now(), Notes='finished' WHERE least(?,Done=Work)", 
+				jobID );
+
+		});
+
+	if (regulated)
+		sql.query(
+			"UPDATE queues SET ?,Age=datediff(now(),Arrived),Work=Work+1,State=Done/Work*100 WHERE ?", [
+			{Util:util()},
+			{Name:job.name} ], 
+			function (err) {
+				
+			if (err)
+				sql.query("INSERT INTO queues SET ?", {
+					Client	: job.client,
+					Class	: job.class,
+					State	: 0,
+					Arrived	: new Date(),
+					Departed: null,
+					Mark	: 0,
+					Job		: job.name,
+					RunTime	: 0,
+					Classif : "",
+					Util	: util(),
+					Priority: 1,
+					Notes	: "running",
+					QoS		: job.qos,
+					Work 	: 1
+				});
+		});
+		
+	else	
+		cb(sql,job);
 }
 	
 function executeJobs(req, exe) {
+}
+
+//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SQL.DBVAR = function(sql,opts,defs) {
+	
+	this.sql = sql;
+	this.err = null;
+	this.query = "";
+	this.opts = null;
+	for (var n in defs) this[n] = defs[n];
+	for (var n in opts) this[n] = opts[n];
+}
+
+SQL.DBVAR.prototype = {
+	get rec() { 
+	},
+	
+	set rec(rhs) {
+		var	me = this;
+			table = SQL.DBTX[me.table] || me.table,
+			ID = me.where ? me.where.ID : 0,
+			lock = me.lock,
+			client = me.client,
+			sql = me.sql,
+			res = me.res,
+			journal = [ "jou."+me.table.split(".").pop(), me.table, ID ];	
+		
+		function nodeify(list) {
+			return "`"+list.split(",").join("`,',',`")+"`";
+		}
+		
+		function x(opt,key,buf) {
+			
+			if (opt) 
+				switch (key) {
+					case "":
+					case "IN BOOLEAN MODE":
+					case "WITH QUERY EXPANSION":
+					
+						me.query += `,MATCH(FullSearch) AGAINST('${opt}' ${key}) AS Score`;
+						me.having = me.score ? "Score>"+me.score : "Score";
+						break;
+					
+					case "SELECT":
+					case "SELECT SQL_CALC_FOUND_ROWS":
+
+						if (me.browse) { 
+							var	nodes = opt.NodeID ? opt.NodeID.split(",") : [];
+							
+							me.group = me.browse[nodes.length];
+
+							if (me.group) { 
+								var pivots = nodeify(browse.slice(0,nodes.length+1));
+								
+								me.query += ` ${key} *`;
+								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+								me.query += ",count(ID) AS NodeCount";
+								me.query += ",false AS leaf, true AS expandable, false AS expanded";
+									
+								nodes.each( function (n,node) {
+									me.where[ browse[n] ] = node;
+								});
+							}
+							else  {
+								var pivots = nodeify(browse.concat(["ID"]));
+								
+								me.query += ` ${key} *`;
+								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+								me.query += ",1 as NodeCount";
+								me.query += ",true AS leaf, false AS expandable, true AS expanded";
+									
+								nodes.each( function (n,node) {
+									me.where[(n >= browse.length) ? "ID" : browse[n]] = node;
+								});
+							}
+						}
+						
+						else
+						if (me.group)
+							if (opt.NodeID) {
+								var	nodes = (opt.NodeID == "root") ? [] : opt.NodeID.split(",");									
+								var pivots = nodes.length ? "" : nodeify(me.group);
+
+								if (pivots) {  		// at the root
+									me.query += ` ${key} ${me.group}`;
+									me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+									me.query += ",count(ID) AS NodeCount"
+									me.query += ",false AS leaf,true AS expandable,false AS expanded";
+								}
+								else {  					// requesting all nodes under a specific node
+									me.query += ` ${key} `;
+									me.query += "ID AS NodeID";
+									me.query += ",1 AS NodeCount";
+									me.query += ",true AS leaf,true AS expandable,false AS expanded";
+								}
+							}
+							else {
+								me.query += ` ${key} ??`;
+								me.opts.push( (opt.vars||"ID").split(",") );
+							}
+						
+						else
+							switch (opt.constructor) {
+								case Array:
+									me.query += ` ${key} ??`;
+									me.opts.push(opt);
+									break;
+									
+								case String:
+									me.query += ` ${key} ${opt}`;
+									break;
+															
+								case Object:
+									me.query += ` ${key} *`;
+									x(opt.nlp, "");
+									x(opt.bin, "IN BINARY MODE");
+									x(opt.qex, "WITH QUERY EXPANSION");
+									break;
+							}
+						
+						break;
+
+					case "JOIN":
+						switch (opt.constructor) {
+							case Array:
+								me.query += ` ${mode} ${key} ON ?`;
+								me.opts.push(opt);
+								break;
+								
+							case String:
+								me.query += ` ${mode} ${key} ON ${opt}`;
+								break;
+
+							case Object:
+
+								var mode = opt.left ? "left" : opt.right ? "right" : "";
+
+								me.query += ` ${mode} ${key} ? ON least(?,1)`;
+								
+								for (var n in opt.on) 
+									buf[n] = me.table+"."+opt.on[n];
+									
+								me.opts.push(opt[mode]);
+								me.opts.push(buf);
+								break;
+						}
+						break;
+					
+					case "LIMIT":
+						switch (opt.constructor) {
+							case Array:
+								me.query += ` ${key} ?`;
+								me.opts.push(opt);
+								break;
+								
+							case String:
+								me.query += ` ${key} ${opt}`;
+								break;
+
+							case Object:
+								me.query += ` ${key} ?`;
+								me.opts.push([opt.start,opt.count]);
+								break;								
+						}
+						break;
+					
+					case "WHERE":
+					case "HAVING":
+						switch (opt.constructor) {
+							case Array:
+							
+								switch (opt.length) {
+									case 0:
+										break;
+									
+									case 1:
+										me.query += ` ${key} ?? IS NULL`;
+										me.opts.push( opt[0] );
+										break;
+										
+									case 2:
+										me.query += ` ${key} ?? LIKE '${opt[1]}'`;
+										me.opts.push( opt[0] );
+										break;
+										
+									case 3:
+										me.query += ` ${key} ?? BETWEEN ? AND ?`;
+										me.opts.push( opt[0] );
+										me.opts.push( opt[1] );
+										me.opts.push( opt[2] );
+										break;
+										
+									default:
+								}
+								
+								break;
+								
+							case String:
+								if (opt)
+									me.query += ` ${key} ${opt}`;
+								break;
+
+							case Object:
+								for (var n in opt) {
+									me.query += ` ${key} least(?,1)`;
+									me.opts.push(opt);
+									break;
+								}
+								break;
+						}
+						break;
+						
+					case "ORDER BY":
+						switch (opt.constructor) {
+							case Array:
+								var by = [];
+								opt.each(function (n,opt) {
+									by.push(`${opt.property} ${opt.direction}`);
+								});
+								me.query += ` ${key} ${by.join(",")}`;
+								break;
+								
+							case String:
+								me.query += ` ${key} ??`;
+								me.opts.push(opt.split(","));
+								break;
+
+							case Object:
+								break;
+						}
+						break;
+						
+					case "SET":
+						switch (opt.constructor) {
+							case Array:
+								me.query += ` ${key} ??`;
+								me.opts.push(opt);
+								break;
+								
+							case String:
+								me.query += ` ${key} ${opt}`;
+								me.opts.push(opt.split(","));
+								break;
+
+							case Object:
+								me.query += ` ${key} ?`;
+								me.opts.push(opt);
+								break;
+						}
+						break;
+						
+					default:
+						switch (opt.constructor) {
+							case Array:
+								me.query += ` ${key} ??`;
+								me.opts.push(opt);
+								break;
+								
+							case String:
+								me.query += ` ${key} ${opt}`;
+								//me.opts.push(opt.split(","));
+								break;
+
+							case Object:
+								me.query += ` ${key} ?`;
+								me.opts.push(opt);
+								break;
+						}
+				}
+
+		}						
+
+		if (rhs) 
+			switch (rhs.constructor) {
+				case Error:
+				
+					if (res) res(rhs);
+					break;
+					
+				case Array: 
+				
+					rhs.each(function (n,rec) {
+						if (rec)
+							me.query = sql.query(
+								"INSERT INTO ?? SET ?", [table,rec], function (err,info) {
+
+								if (!n && res) {
+									res( err || info );
+
+									if (client && SQL.emit) 		// Notify clients of change.  
+										SQL.emit( "insert", {
+											table: me.table, 
+											body: rec, 
+											ID: info.insertId, 
+											from: client
+											//flag: flags.client
+										});
+								}			
+
+							});
+
+						if (me.trace) console.log(me.query.sql);
+					});
+
+					break;
+					
+				case Object:
+
+					me.opts = []; me.query = "";
+					x(table, "UPDATE");
+					x(rhs, "SET");
+					x(me.where, "WHERE");
+					x(me.order, "ORDER BY");
+					
+					sql.query( 						// attempt journal
+						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", 
+						journal)
+						
+					.on("end", function () {
+
+						me.query = sql.query(me.query, me.opts, function (err,info) {
+
+							if (res) res( err || info );
+
+						});
+
+						if (client && SQL.emit) 		// Notify clients of change.  
+							SQL.emit( "update", {
+								table: me.table, 
+								body: rhs, 
+								ID: ID, 
+								from: client
+								//flag: flags.client
+							});
+
+						if (me.trace) console.log(me.query.sql);
+
+					});
+					
+					break;
+					
+				case Function:
+				
+					me.opts = []; me.query = "";
+					x(me.build || "*", "SELECT SQL_CALC_FOUND_ROWS");
+					x(me.nlp, "");
+					x(me.bin, "IN BINARY MODE");
+					x(me.qex, "WITH QUERY EXPANSION");
+					x(table, "FROM");
+					x(me.join, "JOIN", {});
+					x(me.where, "WHERE");
+					x(me.having, "HAVING");
+					x(me.order, "ORDER BY");
+					x(me.group, "GROUP BY");
+					x(me.limit, "LIMIT");
+
+					switch (rhs.name) {
+						case "each":
+							me.query = sql.query(me.query, me.opts)
+							.on("error", function (err) {
+								rhs(err);
+							})						
+							.on("result", function (rec) {										
+								rhs(rec);
+							}); 
+							break;
+						
+						default:
+							me.query = sql.query(me.query, me.opts, function (err,recs) {	
+								rhs( err || recs );
+							});
+					}
+					
+					if (me.trace) console.log(me.query.sql);
+					
+					break;
+					
+				default:
+				
+					if (me.trace) console.log(
+						`${rhs.toUpperCase()} ${table} FOR ${client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`
+					);
+				
+					switch (rhs) {
+
+						case "lock.select":
+
+							me.rec = function (recs) {
+
+								if (recs.constructor == Error) 
+									res( recs+"" );
+								
+								else
+								if (rec = recs[0]) 
+									sql.query(
+										"SELECT * FROM openv.locks WHERE least(?)", 
+										lockID = {Lock:`${table}.${rec.ID}`, Client:client}, 
+										function (err,info) {
+											
+console.log(err);
+console.log(info);											
+										if (info.length) {
+											res( rec );
+											sql.query("COMMIT");
+											sql.query("DELETE FROM openv.locks WHERE ?",lockID);
+										}
+
+										else
+											sql.query(
+												"INSERT INTO openv.locks SET ?",
+												lockID, 
+												function (err,info) {
+													
+												if (err)
+													res( "record already record" );
+
+												else
+													sql.query("START TRANSACTION", function (err) {  // queue this transaction
+
+														res( err || rec );
+														
+													});
+											});	
+									});
+								
+								else
+									res( "no record" );
+								
+							};
+							
+
+							break;
+						
+						case "lock.delete":
+							
+							sql.query(
+								"SELECT * FROM openv.locks WHERE least(?)", 
+								lockID = {Lock:`${table}.${ID}`, Client:client}, 
+								function (err,info) {
+									
+								if (info.length) {
+									me.rec = null;
+									sql.query("COMMIT");
+									sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
+								}
+								else
+									res( "record must be locked" );
+							});
+							break;
+													
+						case "lock.insert":
+
+							sql.query(
+								"DELETE FROM openv.locks WHERE least(?)", 
+								function (err,info) {
+									
+								if (info.affected) {
+									me.rec = [me.data];
+									sql.query("COMMIT");
+								}
+								else
+									res( "record must be locked" );
+							});
+							break;
+							
+						case "lock.update":
+
+			console.log(me.where);
+			console.log(me.data);
+
+							sql.query(
+								"SELECT * FROM openv.locks WHERE least(?)", 
+								lockID = {Lock:`${table}.${ID}`, Client:client}, 
+								function (err,info) {
+									
+			console.log(info);
+								if (info.length) {
+									me.rec = me.data;
+									sql.query("COMMIT");
+									sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
+								}
+								else
+									res( "record must be locked" );
+							});
+
+							break;
+							
+						case "lock.execute":
+							
+							res( "execute undefined" );
+							break;
+
+						case "select": me.rec = me.res; break;
+						case "update": me.rec = me.data; break;
+						case "delete": me.rec = null; break;
+						case "insert": me.rec = [me.data]; break;
+						case "execute": me.rec = new Error("execute undefined"); break;
+						default:
+							me.rec = new Error("invalid request");
+					}
+
+			}
+		else {
+			me.query = ""; me.opts = [];
+			x(table, "DELETE FROM");
+			x(me.where, "WHERE");
+			
+			me.sql.query( 						// attempt journal
+				"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", 
+				journal)
+				
+			.on("end", function () {
+			
+				me.query = me.sql.query(me.query, me.opts, function (err,info) {
+
+					if (me.res) me.res(err || info);
+					
+				});
+				
+				if (me.client && SQL.emit) 		// Notify clients of change.  
+					SQL.emit( "delete", {
+						table: me.table, 
+						ID: ID, 
+						from: me.client
+						//flag: flags.client
+					});
+				
+				if (me.trace) console.log(me.query.sql);
+				
+			});
+		}
+		
+		return this;
+	}
+	
+};
+
+function context(ctx,cb) {
+	var sql = this;
+	var context = {};
+	for (var n in ctx) context[n] = new SQL.DBVAR(sql,ctx[n],{table:"test."+n});
+	if (cb) cb(context);
+}
+
+
+function crude(req,res) {
+		
+	var 
+		sql = req.sql,							// sql connection
+		log = req.log || {RecID:0}, 			// transaction log
+		client = req.client, 					// client info
+		table = req.table,						// db table resource
+		action = req.action,  					// action requested				
+
+		// query, body and flags parameters
+		
+		query = req.query, 
+		body = req.body,
+		flags = req.flags;
+		
+	sql.context({ds: {
+			trace:	true,
+			table:	req.table,
+			where:	req.query,
+			res:	res,	
+			order:	flags.sort,
+			group: 	flags.pivot,
+			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
+			build: 	flags.build,
+			data:	body,
+			client: client
+		}}, function (ctx) {
+			
+		ctx.ds.rec = (flags.lock ? "lock." : "") + action;
+		
+	});
 }
 
 // UNCLASSIFIED
