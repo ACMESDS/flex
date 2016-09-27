@@ -1073,6 +1073,42 @@ SQL.DBVAR.prototype = {
 	get rec() { 
 	},
 	
+	unlock: function (ID, cb, lockcb) {
+		var me = this,
+			sql = me.sql;
+		
+		sql.query(
+			"SELECT * FROM openv.locks WHERE least(?)", 
+			lockID = {Lock:`${me.table}.${ID}`, Client:me.client}, 
+			function (err,info) {
+				
+			if (info.length) {
+				cb();
+				sql.query("COMMIT");  // commit queues transaction
+				sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
+			}
+			
+			else
+			if (lockcb)
+				sql.query(
+					"INSERT INTO openv.locks SET ?",
+					lockID, 
+					function (err,info) {
+						
+					if (err)
+						me.res( "record already locked by another" );
+
+					else
+						sql.query("START TRANSACTION", function (err) {  // queue this transaction
+							lockcb();
+						});
+				});	
+			
+			else
+				me.res( "record must be locked" );
+		});
+	},
+		
 	set rec(rhs) {
 		var	me = this;
 			table = SQL.DBTX[me.table] || me.table,
@@ -1450,35 +1486,10 @@ SQL.DBVAR.prototype = {
 								
 								else
 								if (rec = recs[0]) 
-									sql.query(
-										"SELECT * FROM openv.locks WHERE least(?)", 
-										lockID = {Lock:`${table}.${rec.ID}`, Client:client}, 
-										function (err,info) {
-											
-console.log(err);
-console.log(info);											
-										if (info.length) {
-											res( rec );
-											sql.query("COMMIT");
-											sql.query("DELETE FROM openv.locks WHERE ?",lockID);
-										}
-
-										else
-											sql.query(
-												"INSERT INTO openv.locks SET ?",
-												lockID, 
-												function (err,info) {
-													
-												if (err)
-													res( "record already record" );
-
-												else
-													sql.query("START TRANSACTION", function (err) {  // queue this transaction
-
-														res( err || rec );
-														
-													});
-											});	
+									me.unlock(rec.ID, function () {
+										res( rec );
+									}, function () {
+										res( rec );
 									});
 								
 								else
@@ -1491,56 +1502,23 @@ console.log(info);
 						
 						case "lock.delete":
 							
-							sql.query(
-								"SELECT * FROM openv.locks WHERE least(?)", 
-								lockID = {Lock:`${table}.${ID}`, Client:client}, 
-								function (err,info) {
-									
-								if (info.length) {
-									me.rec = null;
-									sql.query("COMMIT");
-									sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
-								}
-								else
-									res( "record must be locked" );
+							me.unlock(ID, function () {
+								me.rec = null;
 							});
 							break;
 													
 						case "lock.insert":
 
-							sql.query(
-								"DELETE FROM openv.locks WHERE least(?)", 
-								function (err,info) {
-									
-								if (info.affected) {
-									me.rec = [me.data];
-									sql.query("COMMIT");
-								}
-								else
-									res( "record must be locked" );
+							me.unlock(ID, function () {
+								me.rec = [me.data];
 							});
 							break;
 							
 						case "lock.update":
 
-			console.log(me.where);
-			console.log(me.data);
-
-							sql.query(
-								"SELECT * FROM openv.locks WHERE least(?)", 
-								lockID = {Lock:`${table}.${ID}`, Client:client}, 
-								function (err,info) {
-									
-			console.log(info);
-								if (info.length) {
-									me.rec = me.data;
-									sql.query("COMMIT");
-									sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
-								}
-								else
-									res( "record must be locked" );
+							me.unlock(ID, function () {
+								me.rec = me.data;
 							});
-
 							break;
 							
 						case "lock.execute":
@@ -1553,6 +1531,7 @@ console.log(info);
 						case "delete": me.rec = null; break;
 						case "insert": me.rec = [me.data]; break;
 						case "execute": me.rec = new Error("execute undefined"); break;
+						
 						default:
 							me.rec = new Error("invalid request");
 					}
@@ -1605,15 +1584,6 @@ function crude(req,res) {
 		
 	var 
 		sql = req.sql,							// sql connection
-		log = req.log || {RecID:0}, 			// transaction log
-		client = req.client, 					// client info
-		table = req.table,						// db table resource
-		action = req.action,  					// action requested				
-
-		// query, body and flags parameters
-		
-		query = req.query, 
-		body = req.body,
 		flags = req.flags;
 		
 	sql.context({ds: {
@@ -1625,11 +1595,11 @@ function crude(req,res) {
 			group: 	flags.pivot,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
 			build: 	flags.build,
-			data:	body,
-			client: client
+			data:	req.body,
+			client: req.client
 		}}, function (ctx) {
 			
-		ctx.ds.rec = (flags.lock ? "lock." : "") + action;
+		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
 		
 	});
 }
