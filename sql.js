@@ -1059,33 +1059,622 @@ function executeJobs(req, exe) {
 }
 
 //$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-SQL.DBVAR = function(sql,opts,defs) {
+/*
+	Encapsulate an underlying (default MySQL) database table into a JS dataset variable:
+	
+		var ds = SQL.DSVAR(sql, { ATTRIBUTE: VALUE, ... })
+	
+	where ATTRIBUTEs are:
+	
+		table: 	"DB.TABLE" || "TABLE"
+		where: 	[ FIELD, VALUE ] || [ FIELD, MIN, MAX ] || {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} || "CLAUSE"
+		having: [ FIELD, VALUE ] || [ FIELD, MIN, MAX ] || {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} || "CLAUSE"
+		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] || "FIELD, ..."
+		group: 	[ FIELD, ...] || "FIELD, ..."
+		limit: 	[ START, COUNT ] || {start:START, count:COUNT} || "START,COUNT"
+		build:	[ FIELD, ... ] || "FIELD, ... "
+		res: 	function (ds) {...}
+	
+	Null attributes are ignored.  CRUD operations to underlying records are performed using:
+	
+		ds.rec = { FIELD:VALUE, ... }		// update matched record(s) 
+		ds.rec = [ {...}, {...}, ... ]		// insert record(s)
+		ds.rec = null 						// delete matched records matched 
+		ds.rec = function F(data) {...}		// select F=each/all matched record(s)
+		
+	and will callback its non-null response .res method when completed.  The select operation
+	returns the specified .build fields for F=each/all .where matched records, in the requested
+	.order ordering and .group grouping, as filtered by .having and .limit attributes.
+
+	CRUDE = "select" || "delete" || "update" || "insert" || "execute" operations can 
+	also be performed using:
+	
+		ds.res = callback function
+		ds.data = dataset
+		ds.rec = CRUDE
+		
+	or in record-locked mode using:
+	
+		ds.rec = "lock." + CRUDE
+	
+	Additional attributes:
+		
+		attr	default	true/set to
+		-----------------------------------------------------------------------------------
+		unsafe 	true	execute potentially unsafe queries
+		trace	false	display formed queries
+		journal	false	enable table journalling
+		ag		null	aggregate where/having = least(?,1), greatest(?,0), sum(?), ...
+		nlp		null	search pattern using natural language parse
+		bin		null	search pattern in binary mode
+		qex		null	search pattern with query expansion
+		
+	A large context of datasets can be esatlished on the same sql connector with:
+	
+		sql.context( {ds1:{attributes}, ds2:{attributes}, ... }, function (ctx) {
+		
+			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+		
+		});
+				
+	Examples:
+	
+		// create dataset
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,rec:res});
+		
+		// create dataset and access each record
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,limit:[0,1],rec:function each(rec) {console.log(rec)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,where:['x','%ll%'],rec:function each(rec) {console.log(rec)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,where:['a',0,5],rec:function each(rec) {console.log(rec)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,where:"a<30",rec:function each(rec) {console.log(rec)}});		
+		
+		// create dataset and access all records
+
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,build:{NodeID:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
+		
+		// select ds record(s) matched by ds.where
+		ds.where = [1,2];
+		ds.rec = function (rec) {
+			console.log(rec);
+		}
+
+		// delete ds record(s) matched by ds.where
+		ds.where = {ID:2}
+		ds.rec = null
+		
+		// update ds record(s) matched by ds.where
+		ds.where = null
+		ds.rec = [{a:1,b:2,ds:"hello"},{a:10,b:20,x:"there"}]
+		ds.where = {ID:3}
+		ds.rec = {a:100} 
+	
+*/
+
+SQL.DSVAR = function(sql,opts,defs) {
 	
 	this.sql = sql;
 	this.err = null;
 	this.query = "";
 	this.opts = null;
-	for (var n in defs) this[n] = defs[n];
+	this.unsafe = true;
+	
+	for (var n in defs) 
+		switch (n) {
+			case "select":
+			case "update":
+			case "delete":
+			case "insert":
+				this.prototype[n] = defs[n];
+				break;
+				
+			default:	
+				this[n] = defs[n];
+		}
+		
 	for (var n in opts) this[n] = opts[n];
 }
 
-SQL.DBVAR.prototype = {
+SQL.DSVAR.prototype = {
+	
+	x: function xquery(opt,key,buf) {
+		
+		function nodeify(list) {
+			return "`"+list.split(",").join("`,',',`")+"`";
+		}
+	
+		var me = this,
+			keys = key.split(" "),
+			ag = keys[1] || "least(?,1)";
+			
+		if (opt) 
+			switch (keys[0]) {
+				case "":
+				case "IN":
+				case "WITH":
+				
+					me.query += `,MATCH(FullSearch) AGAINST('${opt}' ${key}) AS Score`;
+					me.having = me.score ? "Score>"+me.score : "Score";
+					break;
+				
+				case "SELECT":
+
+					if (me.browse) { 
+						var	nodes = opt.NodeID ? opt.NodeID.split(",") : [];
+						
+						me.group = me.browse[nodes.length];
+
+						if (me.group) { 
+							var pivots = nodeify(browse.slice(0,nodes.length+1));
+							
+							me.query += ` ${key} *`;
+							me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+							me.query += ",count(ID) AS NodeCount";
+							me.query += ",false AS leaf, true AS expandable, false AS expanded";
+								
+							nodes.each( function (n,node) {
+								me.where[ browse[n] ] = node;
+							});
+						}
+						else  {
+							var pivots = nodeify(browse.concat(["ID"]));
+							
+							me.query += ` ${key} *`;
+							me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+							me.query += ",1 as NodeCount";
+							me.query += ",true AS leaf, false AS expandable, true AS expanded";
+								
+							nodes.each( function (n,node) {
+								me.where[(n >= browse.length) ? "ID" : browse[n]] = node;
+							});
+						}
+					}
+					
+					else
+					if (me.group)
+						if (opt.NodeID) {
+							var	nodes = (opt.NodeID == "root") ? [] : opt.NodeID.split(",");									
+							var pivots = nodes.length ? "" : nodeify(me.group);
+
+							if (pivots) {  		// at the root
+								me.query += ` ${key} ${me.group}`;
+								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
+								me.query += ",count(ID) AS NodeCount"
+								me.query += ",false AS leaf,true AS expandable,false AS expanded";
+							}
+							else {  					// requesting all nodes under a specific node
+								me.query += ` ${key} `;
+								me.query += "ID AS NodeID";
+								me.query += ",1 AS NodeCount";
+								me.query += ",true AS leaf,true AS expandable,false AS expanded";
+							}
+						}
+						else {
+							me.query += ` ${key} ??`;
+							me.opts.push( (opt.vars||"ID").split(",") );
+						}
+					
+					else
+						switch (opt.constructor) {
+							case Array:
+								me.query += ` ${key} ??`;
+								me.opts.push(opt);
+								break;
+								
+							case String:
+								if (opt == "*") 
+									me.query += ` ${key} *`;
+								else {
+									me.query += ` ${key} ??`;
+									me.opts.push(opt.split(","));
+								}
+								break;
+														
+							case Object:
+								me.query += ` ${key} *`;
+								x(opt.nlp, "");
+								x(opt.bin, "IN BINARY MODE");
+								x(opt.qex, "WITH QUERY EXPANSION");
+								break;
+						}
+					
+					break;
+
+				case "JOIN":
+					switch (opt.constructor) {
+						case Array:
+							me.query += ` ${mode} ${key} ON ?`;
+							me.opts.push(opt);
+							break;
+							
+						case String:
+							me.query += ` ${mode} ${key} ON ${opt}`;
+							break;
+
+						case Object:
+
+							var mode = opt.left ? "left" : opt.right ? "right" : "";
+
+							me.query += ` ${mode} ${key} ? ON least(?,1)`;
+							
+							for (var n in opt.on) 
+								buf[n] = me.table+"."+opt.on[n];
+								
+							me.opts.push(opt[mode]);
+							me.opts.push(buf);
+							break;
+					}
+					break;
+				
+				case "LIMIT":
+					switch (opt.constructor) {
+						case Array:
+							me.query += ` ${key} ?`;
+							me.opts.push(opt);
+							break;
+							
+						case String:
+							me.query += ` ${key} ?`;
+							me.opts.push(opt.split(","));
+							break;
+
+						case Object:
+							me.query += ` ${key} ?`;
+							me.opts.push([opt.start,opt.count]);
+							break;								
+					}
+					break;
+				
+				case "WHERE":
+				case "HAVING":
+				
+					switch (opt.constructor) {
+						case Array:
+						
+							switch (opt.length) {
+								case 0:
+									break;
+								
+								case 1:
+									me.query += ` ${key} ?? IS NULL`;
+									me.opts.push( opt[0] );
+									break;
+									
+								case 2:
+									me.query += ` ${key} ?? LIKE '${opt[1]}'`;
+									me.opts.push( opt[0] );
+									break;
+									
+								case 3:
+									me.query += ` ${key} ?? BETWEEN ? AND ?`;
+									me.opts.push( opt[0] );
+									me.opts.push( opt[1] );
+									me.opts.push( opt[2] );
+									break;
+									
+								default:
+							}
+							
+							break;
+							
+						case String:
+						
+							if (opt) {
+								me.safe = false;
+								me.query += ` ${key} ${opt}`;
+							}
+							break;
+
+						case Object:
+							var rels = []; 
+							for (var n in opt) {
+								if (opt[n] == null) {
+									me.safe = false;
+									rels.push(n);
+									delete opt[n];
+								}
+								else
+								if ( (args = (opt[n]+"").split(",")).length>1 ) {
+									me.safe = false;
+									rels.push(sql.escapeId(n) + " BETWEEN " + args[0] + " AND " + args[1] );
+									delete opt[n];
+								}
+							}
+							
+							for (var n in opt) {
+								rels.push(ag);
+								me.opts.push(opt);
+								break;
+							}
+									
+							rels = rels.join(" AND ");
+							if (rels)
+								me.query += ` ${key} ${rels}`;
+								
+							break;
+					}
+					break;
+					
+				case "ORDER":
+					switch (opt.constructor) {
+						case Array:
+							var by = [];
+							opt.each(function (n,opt) {
+								if (opt.property)
+									by.push(`${opt.property} ${opt.direction}`);
+								else
+									for (var n in opt) 
+										by.push(`${n} ${opt[n]}`);
+							});
+							me.query += ` ${key} ${by.join(",")}`;
+							break;
+							
+						case String:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt.split(","));
+							break;
+
+						case Object:
+							break;
+					}
+					break;
+					
+				case "SET":
+					switch (opt.constructor) {
+						case Array:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt);
+							break;
+							
+						case String:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt.split(","));
+							break;
+
+						case Object:
+							me.query += ` ${key} ?`;
+							me.opts.push(opt);
+							break;
+					}
+					break;
+					
+				default:
+					switch (opt.constructor) {
+						case Array:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt);
+							break;
+							
+						case String:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt.split(","));
+							break;
+
+						case Object:
+							me.query += ` ${key} ?`;
+							me.opts.push(opt);
+							break;
+					}
+			}
+
+	},
+	
+	update: function (req,res) {
+		
+		var	me = this,
+			table = SQL.DBTX[me.table] || me.table,
+			ID = me.where ? me.where.ID : 0,
+			client = me.client,
+			sql = me.sql,
+			journal = me.journal 
+				? function (cb) {
+					sql.query( 						// attempt journal
+						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
+						"jou."+me.table.split(".").pop(), me.table, ID
+					])						
+					.on("end", cb);
+				}
+				: function (cb) {
+					cb();
+				};
+		
+		me.opts = []; me.query = ""; me.safe = true;
+			
+		me.x(table, "UPDATE");
+		me.x(req, "SET");
+		me.x(me.where, "WHERE "+(me.ag||""));
+		me.x(me.order, "ORDER BY");
+		
+		if (me.safe || me.unsafe)
+			journal( function () {
+				
+				sql.query(me.query, me.opts, function (err,info) {
+
+					if (res) res( err || info );
+
+				});
+
+				if (client && SQL.emit) 		// Notify clients of change.  
+					SQL.emit( "update", {
+						table: me.table, 
+						body: req, 
+						ID: ID, 
+						from: client
+						//flag: flags.client
+					});
+
+				if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+
+			});
+		
+		else
+		if (res)
+			res( new Error("unsafe query blocked") );
+			
+	},
+	
+	select: function (req,res) {
+
+		var	me = this,
+			table = SQL.DBTX[me.table] || me.table,
+			ID = me.where ? me.where.ID : 0,
+			client = me.client,
+			sql = me.sql;
+		
+		me.opts = []; me.query = ""; me.safe = true;
+			
+		me.x(me.build || "*", "SELECT SQL_CALC_FOUND_ROWS");
+		me.x(me.nlp, "");
+		me.x(me.bin, "IN BINARY MODE");
+		me.x(me.qex, "WITH QUERY EXPANSION");
+		me.x(table, "FROM");
+		me.x(me.join, "JOIN", {});
+		me.x(me.where, "WHERE "+(me.ag||""));
+		me.x(me.having, "HAVING "+(me.ag||""));
+		me.x(me.order, "ORDER BY");
+		me.x(me.group, "GROUP BY");
+		me.x(me.limit, "LIMIT");
+
+		if (me.safe || me.unsafe)
+			switch (req.name) {
+				case "each":
+					sql.query(me.query, me.opts)
+					.on("error", function (err) {
+						req(err);
+					})						
+					.on("result", function (rec) {										
+						req(rec);
+					}); 
+					break;
+				
+				case "all":
+				default:
+					sql.query(me.query, me.opts, function (err,recs) {	
+						req( err || recs );
+					});
+			}
+		
+		else
+		if (res)
+			res( new Error("unsafe query blocked") );
+		
+		if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+					
+	},
+	
+	delete: function (req,res) {
+		
+		var	me = this,
+			table = SQL.DBTX[me.table] || me.table,
+			ID = me.where ? me.where.ID : 0,
+			client = me.client,
+			sql = me.sql,
+			journal = me.journal 
+				? function (cb) {
+					sql.query( 						// attempt journal
+						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
+						"jou."+me.table.split(".").pop(), me.table, ID
+					])						
+					.on("end", cb);
+				}
+				: function (cb) {
+					cb();
+				};
+		
+		me.opts = []; me.query = ""; me.safe = true;
+		
+		me.x(table, "DELETE FROM");
+		me.x(me.where, "WHERE "+(me.ag||""));
+		
+		if (me.safe || me.unsafe)
+			journal( function () {
+			
+				me.sql.query(me.query, me.opts, function (err,info) {
+
+					if (me.res) me.res(err || info);
+					
+				});
+					
+				if (me.client && SQL.emit) 		// Notify clients of change.  
+					SQL.emit( "delete", {
+						table: me.table, 
+						ID: ID, 
+						from: me.client
+						//flag: flags.client
+					});
+				
+				if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+				
+			});
+	
+		else
+		if (res)
+			res( new Error("unsafe query blocked") );		
+	},
+	
+	insert: function (req,res) {
+		
+		var	me = this,
+			table = SQL.DBTX[me.table] || me.table,
+			ID = me.where ? me.where.ID : 0,
+			client = me.client,
+			sql = me.sql,
+			journal = me.journal 
+				? function (cb) {
+					sql.query( 						// attempt journal
+						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
+						"jou."+me.table.split(".").pop(), me.table, ID
+					])						
+					.on("end", cb);
+				}
+				: function (cb) {
+					cb();
+				};
+		
+		me.opts = []; me.query = ""; me.safe = true;
+		
+		req.each(function (n,rec) {
+			if (rec)
+				sql.query(
+					me.query = " INSERT INTO ?? SET ?", [table,rec], function (err,info) {
+
+					if (!n && res) {
+						res( err || info );
+
+						if (client && SQL.emit) 		// Notify clients of change.  
+							SQL.emit( "insert", {
+								table: me.table, 
+								body: rec, 
+								ID: info.insertId, 
+								from: client
+								//flag: flags.client
+							});
+					}			
+
+				});
+
+			if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+		});
+
+	},
+
 	get rec() { 
 	},
 	
 	unlock: function (ID, cb, lockcb) {
 		var me = this,
-			sql = me.sql;
+			sql = me.sql,
+			lockID = {Lock:`${me.table}.${ID}`, Client:me.client};
 		
 		sql.query(
-			"SELECT * FROM openv.locks WHERE least(?)", 
-			lockID = {Lock:`${me.table}.${ID}`, Client:me.client}, 
+			"DELETE FROM openv.locks WHERE least(?)", 
+			lockID, 
 			function (err,info) {
 				
-			if (info.length) {
+			if (info.affectedRows) {
 				cb();
 				sql.query("COMMIT");  // commit queues transaction
-				sql.query("DELETE FROM openv.locks WHERE ?",lockID);									
 			}
 			
 			else
@@ -1108,375 +1697,43 @@ SQL.DBVAR.prototype = {
 				me.res( "record must be locked" );
 		});
 	},
+
+	set job(req) {
+	},
+	
+	set rec(req) {
+		var me = this,
+			res = me.res;
 		
-	set rec(rhs) {
-		var	me = this;
-			table = SQL.DBTX[me.table] || me.table,
-			ID = me.where ? me.where.ID : 0,
-			lock = me.lock,
-			client = me.client,
-			sql = me.sql,
-			res = me.res,
-			journal = [ "jou."+me.table.split(".").pop(), me.table, ID ];	
-		
-		function nodeify(list) {
-			return "`"+list.split(",").join("`,',',`")+"`";
-		}
-		
-		function x(opt,key,buf) {
-			
-			if (opt) 
-				switch (key) {
-					case "":
-					case "IN BOOLEAN MODE":
-					case "WITH QUERY EXPANSION":
-					
-						me.query += `,MATCH(FullSearch) AGAINST('${opt}' ${key}) AS Score`;
-						me.having = me.score ? "Score>"+me.score : "Score";
-						break;
-					
-					case "SELECT":
-					case "SELECT SQL_CALC_FOUND_ROWS":
-
-						if (me.browse) { 
-							var	nodes = opt.NodeID ? opt.NodeID.split(",") : [];
-							
-							me.group = me.browse[nodes.length];
-
-							if (me.group) { 
-								var pivots = nodeify(browse.slice(0,nodes.length+1));
-								
-								me.query += ` ${key} *`;
-								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
-								me.query += ",count(ID) AS NodeCount";
-								me.query += ",false AS leaf, true AS expandable, false AS expanded";
-									
-								nodes.each( function (n,node) {
-									me.where[ browse[n] ] = node;
-								});
-							}
-							else  {
-								var pivots = nodeify(browse.concat(["ID"]));
-								
-								me.query += ` ${key} *`;
-								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
-								me.query += ",1 as NodeCount";
-								me.query += ",true AS leaf, false AS expandable, true AS expanded";
-									
-								nodes.each( function (n,node) {
-									me.where[(n >= browse.length) ? "ID" : browse[n]] = node;
-								});
-							}
-						}
-						
-						else
-						if (me.group)
-							if (opt.NodeID) {
-								var	nodes = (opt.NodeID == "root") ? [] : opt.NodeID.split(",");									
-								var pivots = nodes.length ? "" : nodeify(me.group);
-
-								if (pivots) {  		// at the root
-									me.query += ` ${key} ${me.group}`;
-									me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
-									me.query += ",count(ID) AS NodeCount"
-									me.query += ",false AS leaf,true AS expandable,false AS expanded";
-								}
-								else {  					// requesting all nodes under a specific node
-									me.query += ` ${key} `;
-									me.query += "ID AS NodeID";
-									me.query += ",1 AS NodeCount";
-									me.query += ",true AS leaf,true AS expandable,false AS expanded";
-								}
-							}
-							else {
-								me.query += ` ${key} ??`;
-								me.opts.push( (opt.vars||"ID").split(",") );
-							}
-						
-						else
-							switch (opt.constructor) {
-								case Array:
-									me.query += ` ${key} ??`;
-									me.opts.push(opt);
-									break;
-									
-								case String:
-									me.query += ` ${key} ${opt}`;
-									break;
-															
-								case Object:
-									me.query += ` ${key} *`;
-									x(opt.nlp, "");
-									x(opt.bin, "IN BINARY MODE");
-									x(opt.qex, "WITH QUERY EXPANSION");
-									break;
-							}
-						
-						break;
-
-					case "JOIN":
-						switch (opt.constructor) {
-							case Array:
-								me.query += ` ${mode} ${key} ON ?`;
-								me.opts.push(opt);
-								break;
-								
-							case String:
-								me.query += ` ${mode} ${key} ON ${opt}`;
-								break;
-
-							case Object:
-
-								var mode = opt.left ? "left" : opt.right ? "right" : "";
-
-								me.query += ` ${mode} ${key} ? ON least(?,1)`;
-								
-								for (var n in opt.on) 
-									buf[n] = me.table+"."+opt.on[n];
-									
-								me.opts.push(opt[mode]);
-								me.opts.push(buf);
-								break;
-						}
-						break;
-					
-					case "LIMIT":
-						switch (opt.constructor) {
-							case Array:
-								me.query += ` ${key} ?`;
-								me.opts.push(opt);
-								break;
-								
-							case String:
-								me.query += ` ${key} ${opt}`;
-								break;
-
-							case Object:
-								me.query += ` ${key} ?`;
-								me.opts.push([opt.start,opt.count]);
-								break;								
-						}
-						break;
-					
-					case "WHERE":
-					case "HAVING":
-						switch (opt.constructor) {
-							case Array:
-							
-								switch (opt.length) {
-									case 0:
-										break;
-									
-									case 1:
-										me.query += ` ${key} ?? IS NULL`;
-										me.opts.push( opt[0] );
-										break;
-										
-									case 2:
-										me.query += ` ${key} ?? LIKE '${opt[1]}'`;
-										me.opts.push( opt[0] );
-										break;
-										
-									case 3:
-										me.query += ` ${key} ?? BETWEEN ? AND ?`;
-										me.opts.push( opt[0] );
-										me.opts.push( opt[1] );
-										me.opts.push( opt[2] );
-										break;
-										
-									default:
-								}
-								
-								break;
-								
-							case String:
-								if (opt)
-									me.query += ` ${key} ${opt}`;
-								break;
-
-							case Object:
-								for (var n in opt) {
-									me.query += ` ${key} least(?,1)`;
-									me.opts.push(opt);
-									break;
-								}
-								break;
-						}
-						break;
-						
-					case "ORDER BY":
-						switch (opt.constructor) {
-							case Array:
-								var by = [];
-								opt.each(function (n,opt) {
-									by.push(`${opt.property} ${opt.direction}`);
-								});
-								me.query += ` ${key} ${by.join(",")}`;
-								break;
-								
-							case String:
-								me.query += ` ${key} ??`;
-								me.opts.push(opt.split(","));
-								break;
-
-							case Object:
-								break;
-						}
-						break;
-						
-					case "SET":
-						switch (opt.constructor) {
-							case Array:
-								me.query += ` ${key} ??`;
-								me.opts.push(opt);
-								break;
-								
-							case String:
-								me.query += ` ${key} ${opt}`;
-								me.opts.push(opt.split(","));
-								break;
-
-							case Object:
-								me.query += ` ${key} ?`;
-								me.opts.push(opt);
-								break;
-						}
-						break;
-						
-					default:
-						switch (opt.constructor) {
-							case Array:
-								me.query += ` ${key} ??`;
-								me.opts.push(opt);
-								break;
-								
-							case String:
-								me.query += ` ${key} ${opt}`;
-								//me.opts.push(opt.split(","));
-								break;
-
-							case Object:
-								me.query += ` ${key} ?`;
-								me.opts.push(opt);
-								break;
-						}
-				}
-
-		}						
-
-		if (rhs) 
-			switch (rhs.constructor) {
+		if (req) 
+			switch (req.constructor) {
 				case Error:
 				
-					if (res) res(rhs);
+					if (res) res(req);
 					break;
 					
 				case Array: 
-				
-					rhs.each(function (n,rec) {
-						if (rec)
-							me.query = sql.query(
-								"INSERT INTO ?? SET ?", [table,rec], function (err,info) {
 
-								if (!n && res) {
-									res( err || info );
-
-									if (client && SQL.emit) 		// Notify clients of change.  
-										SQL.emit( "insert", {
-											table: me.table, 
-											body: rec, 
-											ID: info.insertId, 
-											from: client
-											//flag: flags.client
-										});
-								}			
-
-							});
-
-						if (me.trace) console.log(me.query.sql);
-					});
-
+					me.insert(req,res);
 					break;
 					
 				case Object:
 
-					me.opts = []; me.query = "";
-					x(table, "UPDATE");
-					x(rhs, "SET");
-					x(me.where, "WHERE");
-					x(me.order, "ORDER BY");
-					
-					sql.query( 						// attempt journal
-						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", 
-						journal)
-						
-					.on("end", function () {
-
-						me.query = sql.query(me.query, me.opts, function (err,info) {
-
-							if (res) res( err || info );
-
-						});
-
-						if (client && SQL.emit) 		// Notify clients of change.  
-							SQL.emit( "update", {
-								table: me.table, 
-								body: rhs, 
-								ID: ID, 
-								from: client
-								//flag: flags.client
-							});
-
-						if (me.trace) console.log(me.query.sql);
-
-					});
-					
+					me.update(req,res);
 					break;
 					
 				case Function:
 				
-					me.opts = []; me.query = "";
-					x(me.build || "*", "SELECT SQL_CALC_FOUND_ROWS");
-					x(me.nlp, "");
-					x(me.bin, "IN BINARY MODE");
-					x(me.qex, "WITH QUERY EXPANSION");
-					x(table, "FROM");
-					x(me.join, "JOIN", {});
-					x(me.where, "WHERE");
-					x(me.having, "HAVING");
-					x(me.order, "ORDER BY");
-					x(me.group, "GROUP BY");
-					x(me.limit, "LIMIT");
-
-					switch (rhs.name) {
-						case "each":
-							me.query = sql.query(me.query, me.opts)
-							.on("error", function (err) {
-								rhs(err);
-							})						
-							.on("result", function (rec) {										
-								rhs(rec);
-							}); 
-							break;
-						
-						default:
-							me.query = sql.query(me.query, me.opts, function (err,recs) {	
-								rhs( err || recs );
-							});
-					}
-					
-					if (me.trace) console.log(me.query.sql);
-					
+					me.select(req,res);
 					break;
 					
 				default:
 				
-					if (me.trace) console.log(
-						`${rhs.toUpperCase()} ${table} FOR ${client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`
+					if (me.trace) Trace(
+						`${req.toUpperCase()} ${me.table} FOR ${me.client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`
 					);
 				
-					switch (rhs) {
-
+					switch (req) {
 						case "lock.select":
 
 							me.rec = function (recs) {
@@ -1497,7 +1754,6 @@ SQL.DBVAR.prototype = {
 								
 							};
 							
-
 							break;
 						
 						case "lock.delete":
@@ -1537,35 +1793,9 @@ SQL.DBVAR.prototype = {
 					}
 
 			}
-		else {
-			me.query = ""; me.opts = [];
-			x(table, "DELETE FROM");
-			x(me.where, "WHERE");
-			
-			me.sql.query( 						// attempt journal
-				"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", 
-				journal)
-				
-			.on("end", function () {
-			
-				me.query = me.sql.query(me.query, me.opts, function (err,info) {
-
-					if (me.res) me.res(err || info);
-					
-				});
-				
-				if (me.client && SQL.emit) 		// Notify clients of change.  
-					SQL.emit( "delete", {
-						table: me.table, 
-						ID: ID, 
-						from: me.client
-						//flag: flags.client
-					});
-				
-				if (me.trace) console.log(me.query.sql);
-				
-			});
-		}
+		
+		else 
+			me.delete(req,res);
 		
 		return this;
 	}
@@ -1575,7 +1805,7 @@ SQL.DBVAR.prototype = {
 function context(ctx,cb) {
 	var sql = this;
 	var context = {};
-	for (var n in ctx) context[n] = new SQL.DBVAR(sql,ctx[n],{table:"test."+n});
+	for (var n in ctx) context[n] = new SQL.DSVAR(sql,ctx[n],{table:"test."+n});
 	if (cb) cb(context);
 }
 
@@ -1585,23 +1815,25 @@ function crude(req,res) {
 	var 
 		sql = req.sql,							// sql connection
 		flags = req.flags;
-		
+
 	sql.context({ds: {
 			trace:	true,
 			table:	req.table,
 			where:	req.query,
-			res:	res,	
+			res:	res,
 			order:	flags.sort,
 			group: 	flags.pivot,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
 			build: 	flags.build,
 			data:	req.body,
-			client: req.client
+			client: req.client,
+			unsafe:	false	
 		}}, function (ctx) {
 			
 		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
 		
 	});
 }
+
 
 // UNCLASSIFIED
