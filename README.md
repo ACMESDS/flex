@@ -2,17 +2,10 @@
 
 [![Forked from SourceForge](https://sourceforge.net)]
 
-## Installation
-
-Download and unzip into your project/sql folder and revise the project/config module as needed
-for your [Totem](https://git.geointapps.org/acmesds/transfer) project.
-
-## Usage
-
 The [Totem](https://git.geointapps.org/acmesds/transfer) SQL module provides a normalized 
-CRUDE (x=select | update | insert | delete | execute) 
-interface to MYSQL-Cluster tables on SQL[x].ds, and to the following virtual
-tables on SQL[x].table
+CRUDE (x=select | update | insert | delete | execute) interface to its underlying 
+(default MySQL-Cluster) databse on SQL[x].ds, and to the following virtual
+tables on SQL[x].table where
 
 	table		functionality provided on x=all
 	=======================================================================
@@ -58,12 +51,29 @@ tables on SQL[x].table
 	CLIQUES		cliques formed between tables and users
 	HEALTH		system health
 
-This SQL module also provides a means to encapsulate its underlying (default MySQL) 
-database table into a database agnostic JS dataset using the following mechanisim:
+Totem's SQL module also provides a means to encapsulate its underlying (default MySQL-Cluster) 
+database into database-agnostic JS datasets as explained in the Usage notes.
 
-	var ds = SQL.DSVAR(sql, { ATTRIBUTE: VALUE, ... })
+## Installation
 
-where its ATTRIBUTEs are:
+Download and unzip into your project/sql folder and revise the project/config module as needed
+for your [Totem](https://git.geointapps.org/acmesds/transfer) project.  Typically, you will
+want to:
+
+	ln -s project/config/debe.sh config.sh
+	ln -s project/config/maint.sh maint.sh
+	ln -s project/config/certs certs
+	
+to override the defaults.
+
+## Usage
+
+This SQL module provides a means to encapsulate its underlying (default MySQL-Cluster) 
+database database-agnostic JS-datasets using the following mechanisim:
+
+	var ds = SQL.DSVAR(sql, { KEY: VALUE, ... })
+
+where its KEY attributes are:
 
 	table: 	"DB.TABLE" || "TABLE"
 	where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | "CLAUSE"
@@ -121,7 +131,7 @@ A context of datasets can be established on the same sql connector with:
 	
 	});
 			
-Examples:
+## Examples
 
 	// create dataset
 	var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,rec:res});
