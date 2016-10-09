@@ -1,4 +1,4 @@
-// UNCLASSIFIED
+// UNCLASSIFIED $$$$
 
 /**
  * @module SQL
@@ -21,8 +21,8 @@
  * @requires crypto
  * @requires url
  */
-/*
-	Provides a normalized CRUDE (x=select | update | insert | delete | execute) 
+/**
+	SQL provides a normalized CRUDE (x=select | update | insert | delete | execute) 
 	interface to MYSQL-Cluster tables on SQL[x].ds, and to the following virtual
 	tables on SQL[x].table
  
@@ -193,7 +193,7 @@ var 											// globals
 	LIST = ",",									// list separator
 	DOT = ".", 									// table.type etc separator
 	SLASH = "/",
-	SUBMITTED = "done";
+	SUBMITTED = "submitted";
 	//LOCKS = {};									// database locks
 
 var 											// nodejs bindings
@@ -240,6 +240,16 @@ var
 		// Job hawking  etc
 		timers: [],
 		sendMail: sendMail,
+		
+		errors: {
+			unsafeQuery: new Error("unsafe queries not allowed"),
+			unsupportedQuery: new Error("query not supported"),
+			invalidQuery: new Error("query invalid"),
+			disableEngine: new Error("requested engine must be disabled to prime"),
+			noEngine: new Error("requested engine does not exist"),
+			missingEngine: new Error("missing engine query"),
+			protectedQueue: new Error("action not allowed on this job queues")
+		},
 		
 		listify: function (hash, idxkey, valkey) {
 			var list = [];
@@ -417,19 +427,20 @@ var
 					}, opts.PULSE.PING*(60*1000) );
 				*/
 				
-				EMAIL.HAWKS = SITE.distro.hawks; //BASE.joinify(SITE.Hawks, ";", function (n,val) { return n; });
-				EMAIL.SUBJ = SITE.title + "?JOB";
+				//$$$$
+				EMAIL.HAWKS = SITE.distro.hawk; 
+				EMAIL.SUBJ = SITE.nick + "?JOB";
 				EMAIL.BODY = 
 					("Click " 
 					+ "here".tag("a",{href:"?URLtipclear.db?ID=?JOBID"})
 					+ " to clear this tip."
 					).tag("p").tag("html");
 
-				var parts = (SITE.EmailHost+":0").split(":");
+				var parts = (SITE.emailhost||"").split(":");
 				EMAIL.TX.HOST = parts[0];
 				EMAIL.TX.PORT = parseInt(parts[1]);
 				
-				var parts = (SITE.EmailUser+":").split(":");
+				var parts = (SITE.emailuser||"").split(":");
 				EMAIL.USER = parts[0];
 				EMAIL.PASS = parts[1];
 				
@@ -492,7 +503,7 @@ var
 					  });
 					});
 				
-				if (SQL.EMAIL.RESTART) 
+				if (SQL.EMAIL.ONSTART) 
 					sendMail({
 						from: SITE.nick, 
 						to: EMAIL.HAWKS,
@@ -899,14 +910,17 @@ SQL.DSVAR.prototype = {
 				
 				case "SELECT":
 
+					var where = me.where;
+					
 					if (me.group)
 					
-						if (opt.BrowseID) { 	// browsing a table
-							var	nodes = opt.BrowseID.split(","),
+						if (where.BrowseID) { 	// browsing a table
+							var	nodes = where.BrowseID.split(","),
 								browse = me.browse;
 							
 							me.group = browse[nodes.length];
-
+							delete where.BrowseID;
+							
 							if (me.group) { 
 								var pivots = nodeify(browse.slice(0,nodes.length+1));
 								
@@ -934,10 +948,11 @@ SQL.DSVAR.prototype = {
 						}
 						
 						else
-						if (opt.NodeID) { 		// pivoting a table
-							var	nodes = (opt.NodeID == "root") ? [] : opt.NodeID.split(",");									
+						if (where.NodeID) { 		// pivoting a table
+							var	nodes = (where.NodeID == "root") ? [] : where.NodeID.split(",");									
 							var pivots = nodes.length ? "" : nodeify(me.group);
-
+							delete where.NodeID;
+							
 							if (pivots) {  		// at the root
 								me.query += ` ${key} ${me.group}`;
 								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
@@ -951,8 +966,9 @@ SQL.DSVAR.prototype = {
 								me.query += ",true AS leaf,true AS expandable,false AS expanded";
 							}
 						}
+						
 						else {
-							me.query += ` ${key} ??`;
+							me.query += ` ${key} ${opt}`;
 							me.opts.push( (opt.vars||"ID").split(",") );
 						}
 					
@@ -1070,26 +1086,27 @@ SQL.DSVAR.prototype = {
 						case Object:
 							var rels = []; 
 							for (var n in opt) {
-								if (opt[n] == null) {
+								if (opt[n] == null) {		// using unsafe expression query (e.g. &x<10)
 									me.safe = false;
 									rels.push(n);
 									delete opt[n];
 								}
-								else
+								else 						// using unsafe range query (e.g. &x=[min,max])
 								if ( (args = (opt[n]+"").split(",")).length>1 ) {
 									me.safe = false;
 									rels.push(sql.escapeId(n) + " BETWEEN " + args[0] + " AND " + args[1] );
 									delete opt[n];
 								}
+								// otherwise using safe query (e.g &x=value)
 							}
 							
-							for (var n in opt) {
+							for (var n in opt) { 			// aggregate where clause using least,sum,etc
 								rels.push(ag);
 								me.opts.push(opt);
 								break;
 							}
 									
-							rels = rels.join(" AND ");
+							rels = rels.join(" AND "); 		// aggregate remaining clauses
 							if (rels)
 								me.query += ` ${key} ${rels}`;
 								
@@ -1211,7 +1228,7 @@ SQL.DSVAR.prototype = {
 		
 		else
 		if (res)
-			res( new Error("unsafe query blocked") );
+			res( SQL.errors.unsafeQuery );
 			
 	},
 	
@@ -1271,7 +1288,7 @@ SQL.DSVAR.prototype = {
 		
 		else
 		if (res)
-			res( new Error("unsafe query blocked") );
+			res( SQL.errors.unsafeQuery );
 		
 		if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
 					
@@ -1324,7 +1341,7 @@ SQL.DSVAR.prototype = {
 	
 		else
 		if (res)
-			res( new Error("unsafe query blocked") );		
+			res( SQL.errors.unsafeQuery );		
 	},
 	
 	insert: function (req,res) {
@@ -1497,10 +1514,10 @@ SQL.DSVAR.prototype = {
 						case "update": me.rec = me.data; break;
 						case "delete": me.rec = null; break;
 						case "insert": me.rec = [me.data]; break;
-						case "execute": me.rec = new Error("execute undefined"); break;
+						case "execute": me.rec = SQL.errors.unsupportedQuery; break;
 						
 						default:
-							me.rec = new Error("invalid request");
+							me.rec = SQL.errors.invalidQuery;
 					}
 
 			}
@@ -1516,7 +1533,7 @@ SQL.DSVAR.prototype = {
 function context(ctx,cb) {
 	var sql = this;
 	var context = {};
-	for (var n in ctx) context[n] = new SQL.DSVAR(sql,ctx[n],{table:"test."+n});
+	for (var n in ctx) context[n] = new SQL.DSVAR(sql,ctx[n],{table:"app1."+n});
 	if (cb) cb(context);
 }
 
@@ -1534,6 +1551,7 @@ function crude(req,res) {
 			order:	flags.sort,
 			browse: flags.pivot,
 			group: 	flags.pivot || flags.tree,
+			score:	flags.score,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
 			index: 	flags.index,
 			data:	req.body,
@@ -1614,9 +1632,37 @@ SQL.update.sql = function Update(req, res) {
 
 // GIT interface
 
+SQL.select.baseline = function Baseline(req,res) {
+
+	var ex = {
+		group: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} ${req.group} >admins/db/${req.group}.sql`,
+		openv: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} openv >admins/db/openv.sql`,
+		commit: `git commit -am "${req.client} baseline"`
+	};
+	
+	res(SUBMITTED);
+	
+	CP.exec(ex.group, function (err,log) {
+		
+		Trace("CHECKPT "+(err||"OK"));
+		
+		CP.exec(ex.openv, function (err,log) {
+			
+			Trace("CHECKPT "+(err||"OK"));
+			
+			CP.exec(ex.commit, function (err,log) {
+				Trace("COMMIT "+(err||"OK"));
+			});
+		});
+	});
+
+}
+
 SQL.select.git = function Select(req, res) {
 
-	CP.exec('git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog', function (err,log) {
+	var gitlogs = 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog';
+	
+	CP.exec(gitlogs, function (err,log) {
 			
 		if (err)
 			res(err);
@@ -2216,7 +2262,7 @@ SQL.select.likeus = function Select(req, res) {
 SQL.select.tips = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
-	sql.query(
+	var q = sql.query(
 		"SELECT *, "
 		+ "count(detects.ID) AS weight, "
 		+ "concat('/tips/',chips.ID,'.jpg') AS tip, "
@@ -2340,7 +2386,7 @@ SQL.execute.engines = function Execute(req, res) {
 					case "execute":
 						
 						if (eng.Enabled)
-							res( new Error("Disable engine to prime") );
+							res( SQL.errors.disableEngine );
 						
 						else 
 							compileEngine(Engine,Name,eng.Code,res);
@@ -2350,7 +2396,7 @@ SQL.execute.engines = function Execute(req, res) {
 					case "jade":			// update jade skin
 						
 						if (eng.Enabled)
-							res( new Error("Disable engine to prime") );
+							res( SQL.errors.disableEngine );
 
 						else
 							try {
@@ -2371,7 +2417,7 @@ SQL.execute.engines = function Execute(req, res) {
 								});
 							}
 							catch (err) {
-								res( new Error("Engine file does not exists") );
+								res( SQL.errors.noEngine );
 							}
 								
 						break;
@@ -2424,7 +2470,7 @@ SQL.execute.engines = function Execute(req, res) {
 			
 		});
 	else
-		res(new Error("Missing Engine and Name query"));
+		res( SQL.errors.missingEngine );
 }
 
 SQL.execute.news = function Execute(req, res) {  
@@ -3922,7 +3968,7 @@ SQL.update.jobs = function Update(req, res) {
 	// adjust priority of jobs matching sql-where clause and route to callback res(job) when updated.
 		
 	if (protect)
-		res(new Error("Cant update job queues"));
+		res( SQL.errors.protectedQueue );
 	else
 		sql.query("UPDATE queues SET ? WHERE ?",body,query, function (err,info) {
 			res( err || info );
@@ -3934,7 +3980,7 @@ SQL.delete.jobs = function Delete(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, body = req.body;
 		
 	if (protect)
-		res(new Error("Cant delete job queues"));
+		res( SQL.errors.protectedQueue );
 	else
 		sql.query("DELETE FROM queues WHERE ?",query, function (err,info) {
 			res( err || info );
@@ -3946,7 +3992,7 @@ SQL.insert.jobs = function Insert(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, body = req.body;
 		
 	if (protect)
-		res(new Error("Cant insert job queues"));
+		res( SQL.errors.protectedQueue );
 	else
 		sql.query("INSERT INTO queues SET ?",body, function (err,info) {
 			res( err || info );
