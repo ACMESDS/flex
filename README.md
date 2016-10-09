@@ -82,7 +82,7 @@ performed in a db-agnostic way using:
 	ds.rec = null 							// delete matched record(s)
 	ds.rec = function F(recs,me) {...}		// select matched record(s)
 	
-and will callback its non-null response .res method when the querey completes.  
+and will callback its non-null response .res method when the query completes.  
 
 The select query will callback the F=each/all/clone handler with all record(s)
 matched by .where, indexed by  .index, ordered by .order ordering, grouped by 
