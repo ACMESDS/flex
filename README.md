@@ -2,7 +2,7 @@
 
 [![Forked from SourceForge](https://sourceforge.net)]
 
-The [Totem](https://git.geointapps.org/acmesds/transfer) SQL module provides a normalized 
+[Totem](https://git.geointapps.org/acmesds/transfer)'s SQL module provides a normalized 
 CRUDE (x=select | update | insert | delete | execute) interface to its underlying 
 (default MySQL-Cluster) databse on SQL[x].ds, and to the following virtual
 tables on SQL[x].table where
@@ -60,9 +60,9 @@ Download and unzip into your project/sql folder and revise the project/config mo
 for your [Totem](https://git.geointapps.org/acmesds/transfer) project.  Typically, you will
 want to:
 
-	ln -s project/config/debe.sh config.sh
-	ln -s project/config/maint.sh maint.sh
-	ln -s project/config/certs certs
+	ln -s ../config/debe.sh config.sh
+	ln -s ../config/maint.sh maint.sh
+	ln -s ../config/certs certs
 	
 to override the defaults.
 
