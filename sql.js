@@ -2,24 +2,26 @@
 
 /**
  * @module SQL
- * @public
- * @requires mysql
+ * nodejs:
  * @requires os
  * @requires fs
  * @requires cluster
  * @requires child_process
- * @requires enum
- * @requires pdffiller
  * @requires vm
  * @requires http
+ * @requires crypto
+ * @requires url
+ * totem:
+ * @requires enum
+ * @requires engine
+ * 3rd party:
+ * @requires pdffiller
+ * @requires mysql
  * @requires nodemailer
  * @requires imap
  * @requires graceful-lwip
  * @requires feed
  * @requires feed-read
- * @requires evlog
- * @requires crypto
- * @requires url
  */
 /**
 	SQL provides a normalized CRUDE (x=select | update | insert | delete | execute) 
@@ -117,7 +119,7 @@
 		
 		attr	default	true/set to
 		-----------------------------------------------------------------------------------
-		unsafe 	true	execute potentially unsafe queries
+		unsafeok 	true	execute potentially unsafe queries
 		trace	false	display formed queries
 		journal	false	enable table journalling
 		ag		null	aggregate where/having = least(?,1), greatest(?,0), sum(?), ...
@@ -184,7 +186,7 @@ var 									// 3rd party bindings
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
-	ENGINE = require("../engine"), 		// tauif simulation engines
+	ENGINE = require("engine"), 		// tauif simulation engines
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
@@ -865,7 +867,7 @@ SQL.DSVAR = function(sql,atts,defs) {
 	this.err = null;
 	this.query = "";
 	this.opts = null;
-	this.unsafe = true;
+	this.unsafeok = true;
 	this.trace = true;
 	
 	for (var n in defs) 
@@ -891,9 +893,9 @@ SQL.DSVAR.prototype = {
 	x: function xquery(opt,key,buf) {  // extends me.query and me.opts
 		
 		function nodeify(list) {
-			return "`"+list.split(",").join("`,',',`")+"`";
+			return "cast(concat(`" + list.join("`,',',`") + "`) AS CHAR)";
 		}
-	
+		
 		var me = this,
 			keys = key.split(" "),
 			ag = keys[1] || "least(?,1)";
@@ -950,26 +952,26 @@ SQL.DSVAR.prototype = {
 						else
 						if (where.NodeID) { 		// pivoting a table
 							var	nodes = (where.NodeID == "root") ? [] : where.NodeID.split(",");									
-							var pivots = nodes.length ? "" : nodeify(me.group);
+							var node = nodes.length ? "" : nodeify(me.group.split(",'"));
 							delete where.NodeID;
 							
-							if (pivots) {  		// at the root
-								me.query += ` ${key} ${me.group}`;
-								me.query += `,cast(concat(${pivots}) AS CHAR) AS NodeID`;
-								me.query += ",count(ID) AS NodeCount"
-								me.query += ",false AS leaf,true AS expandable,false AS expanded";
-							}
-							else {  					// requesting all nodes under a specific node
-								me.query += ` ${key} `;
-								me.query += "ID AS NodeID";
-								me.query += ",1 AS NodeCount";
-								me.query += ",true AS leaf,true AS expandable,false AS expanded";
-							}
+							me.query += node 
+							 	// at the root
+								? ` ${key} ${me.group}`    
+									+ `,${node} AS NodeID`
+									+ ",count(ID) AS NodeCount"
+									+ ",false AS leaf,true AS expandable,false AS expanded"
+								
+								// requesting all nodes under a specific node
+								:  ` ${key} `
+									+ "ID AS NodeID"
+									+ ",1 AS NodeCount"
+									+ ",true AS leaf,true AS expandable,false AS expanded";
 						}
 						
 						else {
 							me.query += ` ${key} ${opt}`;
-							me.opts.push( (opt.vars||"ID").split(",") );
+							me.opts.push( opt.index.split(",") );
 						}
 					
 					else
@@ -1045,10 +1047,12 @@ SQL.DSVAR.prototype = {
 				
 				case "WHERE":
 				case "HAVING":
-				
+
+					me.nowhere = false;
+					
 					switch (opt.constructor) {
-						case Array:
-						
+						/*case Array:
+							
 							switch (opt.length) {
 								case 0:
 									break;
@@ -1073,14 +1077,12 @@ SQL.DSVAR.prototype = {
 								default:
 							}
 							
-							break;
+							break;*/
 							
 						case String:
 						
-							if (opt) {
-								me.safe = false;
-								me.query += ` ${key} ${opt}`;
-							}
+							me.safe = false;
+							me.query += ` ${key} ${opt}`;
 							break;
 
 						case Object:
@@ -1110,7 +1112,13 @@ SQL.DSVAR.prototype = {
 							if (rels)
 								me.query += ` ${key} ${rels}`;
 								
+							else
+								me.nowhere = true;
+							
 							break;
+							
+						default:
+								me.unsafe = true;
 					}
 					break;
 					
@@ -1139,21 +1147,27 @@ SQL.DSVAR.prototype = {
 					break;
 					
 				case "SET":
+					
 					switch (opt.constructor) {
-						case Array:
+						/*case Array:
+							me.safe = false;
 							me.query += ` ${key} ??`;
 							me.opts.push(opt);
-							break;
+							break;*/
 							
 						case String:
-							me.query += ` ${key} ??`;
-							me.opts.push(opt.split(","));
+							me.safe = false;
+							me.query += ` ${key} ${opt}`;
 							break;
 
 						case Object:
+							
 							me.query += ` ${key} ?`;
 							me.opts.push(opt);
 							break;
+							
+						default:
+							me.unsafe = true;
 					}
 					break;
 					
@@ -1182,7 +1196,7 @@ SQL.DSVAR.prototype = {
 		
 		var	me = this,
 			table = SQL.DBTX[me.table] || me.table,
-			ID = me.where ? me.where.ID : 0,
+			ID = me.where.ID ,
 			client = me.client,
 			sql = me.sql,
 			journal = me.journal 
@@ -1197,32 +1211,36 @@ SQL.DSVAR.prototype = {
 					cb();
 				};
 		
-		me.opts = []; me.query = ""; me.safe = true;
+		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 			
 		me.x(table, "UPDATE");
 		me.x(req, "SET");
 		me.x(me.where, "WHERE "+(me.ag||""));
 		me.x(me.order, "ORDER BY");
 		
-		if (me.safe || me.unsafe)
+		if (me.nowhere)
+			res( SQL.errors.unsafeQuery );
+
+		else
+		if (me.safe || me.unsafeok)
 			journal( function () {
 				
 				sql.query(me.query, me.opts, function (err,info) {
 
 					if (res) res( err || info );
 
+					if (SQL.emit && ID && !err) 		// Notify clients of change.  
+						SQL.emit( "update", {
+							table: me.table, 
+							body: req, 
+							ID: ID, 
+							from: client
+							//flag: flags.client
+						});
+
 				});
 
-				if (client && SQL.emit) 		// Notify clients of change.  
-					SQL.emit( "update", {
-						table: me.table, 
-						body: req, 
-						ID: ID, 
-						from: client
-						//flag: flags.client
-					});
-
-				if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+				if (me.trace) Trace(me.query);
 
 			});
 		
@@ -1236,11 +1254,10 @@ SQL.DSVAR.prototype = {
 
 		var	me = this,
 			table = SQL.DBTX[me.table] || me.table,
-			ID = me.where ? me.where.ID : 0,
 			client = me.client,
 			sql = me.sql;
 		
-		me.opts = []; me.query = ""; me.safe = true;
+		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 			
 		me.x(me.index || "*", "SELECT SQL_CALC_FOUND_ROWS");
 		me.x(me.nlp, "");
@@ -1254,7 +1271,7 @@ SQL.DSVAR.prototype = {
 		me.x(me.group, "GROUP BY");
 		me.x(me.limit, "LIMIT");
 
-		if (me.safe || me.unsafe)
+		if (me.safe || me.unsafeok)
 			switch (req.name) {
 				case "each": 
 					sql.query(me.query, me.opts)
@@ -1290,7 +1307,7 @@ SQL.DSVAR.prototype = {
 		if (res)
 			res( SQL.errors.unsafeQuery );
 		
-		if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+		if (me.trace) Trace(me.query);
 					
 	},
 	
@@ -1298,7 +1315,7 @@ SQL.DSVAR.prototype = {
 		
 		var	me = this,
 			table = SQL.DBTX[me.table] || me.table,
-			ID = me.where ? me.where.ID : 0,
+			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql,
 			journal = me.journal 
@@ -1313,29 +1330,33 @@ SQL.DSVAR.prototype = {
 					cb();
 				};
 		
-		me.opts = []; me.query = ""; me.safe = true;
+		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 		
 		me.x(table, "DELETE FROM");
 		me.x(me.where, "WHERE "+(me.ag||""));
 		
-		if (me.safe || me.unsafe)
+		if (me.nowhere)
+			res( SQL.errors.unsafeQuery );	
+		
+		else
+		if (me.safe || me.unsafeok)
 			journal( function () {
 			
 				me.sql.query(me.query, me.opts, function (err,info) {
 
 					if (me.res) me.res(err || info);
+				
+					if (SQL.emit && ID && !err) 		// Notify clients of change.  
+						SQL.emit( "delete", {
+							table: me.table, 
+							ID: ID, 
+							from: me.client
+							//flag: flags.client
+						});
 					
 				});
 					
-				if (me.client && SQL.emit) 		// Notify clients of change.  
-					SQL.emit( "delete", {
-						table: me.table, 
-						ID: ID, 
-						from: me.client
-						//flag: flags.client
-					});
-				
-				if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+				if (me.trace) Trace(me.query);
 				
 			});
 	
@@ -1346,9 +1367,14 @@ SQL.DSVAR.prototype = {
 	
 	insert: function (req,res) {
 		
+		function isEmpty(obj) {
+			for (var n in obj) return false;
+			return true;
+		}
+		
 		var	me = this,
 			table = SQL.DBTX[me.table] || me.table,
-			ID = me.where ? me.where.ID : 0,
+			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql,
 			journal = me.journal 
@@ -1363,29 +1389,34 @@ SQL.DSVAR.prototype = {
 					cb();
 				};
 		
-		me.opts = []; me.query = ""; me.safe = true;
+		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
+		
+		if (!req.length) req = [{}];   // force at least one insert
 		
 		req.each(function (n,rec) {
-			if (rec)
-				sql.query(
-					me.query = " INSERT INTO ?? SET ?", [table,rec], function (err,info) {
+			sql.query(
+				me.query = isEmpty(rec)
+					? " INSERT INTO ?? VALUE ()"
+					: " INSERT INTO ?? SET ?" ,
 
-					if (!n && res) {
-						res( err || info );
+					[table,rec], function (err,info) {
 
-						if (client && SQL.emit) 		// Notify clients of change.  
-							SQL.emit( "insert", {
-								table: me.table, 
-								body: rec, 
-								ID: info.insertId, 
-								from: client
-								//flag: flags.client
-							});
-					}			
+				if (!n && res) { 					// respond only to first insert
+					res( err || info );
 
-				});
+					if (SQL.emit && !err) 		// Notify clients of change.  
+						SQL.emit( "insert", {
+							table: me.table, 
+							body: rec, 
+							ID: info.insertId, 
+							from: client
+							//flag: flags.client
+						});
+				}			
 
-			if (me.trace) Trace((me.safe?"":"UNSAFE")+me.query);
+			});
+
+			if (me.trace) Trace(me.query);
 		});
 
 	},
