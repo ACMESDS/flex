@@ -11,7 +11,7 @@ to a (default MYSQL-Cluster) database using:
 
 	});
 
-where dsX are datasets and where sql in a mysql connector.  Or lone datasets can be created:
+where dsX are datasets and where sql in a mysql connector.  Or, lone datasets can be created:
 
 	var ds = SQL.DSVAR(sql, ATTRIBUTES);
 
@@ -64,8 +64,8 @@ pivot the dataset.
 
 ## DEBE Extensions
 
-SQL also provides a CRUDE (x=select | update | insert | delete | execute) interface to virtual tables.  The 
-following tables are predefined at SQL[x].table and are used extensively by DEBE:
+SQL also provides a CRUDE interface to virtual tables.  The following tables are predefined at 
+SQL[CRUDE].table and are used extensively by DEBE:
  
   		table		functionality provided on x=all
  		=======================================================================
@@ -112,7 +112,24 @@ following tables are predefined at SQL[x].table and are used extensively by DEBE
  		HEALTH		system health
 		
 ## Examples
+
+Require and config SQL:
+
+	var SQL = require("sql").config({ ... });
 	
+There is nothing to configure if the default MySQL-Cluster support suffices.  SQL extends [ENUM](https://git.geointapps.org/acmesds/eum) 
+so its start() options can be specified using ENUM.copy() conventions:
+
+	options =  {
+		key: value, 						// set 
+		"key.key": value, 					// index and set
+		"key.key.": value,					// index and append
+		OBJECT: [ function (){}, ... ], 	// add prototypes
+		Function: function () {} 			// add callback
+		:
+		:
+	}
+
 Create dataset
 
 	var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,rec:res});
