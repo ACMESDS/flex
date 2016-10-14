@@ -34,8 +34,8 @@
  		jobs		get, add, stop, and update a job placed in qos-priority queues
  		sql			crude engines to sql tables
  		git			get local repo history, commit changes to local repo, sync with remote repo
- 		uploads
- 		stores
+ 		uploads	one-time file upload area
+ 		stores	monitored file store area
  		
 		table		import/export/sync of records on x=execute
 		==============================================================================
@@ -56,9 +56,9 @@
  		
 		table		information returned on x=select
 		======================================================================
-		likeus
- 		tips
- 		ACTIVITY	
+		likeus	gives us a like
+ 		tips	...
+ 		ACTIVITY	system activity
  		CATALOG		catalog of tables
  		VIEWS		areas containing skinning files
  		LINKS		links to skinning files
@@ -67,7 +67,7 @@
  		ENGINES		status of simulation engines
  		CONFIG		system sw/hw configuration
  		TABLES		status of mysql table sources
- 		ADMIN		
+ 		ADMIN		...
  		QUEUES		status of qos-priority queues	
  		CLIQUES		cliques formed between tables and users
  		HEALTH		system health
@@ -80,32 +80,24 @@
 	where its ATTRIBUTEs are:
 	
 		table: 	"DB.TABLE" || "TABLE"
-		where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | "CLAUSE"
-		having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+		where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+		res: 	function (ds) {...}
+
+		having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
 		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
 		group: 	[ FIELD, ...] | "FIELD, ..."
 		limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-		index:	[ FIELD, ... ] | "FIELD, ... "
-		res: 	function (ds) {...}
-	
-	Null attributes are ignored during queries.  Queries to dataset records can then be 
-	performed in a db-agnostic way using:
+		index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+
+	Null attributes are ignored.   In this way, dataset queries can be performed in a db-agnostic way using:
 	
 		ds.rec = { FIELD:VALUE, ... }			// update matched record(s) 
 		ds.rec = [ {...}, {...}, ... ]			// insert record(s)
 		ds.rec = null 							// delete matched record(s)
-		ds.rec = function F(recs,me) {...}		// select matched record(s)
+		ds.rec = function CB(recs,me) {...}		// select matched record(s)
 		
-	and will callback its non-null response .res method when the querey completes.  
-	
-	The select query will callback the F=each/all/clone handler with all record(s)
-	matched by .where, indexed by  .index, ordered by .order ordering, grouped by 
-	.group, filtered by .having and limited by .limit attributes.  The select query
-	will smartly group-browse or group-pivot records if its .where contains a 
-	BrowseID or a NodeID, respectively.
-
-	CRUDE = "select" | "delete" | "update" | "insert" | "execute" queries can 
-	also be performed using:
+	with callback to its non-null response .res method when the query completes.  A CRUDE = 
+	"select" | "delete" | "update" | "insert" | "execute" query can also be performed using:
 	
 		ds.res = callback() { ... }
 		ds.data = [ ... ]
@@ -115,17 +107,20 @@
 	
 		ds.rec = "lock." + CRUDE
 	
-	Additional dataset attributes:
+	The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
+	by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
+	and limited by .limit ATTRIBUTEs.  Select will use its .index ATTRIBUTE to search for PATTERN 
+	using nlp (natural language parse), bin (binary mode), or qex (query expansion), and can browse or 
+	pivot the dataset.
+
+	Additional dataset ATTRIBUTEs:
 		
 		attr	default	true/set to
 		-----------------------------------------------------------------------------------
-		unsafeok 	true	execute potentially unsafe queries
+		unsafeok 	true	execute potentially unsafe CLAUSE queries
 		trace	false	display formed queries
 		journal	false	enable table journalling
 		ag		null	aggregate where/having = least(?,1), greatest(?,0), sum(?), ...
-		nlp		null	search pattern using natural language parse
-		bin		null	search pattern in binary mode
-		qex		null	search pattern with query expansion
 		
 	A context of datasets can be established on the same sql connector with:
 	
@@ -150,7 +145,7 @@
 
 		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
 		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
-		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,index:{NodeID:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
+		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,index:{pivot:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
 		
 		// select ds record(s) matched by ds.where
 		ds.where = [1,2];
@@ -277,18 +272,9 @@ var
 		insert: {ds: crude}, 
 		execute: {ds: crude}, 
 	
-		RECID: "ID", 					// Default unique record identifier
 		emit: null,		 				// Emitter to sync clients
 		thread: null, 					// SQL connection threader
 		skin : null, 					// Jade renderer
-		TRACE : true,					// Trace SQL querys to the console
-		//BIT : null,					// No BIT-mode until set to a SYNC hash
-		//POOL : null, 					// No pool until SQB configured
-		//DB: "none", 					// Default database
-		//SQL : null,	 				// Default virtual table logic
-		//USER : ENV.DB_USER,			// SQL client account (safe login for production)
-		//PASS : ENV.DB_PASS,			// Passphrase to the SQL DB 
-		//SESSIONS : 2,					// Maxmimum number of simultaneous sessions
 		DBTX : {						// Table to database translator
 			issues: "openv.issues",
 			tta: "openv.tta",
@@ -304,12 +290,6 @@ var
 			FAQs: "openv.FAQs",
 			aspreqts: "openv.aspreqts",
 			ispreqts: "openv.ispreqts" 
-		},
-		RESET : 12,	 					// mysql connection pool timer (hours)
-		RECID : "ID",					// DB key field
-		NODENAV : {						// specs for folder navigation
-			ROOT : "", 					// Root node ID
-			JOIN : ",',',"				// Node joiner (embed same slash value above)
 		},
 		DEFTYPES : {
 			"#": "varchar(32)",
@@ -892,9 +872,9 @@ SQL.DSVAR.prototype = {
 	
 	x: function xquery(opt,key,buf) {  // extends me.query and me.opts
 		
-		function nodeify(list) {
+		/*function nodeify(list) {
 			return "cast(concat(`" + list.join("`,',',`") + "`) AS CHAR)";
-		}
+		} */
 		
 		var me = this,
 			keys = key.split(" "),
@@ -902,6 +882,51 @@ SQL.DSVAR.prototype = {
 			
 		if (opt) 
 			switch (keys[0]) {
+
+				case "BROWSE":
+
+					var	slash = "_", quote = "`",
+						where = me.where,
+						nodeID = where.NodeID,
+						nodes = nodeID ? nodeID.split(slash) : [],
+						pivots = opt.split(",");
+
+					me.group = (nodes.length >= pivots.length)
+						? pivots.concat(["ID"])
+						: pivots.slice(0,nodes.length+1);
+
+					var name = pivots[nodes.length] || "concat('ID',ID)";
+					var path = quote + me.group.join(`${quote},'${slash}',${quote}`) + quote;
+
+					me.query += `, cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
+							+ ", count(ID) AS NodeCount "
+							+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
+
+					delete where.NodeID;
+					nodes.each( function (n,node) {
+						where[ pivots[n] || "ID" ] = node;
+					});
+					break;
+					
+				case "PIVOT":
+					
+					var where = me.where,
+						nodeID = where.NodeID || "root";
+
+					if (nodeID == "root") {
+						me.query += ", group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
+						me.group = opt;
+						delete where.NodeID;
+					}
+					
+					else {
+						me.query += `, '${nodeID}' as NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
+						me.where = `instr(',${nodeID},' , concat(',' , ID , ','))`;
+						me.group = null;
+					}
+					
+					break;
+					
 				case "":
 				case "IN":
 				case "WITH":
@@ -912,92 +937,36 @@ SQL.DSVAR.prototype = {
 				
 				case "SELECT":
 
-					var where = me.where;
-					
-					if (me.group)
-					
-						if (where.BrowseID) { 	// browsing a table
-							var	nodes = where.BrowseID.split(","),
-								browse = me.browse;
-							
-							me.group = browse[nodes.length];
-							delete where.BrowseID;
-							
-							if (me.group) { 
-								var pivots = nodeify(browse.slice(0,nodes.length+1));
-								
+					switch (opt.constructor) {
+						case Array:
+							me.query += ` ${key} ??`;
+							me.opts.push(opt);
+							break;
+
+						case String:
+							if (opt == "*") 
 								me.query += ` ${key} *`;
-								me.query += `,cast(concat(${pivots}) AS CHAR) AS BrowseID`;
-								me.query += ",count(ID) AS NodeCount";
-								me.query += ",false AS leaf, true AS expandable, false AS expanded";
-									
-								nodes.each( function (n,node) {
-									me.where[ browse[n] ] = node;
-								});
+							else {
+								me.query += ` ${key} ${opt}`;
+								me.unsafe = true;
 							}
-							else  {
-								var pivots = nodeify(browse.concat(["ID"]));
-								
-								me.query += ` ${key} *`;
-								me.query += `,cast(concat(${pivots}) AS CHAR) AS BrowseID`;
-								me.query += ",1 as NodeCount";
-								me.query += ",true AS leaf, false AS expandable, true AS expanded";
-									
-								nodes.each( function (n,node) {
-									me.where[(n >= browse.length) ? "ID" : browse[n]] = node;
-								});
-							}
-						}
-						
-						else
-						if (where.NodeID) { 		// pivoting a table
-							var	nodes = (where.NodeID == "root") ? [] : where.NodeID.split(",");									
-							var node = nodes.length ? "" : nodeify(me.group.split(",'"));
-							delete where.NodeID;
+							break;
+
+						case Object:
 							
-							me.query += node 
-							 	// at the root
-								? ` ${key} ${me.group}`    
-									+ `,${node} AS NodeID`
-									+ ",count(ID) AS NodeCount"
-									+ ",false AS leaf,true AS expandable,false AS expanded"
-								
-								// requesting all nodes under a specific node
-								:  ` ${key} `
-									+ "ID AS NodeID"
-									+ ",1 AS NodeCount"
-									+ ",true AS leaf,true AS expandable,false AS expanded";
-						}
-						
-						else {
-							me.query += ` ${key} ${opt}`;
-							me.opts.push( opt.index.split(",") );
-						}
-					
-					else
-						switch (opt.constructor) {
-							case Array:
-								me.query += ` ${key} ??`;
-								me.opts.push(opt);
-								break;
-								
-							case String:
-								if (opt == "*") 
-									me.query += ` ${key} *`;
-								else {
-									me.query += ` ${key} ??`;
-									me.opts.push(opt.split(","));
-								}
-								break;
-														
-							case Object:
+							if (opt.idx) 
+								me.x(opt.idx, key);
+							else {
 								me.query += ` ${key} *`;
-								x(opt.nlp, "");
-								x(opt.bin, "IN BINARY MODE");
-								x(opt.qex, "WITH QUERY EXPANSION");
-								break;
-						}
-					
+								me.x(opt.nlp, "");
+								me.x(opt.bin, "IN BINARY MODE");
+								me.x(opt.qex, "WITH QUERY EXPANSION");
+								me.x(opt.browse, "BROWSE");
+								me.x(opt.pivot, "PIVOT");
+							}
+							break;
+					}					
+
 					break;
 
 				case "JOIN":
@@ -1260,9 +1229,6 @@ SQL.DSVAR.prototype = {
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 			
 		me.x(me.index || "*", "SELECT SQL_CALC_FOUND_ROWS");
-		me.x(me.nlp, "");
-		me.x(me.bin, "IN BINARY MODE");
-		me.x(me.qex, "WITH QUERY EXPANSION");
 		me.x(table, "FROM");
 		me.x(me.join, "JOIN", {});
 		me.x(me.where, "WHERE "+(me.ag||""));
@@ -1296,11 +1262,17 @@ SQL.DSVAR.prototype = {
 					});
 					break;
 				
+				case "trace":
+					Trace( sql.query(me.query, me.opts, function (err,recs) {	
+						req( err || recs, me );
+					}));
+					break;
+					
 				case "all":
 				default:  
-					sql.query(me.query, me.opts, function (err,recs) {	
+					Trace( sql.query(me.query, me.opts, function (err,recs) {	
 						req( err || recs, me );
-					});
+					}) );
 			}
 		
 		else
@@ -1572,22 +1544,23 @@ function crude(req,res) {
 		
 	var 
 		sql = req.sql,							// sql connection
-		flags = req.flags;
+		flags = req.flags,
+		query = req.query,
+		body = req.body;
 
 	sql.context({ds: {
 			trace:	true,
 			table:	req.table,
-			where:	req.query,
+			where:	flags.where || query,
 			res:	res,
 			order:	flags.sort,
-			browse: flags.pivot,
-			group: 	flags.pivot || flags.tree,
+			having: flags.having,
+			group: 	flags.group || flags.tree,
 			score:	flags.score,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-			index: 	flags.index,
-			data:	req.body,
-			client: req.client,
-			unsafe:	false	
+			index: 	{nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
+			data:	body,
+			client: req.client
 		}}, function (ctx) {
 			
 		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
