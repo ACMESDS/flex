@@ -2,9 +2,70 @@
 
 [![Forked from SourceForge](https://sourceforge.net)]
 
-[Totem](https://git.geointapps.org/acmesds/transfer)'s SQL module provides a normalized CRUDE
-(x=select | update | insert | delete | execute) interface to MYSQL-Cluster tables on SQL[x].ds, and 
-to the following virtual tables on SQL[x].table
+[Totem](https://git.geointapps.org/acmesds/transfer)'s SQL provides a normalized JS dataset interface 
+to a (default MYSQL-Cluster) database using:
+	
+		sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
+		
+			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+		
+		});
+				
+	where dsX are datasets and where sql in a mysql connector.  Or lone datasets can be created:
+	
+		var ds = SQL.DSVAR(sql, ATTRIBUTES);
+	
+	where ATTRIBUTES = {key:value, ... } are described below.  In this way, dataset queries can be 
+	performed in a db-agnostic way using:
+	
+		ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
+		ds.rec = [ {...}, {...}, ... ]						// insert record(s)
+		ds.rec = null 										// delete matched record(s)
+		ds.rec = function CB(recs,me) {...}		// select matched record(s)
+		
+	with callback to its non-null response .res method when the query completes.  Any CRUDE 
+	
+			"select" | "delete" | "update" | "insert" | "execute" 
+			
+	query can also be performed using:
+	
+		ds.res = callback() { ... }
+		ds.data = [ ... ]
+		ds.rec = CRUDE
+		
+	or in record-locked mode using:
+	
+		ds.rec = "lock." + CRUDE
+	
+	Dataset ATTRIBUTES = { key: value, ... } include:
+	
+		table: 	"DB.TABLE" || "TABLE"
+		where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+		res: 	function (ds) {...}
+
+		having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
+		group: 	[ FIELD, ...] | "FIELD, ..."
+		limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
+		index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+
+		unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
+		trace: [true] | false				to display formed queries
+		journal: true | [false] 			enable table journalling
+		ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
+
+	Null attributes are ignored.   
+	
+	The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
+	by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
+	and limited by .limit ATTRIBUTEs.  Select will use its .index ATTRIBUTE to search for PATTERN 
+	using nlp (natural language parse), bin (binary mode), or qex (query expansion), and can browse or 
+	pivot the dataset.
+
+## DEBE Extensions
+
+SQL also provides a CRUDE (x=select | update | insert | delete | execute) interface to virtual tables.  The 
+following tables are predefined at SQL[x].table and are used extensively by DEBE:
  
   		table		functionality provided on x=all
  		=======================================================================
@@ -49,66 +110,8 @@ to the following virtual tables on SQL[x].table
  		QUEUES		status of qos-priority queues	
  		CLIQUES		cliques formed between tables and users
  		HEALTH		system health
-
-	This SQL module also provides a means to encapsulate its underlying (default MySQL) 
-	database table into a database agnostic JS dataset using the following mechanisim:
-	
-		var ds = SQL.DSVAR(sql, { ATTRIBUTE: VALUE, ... })
-	
-	where its ATTRIBUTEs are:
-	
-		table: 	"DB.TABLE" || "TABLE"
-		where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
-		res: 	function (ds) {...}
-
-		having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
-		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
-		group: 	[ FIELD, ...] | "FIELD, ..."
-		limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-		index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
-
-	Null attributes are ignored.   In this way, dataset queries can be performed in a db-agnostic way using:
-	
-		ds.rec = { FIELD:VALUE, ... }			// update matched record(s) 
-		ds.rec = [ {...}, {...}, ... ]			// insert record(s)
-		ds.rec = null 							// delete matched record(s)
-		ds.rec = function CB(recs,me) {...}		// select matched record(s)
 		
-	with callback to its non-null response .res method when the query completes.  A CRUDE = 
-	"select" | "delete" | "update" | "insert" | "execute" query can also be performed using:
-	
-		ds.res = callback() { ... }
-		ds.data = [ ... ]
-		ds.rec = CRUDE
-		
-	or in record-locked mode using:
-	
-		ds.rec = "lock." + CRUDE
-	
-	The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
-	by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
-	and limited by .limit ATTRIBUTEs.  Select will use its .index ATTRIBUTE to search for PATTERN 
-	using nlp (natural language parse), bin (binary mode), or qex (query expansion), and can browse or 
-	pivot the dataset.
-
-	Additional dataset ATTRIBUTEs:
-		
-		attr	default	true/set to
-		-----------------------------------------------------------------------------------
-		unsafeok 	true	execute potentially unsafe CLAUSE queries
-		trace	false	display formed queries
-		journal	false	enable table journalling
-		ag		null	aggregate where/having = least(?,1), greatest(?,0), sum(?), ...
-		
-	A context of datasets can be established on the same sql connector with:
-	
-		sql.context( {ds1:{attributes}, ds2:{attributes}, ... }, function (ctx) {
-		
-			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
-		
-		});
-				
-## Examples
+## Examples:
 	
 		// create dataset
 		var ds = new SQL.DSVAR(sql,{table:"test.x",trace:1,rec:res});
@@ -140,6 +143,16 @@ to the following virtual tables on SQL[x].table
 		ds.rec = [{a:1,b:2,ds:"hello"},{a:10,b:20,x:"there"}]
 		ds.where = {ID:3}
 		ds.rec = {a:100} 
+	
+## Installation
+
+Download and unzip into your project/totem folder and revise the project/config module as needed
+for your [Totem](https://git.geointapps.org/acmesds/transfer) project.  Typically, you will
+want to:
+
+	ln -s project/config/maint.sh maint.sh
+	
+to override the defaults.
 	
 ## License
 
