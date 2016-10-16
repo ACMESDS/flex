@@ -1,9 +1,15 @@
+// UNCLASSIFIED ++++
+
 /*
  * nodejs:
  * @requires vm
  * @requires http
  * @requires crypto
  * @requires url
+ * @requires cluster
+ * @requires fs
+ * @requires child-process
+ * @requires os
  * totem:
  * @requires enum
  * @requires engine
@@ -90,12 +96,6 @@ var 											// globals
 	DOT = ".", 									// table.type etc separator
 	SLASH = "/",
 	SUBMITTED = "submitted";
-
-var 											// nodejs bindings
-	FS = require("fs"), 						// file system resources
-	OS = require("os"), 						// operating system resources
-	CP = require("child_process"), 				// Process spawning
-	CLUSTER = require('cluster'); 				// Work cluster manager
 
 var 											// totem bindings
 	ENUM = require("enum").extend({
