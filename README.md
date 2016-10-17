@@ -64,9 +64,16 @@ There is nothing to configure if the default MySQL-Cluster support suffices.
 
 ## Installation
 
-Download and unzip into your project/totem folder and revise the project/config module as needed
-for your [Totem](https://git.geointapps.org/acmesds/transfer) project.  Typically, you will
-want to point the following to your project/config
+Download and unzip [the latest version of SQL](https://git.geointapps.org/acmesds/sql) into your
+project/sql folder, then install its dependencies:
+
+	npm install
+
+If you are on a closed system, you will need to download  [Totem's 3rd-party repo](https://git.geointapps.org/acmesds/transfer) 
+into, say, a project/repo folder, then revise each dependencies in project/totem/package.json from {X:"ver"} to 
+{X: "file:../repo/X/node_modules} before you "npm install".
+
+Typically, you will want to redirect the following to your project/config
 
 	ln -s project/config/maint.sh maint.sh
 	

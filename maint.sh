@@ -1,1 +1,1 @@
-../config/maint.sh
+../totem/maint.sh
