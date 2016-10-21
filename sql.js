@@ -1,4 +1,4 @@
-// UNCLASSIFIED ++++
+// UNCLASSIFIED >>>>
 
 /*
  * nodejs:
@@ -133,17 +133,12 @@ var
 		timers: [],
 		sendMail: sendMail,
 		
-		/*
 		errors: {
-			unsafeQuery: new Error("unsafe queries not allowed"),
-			unsupportedQuery: new Error("query not supported"),
-			invalidQuery: new Error("query invalid"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
 			missingEngine: new Error("missing engine query"),
 			protectedQueue: new Error("action not allowed on this job queues")
 		},
-		*/
 		
 		listify: function (hash, idxkey, valkey) {
 			var list = [];
