@@ -1,4 +1,4 @@
-// UNCLASSIFIED >>>>
+// UNCLASSIFIED ++++
 
 /*
  * nodejs:
@@ -119,6 +119,10 @@ function Trace(msg,arg) {
 	if (msg.constructor == String)
 		console.log("S>"+msg);
 	else
+	if (msg.constructor == Error)
+		console.log("S>ERROR",msg);
+	
+	else
 		console.log("S>"+msg.sql);
 
 	if (arg) console.log(arg);
@@ -155,6 +159,24 @@ var
 					list.push(idx);
 					
 			return list;
+		},
+		
+		flatten: { 		// catalog flattening 
+			catalog: {  // default tables to flatten and their fulltext keys
+				files: "Tag,Area,Name",
+				intake: "Special,Name,App,Tech",
+				engines: "Code,engine,Classif,Special",
+				news: "Message",
+				sockets: "Location,Client,Message",
+				detects: "label"
+			},
+			
+			limits: {  // flattening parameters
+				score: 0.1,
+				records: 100,
+				stamp: new Date(),
+				pivots: ""
+			}
 		},
 		
 		// CRUDE interface
@@ -238,7 +260,7 @@ var
 						
 						SQL.thread(function (sql) {
 							
-							console.log("PROFILES UPDATED");
+							Trace("PROFILES UPDATED");
 							
 							sql.query(
 								"SELECT *, datediff(now(),Updated) AS Age FROM openv.profiles WHERE LikeUs HAVING Age>=?",
@@ -285,7 +307,6 @@ var
 					}, opts.PULSE.PING*(60*1000) );
 				*/
 				
-				//$$$$
 				EMAIL.HAWKS = SITE.distro.hawk; 
 				EMAIL.SUBJ = SITE.nick + "?JOB";
 				EMAIL.BODY = 
@@ -304,7 +325,7 @@ var
 				
 				if (EMAIL.TX.PORT) {  		// Establish server's email transport
 					
-					console.log("MAILING  "+EMAIL.TX.HOST+":"+EMAIL.TX.PORT + " AS " + EMAIL.USER);
+					Trace(`EMAIL  ${EMAIL.TX.HOST} RE ${EMAIL.TX.PORT}`);
 					
 					EMAIL.TX.TRAN = EMAIL.USER
 						? 
@@ -372,7 +393,7 @@ var
 							contents: ""
 						}]
 					}, function (err,info) {
-						if (err) console.log(`EMAIL ${err}`);
+						if (err) Trace(err);
 					});
 			}			
 		}
@@ -386,26 +407,26 @@ var
  * */
 function flattenCatalog(flags, catalog, limits, cb) {
 	
-	function flatten( sql, rtns, depth, order, catalog, limits, returncb, matchcb) {
+	function flatten( sql, rtns, depth, order, catalog, limits, cb) {
 		var table = order[depth];
 		
 		if (table) {
 			var match = catalog[table];
-			var selects = matchcb(match);
+			var filter = cb.filter(match);
 			
-			var qual = " using "+ (selects ? selects : "open")  + " search limit " + limits.records;
+			var quality = " using "+ (filter ? filter : "open")  + " search limit " + limits.records;
 			
-			Trace("CATALOG ("+table+qual+") HAS "+rtns.length);
+			Trace("CATALOG ("+table+quality+") HAS "+rtns.length);
 		
-			var query = selects 
-					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + selects + " FROM ?? HAVING Score>? LIMIT 0,?"
+			var query = filter 
+					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + filter + " FROM ?? HAVING Score>? LIMIT 0,?"
 					: "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID FROM ?? LIMIT 0,?";
 					
-			var args = selects
+			var args = filter
 					? [table, limits.score, limits.records]
 					: [table, limits.records];
 
-			sql.query( query, args,  function (err,recs) {
+			Trace( sql.query( query, args,  function (err,recs) {
 				
 				if (err) {
 					rtns.push( {
@@ -418,7 +439,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 						Content: err+""
 					} );
 
-					flatten( sql, rtns, depth+1, order, catalog, limits, returncb, matchcb );
+					flatten( sql, rtns, depth+1, order, catalog, limits, cb );
 				}
 				else 
 					sql.query("select found_rows()")
@@ -430,18 +451,18 @@ function flattenCatalog(flags, catalog, limits, cb) {
 								Ref: table,
 								Name: table+DOT+rec.ID,
 								Dated: limits.stamp,
-								Searched: recs.length + " of " + stat["found_rows()"] + qual,
+								Quality: recs.length + " of " + stat["found_rows()"] + quality,
 								Link: table.tag("a",{href: "/" + table + ".db?ID=" + rec.ID}),
 								Content: JSON.stringify( rec )
 							} );
 						});
 
-						flatten( sql, rtns, depth+1, order, catalog, limits, returncb, matchcb );
+						flatten( sql, rtns, depth+1, order, catalog, limits, cb );
 					});
-			});	
+			}) );	
 		}
 		else
-			returncb(rtns);
+			cb.res(rtns);
 	}
 
 	/*
@@ -449,18 +470,19 @@ function flattenCatalog(flags, catalog, limits, cb) {
 	*/
 	
 	var sql = this,
-		rtns = [],
-		limits = {
+		rtns = [];
+		/*limits = {
 			records: 100,
 			stamp: new Date()
 			//pivots: flags._pivot || ""
-		};
+		};*/
 		
-	flatten( sql, rtns, 0, SQL.listify(catalog), catalog, limits, cb, function (search) {
-
-		return Builds( "", search, flags);
-
-	});
+	flatten( sql, rtns, 0, SQL.listify(catalog), catalog, limits, {
+			res: cb, 
+		
+			filter: function (search) {
+				return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
+		} });
 }
 
 function hawkCatalog(req,res) {
@@ -526,7 +548,7 @@ function selectJobs(where, cb) {
 		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
 	)
 	.on("error", function (err) {
-		console.log(err);
+		Trace(err);
 	})
 	.on("result", function (rec) {
 		cb(rec);
@@ -723,7 +745,6 @@ function crude(req,res) {
 		body = req.body;
 
 	sql.context({ds: {
-			trace:	true,
 			table:	req.table,
 			where:	flags.where || query,
 			res:	res,
@@ -732,7 +753,7 @@ function crude(req,res) {
 			group: 	flags.group || flags.tree,
 			score:	flags.score,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-			index: 	{nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
+			index: 	{has:flags.has, nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
 			data:	body,
 			client: req.client
 		}}, function (ctx) {
@@ -900,7 +921,7 @@ SQL.execute.unsent = function Execute(req,res) {
 				contents: ""
 			}]
 		}, function (err,info) {
-			if (err) console.log(err);
+			if (err) Trace(err);
 		});
 	});
 	
@@ -908,7 +929,7 @@ SQL.execute.unsent = function Execute(req,res) {
 
 // Master catalog interface
 
-SQL.select.CATALOG = function Select(req, res) {
+/*SQL.select.CATALOG = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 
 	if (flags.has)
@@ -932,31 +953,29 @@ SQL.select.CATALOG = function Select(req, res) {
 		});
 	
 }
+*/
 
-SQL.execute.CATALOG = function Execute(req, res) {
-	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
+SQL.execute.catalog = function Execute(req, res) {
+	var sql = req.sql, log = req.log, query = req.query, flags = req.flags,
+			catalog = SQL.flatten.catalog || {},
+			limits = SQL.flatten.limits || {};
+	
+	limits.pivots = flags.pivot || "";
+	limits.stamp = new Date();
 
-	var catalog = {
-		files: "Tags,Tagger,Area",
-		intake: "Special,Name,App,Tech",
-		engines: "Code,engine,Classif,Special",
-		news: "Message",
-		sockets: "Location,Client,Message",
-		detects: "label"
-	};
-
-	var limits = {
-		score: 0.1,
-		records: 100,
-		stamp: new Date(),
-		pivots: flags.pivot || ""
-	};
-		
+if (false)
+console.log({
+	cat: catalog,
+	lim: limits
+});
+	
 	res(SUBMITTED);
 	
 	sql.query("DELETE from catalog");
 	
 	sql.flattenCatalog( flags, catalog, limits, function (recs) {
+		
+		Trace("FLATTEN "+recs.length);
 		
 		recs.each( function (n,rec) {
 			sql.query("INSERT INTO catalog SET ?",rec);
@@ -1272,7 +1291,7 @@ SQL.select.HEALTH = function Select(req, res) {
 		+ "count(ID) AS logs "
 		+ "FROM dblogs")
 	.on("error", function (err) {
-		console.log(err);
+		Trace(err);
 	})
 	.on("result", function (lstats) {
 
@@ -1285,7 +1304,7 @@ SQL.select.HEALTH = function Select(req, res) {
 		+ "sum(RunTime)*? AS cost_$ "
 		+ "FROM queues",[4700])
 	.on("error", function (err) {
-		console.log(err);
+		Trace(err);
 	})
 	.on("result", function (qstats) {
 	
@@ -1417,19 +1436,22 @@ SQL.select.likeus = function Select(req, res) {
 			contents: ""
 		}]
 	}, function (err,info) {
-		if (err) console.log(`EMAIL ${err}`);
+		if (err) Trace(err);
 	});
 	
-	sql.query("INSERT INTO openv.profiles SET ? ON DUPLICATE KEY UPDATE Likeus=Likeus+1,QoS=least(Likeus+1,5)",{ 
+	sql.query(
+		"INSERT INTO openv.profiles SET ? " +
+		"ON DUPLICATE KEY UPDATE Challenge=0,Likeus=Likeus+1,QoS=least(Likeus+1,5)", { 
 		LikeUs:0, 
 		QoS:0,
 		Banned:"",
 		Joined: new Date(),
 		Updated: new Date(),
+		Challenge:1,
 		Client:req.client 
 	})
 	.on("error", function (err) {
-		console.log("Failed to update profile "+err);
+		Trace(err);
 	});
 
 	res( `Thanks ${req.client} for liking ${SQL.SITE.nick} !  Check out your new ` +
@@ -1461,7 +1483,7 @@ SQL.select.tips = function Select(req, res) {
 		function (err, recs) {
 
 			if (err)
-				console.log([err,q.sql]);
+				Trace("tips",[err,q.sql]);
 			else
 				recs.each(function(n,rec) {
 					rec.ID = n;
@@ -1673,7 +1695,7 @@ SQL.execute.news = function Execute(req, res) {
 				to = parts[1].substr(0,parts[1].indexOf(" ")),
 				body = parts[1].substr(to.length);
 
-			console.log("NEWS -> "+to);
+			Trace(`NEWS ${to}`);
 
 			switch (to) {
 				case "conseq":
@@ -1725,7 +1747,7 @@ SQL.execute.news = function Execute(req, res) {
 			+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
 			+ "WHERE intake.?", ["/intake.jade?name=","/queue.jade?name=",client,{ Name:name }] ) 
 		.on("error", function (err) {
-			console.log("news apperr="+err);
+			Trace(err);
 		})
 		.on("result", function (sys) {
 			var msg = sys.Link+" "+make.format(sys);
@@ -1751,7 +1773,7 @@ SQL.execute.milestones = function Execute(req, res) {
 		for (var n in map) map[n] = rec[n] || "";
 		
 		sql.query("INSERT INTO openv.milestones SET ?",map, function (err) {
-			if (err) console.log("apperr="+err);
+			if (err) Trace(err);
 		});
 	});
 
@@ -1779,6 +1801,8 @@ SQL.select.uploads = SQL.select.stores = function Uploads(req, res) {
 	var rtns = [], area = req.table;
 	var path = `./public/${area}`;
 
+	Trace(`DIR ${path}`);
+		  
 	switch (area) {
 		
 		case "uploads":
@@ -2199,7 +2223,7 @@ SQL.execute.detectors = function Execute(req, res) {
 
 	res(SUBMITTED);
 	
-	console.log("PRIME DETECTORS");
+	Trace("PRIME DETECTORS");
 	
 	if ( guardQuery(query,false) ) 	// clear previously locked proofs and retrain selected detectors
 		sql.query("UPDATE proofs SET dirty=0,posLock=null,negLock=null WHERE posLock OR negLock", function () {
@@ -2620,7 +2644,7 @@ SQL.execute.parms = function Execute(req, res) {
 	sql.query("SHOW TABLES FROM app1 WHERE Tables_in_app1 NOT LIKE '\\_%'", function (err,tables) {	// sync parms table with DB
 		var allparms = {}, ntables = 0;
 
-		console.log("SCANNING TABLES");
+		Trace("DESCRIBING TABLES");
 		
 		tables.each(function (n,table) {
 			var tname = table.Tables_in_app1;
@@ -2813,7 +2837,7 @@ SQL.execute.searches = function Execute(req, res) {
 			+ "HAVING datediff(now(),made)<= ?"
 			+ "ORDER BY openv.profiles.QoS,openv.profiles.Client" , [1,1,0,30]
 		).on("error", function (err) {
-			console.log("search apperr="+err);
+			Trace(err);
 		}).on("result", function (make) {
 			if (make.ID)
 				sql.query("SELECT * FROM tempdets WHERE ? LIMIT 1",{Name:config.SetPoint})
@@ -2881,7 +2905,7 @@ SQL.execute.swaps = function Execute(req, res) {
 				".tar": "tar -C $D -xvf $I"
 			};
 
-		console.log("INSTALLING "+package);
+		Trace("INSTALLING "+package);
 
 		// submit swaps that have not already been submitted 
 		
@@ -2899,7 +2923,7 @@ SQL.execute.swaps = function Execute(req, res) {
 					contents: ""
 				}]
 			}, function (err,info) {
-				if (err) console.log(`EMAIL ${err}`);
+				if (err) Trace(err);
 			});
 			
 		});
@@ -2947,7 +2971,7 @@ SQL.execute.swaps = function Execute(req, res) {
 			
 			if (unpack)
 				unpack.command({I:install,D:dest}, "", function () {
-					console.log("UNPACKED "+package);
+					Trace("UNPACKED "+package);
 				});
 			else {  // crawl site with phantomjs to pull latest source
 			}
@@ -2981,7 +3005,7 @@ SQL.execute.jobs = function Execute(req, res) {
 		function hawk(rule) {
 			SQL.thread(function (sql) {
 
-				console.log(`HAWK ${rule.Action} WHEN ${rule.Condition} EVERY ${rule.Period} mins`);
+				Trace(`HAWKING ${rule.Action} WHEN ${rule.Condition} EVERY ${rule.Period} mins`);
 				
 				sql.query("UPDATE hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
 
@@ -2999,7 +3023,9 @@ SQL.execute.jobs = function Execute(req, res) {
 								setTimeout: function () {}
 							}*/
 						}, {
-							send: function (rtn) {console.log(rtn);} 
+							send: function (rtn) {
+								console.log(rtn);
+							} 
 						}, rule.Table, "execute");
 						
 						break;
@@ -3038,7 +3064,7 @@ SQL.execute.jobs = function Execute(req, res) {
 										contents: ""
 									}]
 								}, function (err,info) {
-									if (err) console.log(`EMAIL ${err}`);
+									if (err) Trace(err);
 								});
 
 							});
@@ -3087,7 +3113,6 @@ SQL.execute.jobs = function Execute(req, res) {
 						
 					default:
 						console.log(rule.Action);
-						
 				}
 				
 				sql.release();
@@ -3102,21 +3127,22 @@ SQL.execute.jobs = function Execute(req, res) {
 		
 		//sql.query("DELETE FROM queues"); 		// flush job queues
 		
-		sql.query("SELECT * FROM config WHERE Hawks") 			// get hawk config options
-		.on("result", function (config) {
-			sql.query(
-				"SELECT * FROM hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", 
-				[{Enabled:1,Name:config.SetPoint},config.MaxFaults]
-			).on("result", function (rule) { 		// create a hawk
-				if (rule.Period) 					// hawk is periodic
-					SQL.timers.push( 
+ 		sql.query("SELECT * FROM config WHERE Hawks")             // get hawk config options
+        .on("result", function (config) {
+            sql.query(
+                "SELECT * FROM hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
+				{Enabled:1, Name:config.SetPoint}, 
+				config.MaxFaults
+			])
+			.on("result", function (rule) {         // create a hawk
+				if (rule.Period)                     // hawk is periodic
+					SQL.timers.push(
 						setInterval( hawk, rule.Period*60*1000, rule )
 					);
-				else 								// one-time hawk
+				else                                 // one-time hawk
 					hawk(rule);
 			});
-		
-		});
+        });
 	}
 
 	res(SUBMITTED);
@@ -3193,7 +3219,7 @@ function (req,res) {
 		keys = (query.key||body.key||"nokey").split("."),
 		db = "openv." + keys[0];
 
-	delete query.key;  //$$$$
+	delete query.key; 
 	delete body.key;
 	
 console.log({
@@ -3314,8 +3340,6 @@ SQL.execute.detectors = function Execute(req, res) {
 	var vers = [0]; //job.Overhead ? [0,90] : [0];
 	var labels = job.Labels.split(",");
 
-console.log(">>>>>>>>>>>>>>>>>>>>> labels="+labels);
-
 	// train classifier
 	//	`python ${ENV.CAFENGINES}/train`
 
@@ -3358,7 +3382,7 @@ console.log(">>>>>>>>>>>>>>>>>>>>> labels="+labels);
 			"COMMIT", 
 			function (err) { 
 		
-console.log([">>>> proofs",posProofs.length,negProofs.length]);
+		Trace("PROOFING ",[posProofs.length,negProofs.length]);
 
 		if (posProofs.length && negProofs.length) {	// must have some proofs to execute job
 			
@@ -3368,7 +3392,7 @@ console.log([">>>> proofs",posProofs.length,negProofs.length]);
 				totProofs = posProofs.length + negProofs.length,
 				dirtyness = totDirty / totProofs;
 
-			console.log('DIRTY CHECK '+[dirtyness,job.MaxDirty,posDirty,negDirty,posProofs.length,negProofs.length]);
+			Trace('DIRTY', [dirtyness,job.MaxDirty,posDirty,negDirty,posProofs.length,negProofs.length]);
 
 			sql.query("UPDATE detectors SET ? WHERE ?",[{Dirty:dirtyness},{ID:job.ID}]);
 			
@@ -3395,7 +3419,7 @@ console.log([">>>> proofs",posProofs.length,negProofs.length]);
 					det.client = log.client;
 					det.work = det.posCount + det.negCount;
 
-					console.log("TRAIN "+det.Name+"["+ver+"]");
+					Trace(`TRAIN ${det.Name} v${ver}`);
 				
 					var Execute = {
 						Purge: "rm -rf " + det.Path,
@@ -3414,7 +3438,7 @@ console.log([">>>> proofs",posProofs.length,negProofs.length]);
 							//"opencv_traincascade -data $Cascade -bg $negPath -vec $Vector -numPos $Positives -numNeg $Negatives -numStages $MaxStages -precalcValBufSize 100 -precalcIdxBufSize 100 -featureType HAAR -w $Width -h $Height -mode BASIC -minHitRate $MinTPR -maxFalseAlarmRate $MaxFPR -weightTrimRate $TrimRate -maxDepth $MaxDepth -maxWeakCount $MaxWeak"										
 					};
 						
-					console.log((det.Execute||"").toUpperCase()+" "+det.name);
+					Trace((det.Execute||"").toUpperCase()+" "+det.name);
 					
 					/**
 					* Training requires:
@@ -3580,7 +3604,7 @@ function statRepo(sql) {
 		default: "Special"
 	};		
 		
-	console.log("REFLECT GIT LOGS");
+	Trace("STAT GIT");
 	
 	CP.exec('git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog', function (err,log) {
 			
@@ -3730,7 +3754,7 @@ function showIMAP(obj) {
 }
 
 function killIMAP(err) {
-	console.info(ME+'Uh oh: ' + err);
+	Trace(err);
 	process.exit(1);
 }
 
@@ -3743,7 +3767,7 @@ function openIMAP(cb) {
 
 function sendMail(opts, cb) {
 	
-	if (SQL.EMAIL.TRACE) console.log(`>>Emailing ${opts.to} ${opts.subject}`);
+	Trace(`EMAIL ${opts.to} RE ${opts.subject}`);
 		
 	if (x = SQL.EMAIL)
 		if (x = x.TX.TRAN)
