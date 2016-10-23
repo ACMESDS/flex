@@ -1,8 +1,8 @@
+/**
+@class flex [![Forked from SourceForge](https://sourceforge.net)]
 # FLEX
 
-[![Forked from SourceForge](https://sourceforge.net)]
-
-FLEX provides a CRUDE interface on FLEX[ select | update | delete | insert | execute ].table for
+The FLEX NodeJS module provides a CRUDE interface on FLEX[ select | update | delete | insert | execute ].table for
 searching and editing a database (default MySQL cluster) that scales with the  underlying
 VM architecture.  FLEX provides this capability via the following tables:
 
@@ -83,3 +83,5 @@ Typically, you will want to redirect the following to your project/master
 ## License
 
 [MIT](LICENSE)
+
+*/

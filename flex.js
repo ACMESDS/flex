@@ -1,7 +1,7 @@
 // UNCLASSIFIED
 
 /*
- * nodejs:
+ * @class flex
  * @requires vm
  * @requires http
  * @requires crypto
@@ -10,16 +10,15 @@
  * @requires fs
  * @requires child-process
  * @requires os
- * totem:
+
  * @requires enum
  * @requires engine
- * 3rd party:
+
  * @requires pdffiller
  * @requires nodemailer
  * @requires imap
  * @requires feed
  * @requires feed-read
- * @include README.md
  */
  
 var 									// nodejs bindings
@@ -940,7 +939,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 		  "SELECT "
 		+ "sum(departed IS null) AS backlog, "
 		+ "avg(datediff(ifnull(departed,now()),arrived)) AS avg_wait_DAYS, "
-		+ "sum(RunTime)*? AS cost_$ "
+		+ "sum(Age)*? AS cost_$ "
 		+ "FROM queues",[4700])
 	.on("error", function (err) {
 		Trace(err);
