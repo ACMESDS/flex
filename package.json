@@ -1,14 +1,14 @@
 {
-  "name": "sql",
+  "name": "flex",
   "version": "1.0.0",
-  "description": "SQL framework for totem",
-  "main": "sql.js",
+  "description": "FLEX framework for totem",
+  "main": "flex.js",
   "scripts": {
     "test": "node test.js"
   },
   "repository": {
     "type": "git",
-    "url": "git@git.geointapps.org:acme/sql.git"
+    "url": "git@git.geointapps.org:acme/flex.git"
   },
   "keywords": [
     "geoNode"
