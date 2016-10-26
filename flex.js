@@ -86,6 +86,7 @@ var
 		sendMail: sendMail,
 		
 		errors: {
+			badbaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
 			missingEngine: new Error("missing engine query"),
@@ -469,7 +470,7 @@ FLEX.update.sql = function Update(req, res) {
 
 // GIT interface
 
-FLEX.execute.git = function Execute(req,res) {
+FLEX.execute.git = function Execute(req,res) {  // baseline changes
 
 	var ex = {
 		group: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} ${req.group} >admins/db/${req.group}.sql`,
@@ -477,8 +478,16 @@ FLEX.execute.git = function Execute(req,res) {
 		commit: `git commit -am "${req.client} baseline"`
 	};
 	
-	res(SUBMITTED);
+	sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
+		if (err)
+			res( FLEX.errors.badbaseline );
+		else
+			res( "Baselined "+recs[0].Changes+" changes" );
+
+		sql.query("DELETE FROM openv.journal");
+	});
 	
+	if (0)
 	CP.exec(ex.group, function (err,log) {
 		
 		Trace("CHECKPT "+(err||"OK"));
@@ -630,17 +639,17 @@ FLEX.select.ACTIVITY = function Select(req, res) {
 	var recs = {};
 	
 	sql.query(
-		"SELECT * FROM openv.roles", 
+		"SELECT * FROM openv.attrs", 
 		[] , 
-		function (err,roles) {
+		function (err,attrs) {
 			
 	sql.query(
 		'SELECT `Table`,sum(action="Insert") AS INSERTS,sum(action="Updates") as UPDATES, sum(action="Select") as SELECTS,sum(action="Delete") as DELETES,sum(action="Execute") as EXECUTES  FROM dblogs WHERE datediff(now(),Event)<30 GROUP BY `Table`',
 		[],
 		function (err,acts) {
 			
-			roles.each( function (n,role) {
-				var rec = recs[role.Table];
+			attrs.each( function (n,dsattr) {
+				var rec = recs[dsattr.Table];
 				
 				if (!rec) rec = {
 					INSERT: 0,
@@ -650,7 +659,7 @@ FLEX.select.ACTIVITY = function Select(req, res) {
 					EXECUTES: 0
 				};
 				
-				Copy( role, rec );
+				Copy( dsattr, rec );
 			});
 			
 			acts.each( function (n,act) {
@@ -891,8 +900,8 @@ FLEX.select.CLIQUES = function v(req, res) {
 	res([]);
 	/*
 	sql.query(
-		  "SELECT dblogs.ID AS ID,cliqueinfo(dblogs.ID,count(DISTINCT user),concat(ifnull(role,'none'),'-',ifnull(detectors.name,'nill')),group_concat(DISTINCT user,';')) AS Name "
-		  + "FROM dblogs LEFT JOIN detectors ON (detectors.id=dblogs.recid AND dblogs.table='detectors') WHERE recid AND least(?,1) GROUP BY role,detectors.name",
+		  "SELECT dblogs.ID AS ID,cliqueinfo(dblogs.ID,count(DISTINCT user),concat(ifnull(dsattr,'none'),'-',ifnull(detectors.name,'nill')),group_concat(DISTINCT user,';')) AS Name "
+		  + "FROM dblogs LEFT JOIN detectors ON (detectors.id=dblogs.recid AND dblogs.table='detectors') WHERE recid AND least(?,1) GROUP BY dsattr,detectors.name",
 		
 		guardQuery(query,true),  function (err, recs) {
 			res(err || recs);
@@ -1132,6 +1141,76 @@ FLEX.select.tips = function Select(req, res) {
 			
 			res(err || recs);
 	});
+}
+
+FLEX.select.history = function (req,res) {
+	var sql = req.sql, log = req.log, query = req.query;
+
+	sql.query("USE openv", function () {
+		
+		switch (query.return) {
+
+			case "reviews":
+				
+				sql.query(
+					"SELECT roles.Client,group_concat(linkrole(Role,Reviews,Strength)) AS Reviews "
+					+ "FROM roles LEFT JOIN profiles ON roles.client=profiles.client GROUP BY roles.Client", 
+					function (err,recs) {
+						
+						res(err || recs);
+					});
+				break;
+						 
+			case "views":
+
+				sql.query(
+					"SELECT Role,monitors.Dataset,group_concat(distinct monitors.field) AS Fields, "
+					+ "journal.Updates, group_concat(distinct link(viewer,concat('/',viewer,'.view'))) AS Views, "
+					+ "false AS Reviewed, monitors.Strength "
+					+ "FROM monitors "
+					+ "LEFT JOIN journal ON least(monitors.dataset=journal.dataset,monitors.field=journal.field) "
+					+ "LEFT JOIN viewers ON monitors.dataset=viewers.dataset GROUP BY role,dataset", 
+					function (err,recs) {
+						res (err || recs );
+				});
+				break;
+				
+			case "moderators":
+			default:
+
+				sql.query(
+					"SELECT group_concat(DISTINCT linkrole(monitors.role,journal.updates,monitors.strength)) AS Moderators,"
+					+ "concat(monitors.Dataset,'.',monitors.Field) AS Idx FROM monitors "
+					+ "LEFT JOIN journal ON least(monitors.dataset=journal.dataset,monitors.field=journal.field,monitors.role=journal.Moderator) "
+					+ "GROUP BY monitors.dataset,monitors.field" , 
+					function (err,recs) {
+						res( err || recs );
+				});
+
+		}
+	});
+
+}
+
+FLEX.update.history = function (req,res) {
+	var sql = req.sql, query = req.query, body = req.body;
+
+console.log({
+	q: query,
+	b: body
+});
+	
+	if (body.Reviewed)
+		sql.query(
+			"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE Reviews=Reviews+1", {
+			Client: req.client,
+			Role: query.Role
+		}, function (err) {
+			res(err);
+		});
+	else
+		res( new Error("Missing Reviewed")  );
+
 }
 
 // Digital globe interface
@@ -2323,15 +2402,15 @@ FLEX.execute.parms = function Execute(req, res) {
 
 }
 
-FLEX.execute.roles = function Execute(req, res) { 
+FLEX.execute.attrs = function Execute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	var created = [];
 		
 	res(SUBMITTED);
 
-	sql.query("SELECT * FROM openv.roles")
-	.on("result", function (role) {		
-		sql.query("CREATE TABLE ?? (ID float unique auto_increment)", role.Table);
+	sql.query("SELECT * FROM openv.attrs")
+	.on("result", function (dsattr) {		
+		sql.query("CREATE TABLE ?? (ID float unique auto_increment)", dsattr.Table);
 	});
 }
 
