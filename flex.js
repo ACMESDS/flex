@@ -1197,17 +1197,23 @@ FLEX.update.history = function (req,res) {
 
 console.log({
 	q: query,
-	b: body
+	b: body,
+	f: req.flags
 });
 	
-	if (body.Reviewed)
+	if (body.Reviewed) {
+		res( "ok" );
 		sql.query(
 			"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE Reviews=Reviews+1", {
-			Client: req.client,
-			Role: query.Role
-		}, function (err) {
-			res(err);
+				Client: req.client,
+				Role: body.Role
 		});
+		sql.query(
+			"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
+				Moderator: body.Role,
+				Dataset: body.Dataset
+		});
+	}
 	else
 		res( new Error("Missing Reviewed")  );
 
