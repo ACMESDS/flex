@@ -166,7 +166,7 @@ var
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
-				Trace("EXTENDING FLEX CONNECTOR");
+				Trace("EXTENDING SQL CONNECTOR");
 				
 				ENUM.extend(sql.constructor, [
 					selectJob,
@@ -858,7 +858,22 @@ FLEX.select.TABLES = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
-	sql.query("SHOW TABLES")
+	sql.eachTable( {from:"app1"}, function (table) {
+		rtns.push({
+			Name: table.tag("a",{href:"/"+table+".db"}),
+			ID: ID++
+		});
+	});
+
+	for (var n in FLEX.select)
+		rtns.push({
+			Name: n.tag("a",{href:"/"+n+".db"}),
+			ID: ID++
+		});
+
+	res(rtns);
+	
+	/*sql.query("SHOW TABLES")
 	.on("result", function (rec) {
 		rtns.push({
 			Name: rec.Tables_in_app1.tag("a",{href:"/"+rec.Tables_in_app1+".db"}),
@@ -873,7 +888,7 @@ FLEX.select.TABLES = function Select(req, res) {
 			});
 			
 		res(rtns);
-	});
+	}); */
 }
 
 FLEX.select.ADMIN = function Select(req, res) {
@@ -1146,6 +1161,14 @@ FLEX.select.tips = function Select(req, res) {
 FLEX.select.history = function (req,res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
+	var groups = {
+		"": "least(monitors.dataset=journal.dataset,monitors.field=journal.field)",
+		bydataset: "monitors.dataset=journal.dataset",
+		byfield: "monitors.field=journal.field"
+	};
+	var group = groups[query.group || ""] || groups[""];
+console.log("grp="+group);
+	
 	sql.query("USE openv", function () {
 		
 		switch (query.return) {
@@ -1161,27 +1184,28 @@ FLEX.select.history = function (req,res) {
 					});
 				break;
 						 
-			case "views":
+			case "signoffs":
 
 				sql.query(
 					"SELECT Role,monitors.Dataset,group_concat(distinct monitors.field) AS Fields, "
 					+ "journal.Updates, group_concat(distinct link(viewer,concat('/',viewer,'.view'))) AS Views, "
 					+ "false AS Reviewed, monitors.Strength "
 					+ "FROM monitors "
-					+ "LEFT JOIN journal ON least(monitors.dataset=journal.dataset,monitors.field=journal.field) "
-					+ "LEFT JOIN viewers ON monitors.dataset=viewers.dataset GROUP BY role,dataset", 
+					+ `LEFT JOIN journal ON ${group} `
+					+ "LEFT JOIN viewers ON monitors.dataset=viewers.dataset "
+					+ "GROUP BY role,dataset", 
 					function (err,recs) {
 						res (err || recs );
 				});
 				break;
 				
-			case "moderators":
+			case "changes":
 			default:
 
 				sql.query(
 					"SELECT group_concat(DISTINCT linkrole(monitors.role,journal.updates,monitors.strength)) AS Moderators,"
 					+ "concat(monitors.Dataset,'.',monitors.Field) AS Idx FROM monitors "
-					+ "LEFT JOIN journal ON least(monitors.dataset=journal.dataset,monitors.field=journal.field,monitors.role=journal.Moderator) "
+					+ `LEFT JOIN journal ON ${group} `
 					+ "GROUP BY monitors.dataset,monitors.field" , 
 					function (err,recs) {
 						res( err || recs );
@@ -1192,7 +1216,7 @@ FLEX.select.history = function (req,res) {
 
 }
 
-FLEX.update.history = function (req,res) {
+FLEX.execute.history = function (req,res) {
 	var sql = req.sql, query = req.query, body = req.body;
 
 console.log({
@@ -1201,17 +1225,19 @@ console.log({
 	f: req.flags
 });
 	
-	if (body.Reviewed) {
+	if (query.Reviewed) {
 		res( "ok" );
 		sql.query(
 			"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE Reviews=Reviews+1", {
 				Client: req.client,
-				Role: body.Role
+				Role: query.Role,
+				Reviews: 1
 		});
+		
 		sql.query(
 			"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
-				Moderator: body.Role,
-				Dataset: body.Dataset
+				Moderator: query.Role,
+				Dataset: query.Dataset
 		});
 	}
 	else
@@ -2349,8 +2375,38 @@ FLEX.execute.parms = function Execute(req, res) {
 	}
 
 	res(SUBMITTED);
+	
+	var allparms = {}, ntables = 0;
+	sql.eachTable({from:"app1",where: "Tables_in_app1 NOT LIKE '\\_%' "}, function (tname) {
+		
+		sql.query("DESCRIBE ??",[tname], function (err, parms) {
+
+				parms.each(function (n,parm) {
+					var pname = parm.Field.toLowerCase();
 					
-	if (true)
+					if (pname != "id" && pname.indexOf("_")!=0 ) {
+						var tables = allparms[pname];
+						if (!tables) tables = allparms[pname] = {};
+						
+						tables[tname] = parm.Type.split("(")[0].replace("unsigned","");
+					}
+				});
+
+				if (++ntables == tables.length) 
+					Each(allparms, function (pname,tables) {
+						var tablelist = FLEX.listify(tables).join(",");
+						var ptype = "varchar";
+						for (var tname in tables) ptype = tables[tname];
+						
+						var parm = {Tables:tablelist, Parm:pname, Type:ptype};
+
+						sql.query("INSERT INTO parms SET ? ON DUPLICATE KEY UPDATE ?",[parm,parm]);
+					});
+			});
+		
+	});
+	
+	/*if (true)
 	sql.query("SHOW TABLES FROM app1 WHERE Tables_in_app1 NOT LIKE '\\_%'", function (err,tables) {	// sync parms table with DB
 		var allparms = {}, ntables = 0;
 
@@ -2387,7 +2443,7 @@ FLEX.execute.parms = function Execute(req, res) {
 			});
 
 		});
-	});
+	});*/
 	
 	if (false)
 	sql.query("SELECT * FROM parms", function (err,parms) { // sync DB with parms table
