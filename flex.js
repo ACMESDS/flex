@@ -1161,55 +1161,78 @@ FLEX.select.tips = function Select(req, res) {
 FLEX.select.history = function (req,res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
-	var groups = {
-		"": "least(monitors.dataset=journal.dataset,monitors.field=journal.field)",
-		bydataset: "monitors.dataset=journal.dataset",
-		byfield: "monitors.field=journal.field"
-	};
-	var group = groups[query.group || ""] || groups[""];
-console.log("grp="+group);
+	var pivots = {
+		"both": "journal.Dataset,journal.Field",
+		bydataset: "journal.Dataset",
+		byfield: "journal.Field"
+	},
+		pivot = pivots[query.pivot || "bydataset"] || pivots.both;
 	
 	sql.query("USE openv", function () {
 		
 		switch (query.return) {
 
-			case "reviews":
-				
-				sql.query(
-					"SELECT roles.Client,group_concat(linkrole(Role,Reviews,Strength)) AS Reviews "
-					+ "FROM roles LEFT JOIN profiles ON roles.client=profiles.client GROUP BY roles.Client", 
-					function (err,recs) {
-						
-						res(err || recs);
-					});
-				break;
-						 
 			case "signoffs":
 
-				sql.query(
-					"SELECT Role,monitors.Dataset,group_concat(distinct monitors.field) AS Fields, "
-					+ "journal.Updates, group_concat(distinct link(viewer,concat('/',viewer,'.view'))) AS Views, "
-					+ "false AS Reviewed, monitors.Strength "
-					+ "FROM monitors "
-					+ `LEFT JOIN journal ON ${group} `
-					+ "LEFT JOIN viewers ON monitors.dataset=viewers.dataset "
-					+ "GROUP BY role,dataset", 
-					function (err,recs) {
-						res (err || recs );
-				});
+				Trace(sql.query(
+					"SELECT Hawk,"
+					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
+					+ "group_concat(distinct journal.dataset) AS Datasets,"
+					+ "group_concat(distinct journal.field) AS Fields,"
+					+ "linkrole(hawk,max(updates),max(power)) AS Moderator,"
+					+ "false as Reviewed "
+					+ "FROM journal "
+					+ "LEFT JOIN viewers ON journal.Dataset=viewers.Dataset "
+					+ "WHERE Updates "
+					+ `GROUP BY hawk,${pivot}`, 
+					function (err, recs) {
+						
+						res( err || recs );
+					}));
+				break;
+					
+			case "changes":
+
+				Trace(sql.query(
+				"SELECT "
+				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Changes,"
+				+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
+				+ "FROM journal "
+				+ "WHERE Updates "
+				+ `GROUP BY ${pivot}`, 
+					function (err, recs) {
+					
+					res( err || recs );
+				}));
 				break;
 				
-			case "changes":
+			case "earnings":
+				Trace(sql.query(
+					"SELECT Client, "
+					+ "group_concat( distinct linkrole(roles.Hawk,roles.Earnings,roles.Strength)) AS Earnings "
+					+ "FROM roles "
+					+ "LEFT JOIN journal ON roles.Hawk=journal.Hawk "
+					+ "WHERE Updates "
+					+ "GROUP BY Client", 
+					function (err, recs) {
+					
+					res( err || recs );
+				}));
+				break;
+				
+			case "itemized":
 			default:
-
-				sql.query(
-					"SELECT group_concat(DISTINCT linkrole(monitors.role,journal.updates,monitors.strength)) AS Moderators,"
-					+ "concat(monitors.Dataset,'.',monitors.Field) AS Idx FROM monitors "
-					+ `LEFT JOIN journal ON ${group} `
-					+ "GROUP BY monitors.dataset,monitors.field" , 
+					
+				Trace(sql.query(
+					"SELECT concat(Dataset,'.',Field) AS Idx, "
+					+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
+					+ "FROM journal "
+					+ "WHERE Updates "
+					+ `GROUP BY ${pivot}`, 
 					function (err,recs) {
-						res( err || recs );
-				});
+
+					res( err || recs );
+				}));
 
 		}
 	});
@@ -1227,18 +1250,30 @@ console.log({
 	
 	if (query.Reviewed) {
 		res( "ok" );
-		sql.query(
-			"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE Reviews=Reviews+1", {
-				Client: req.client,
-				Role: query.Role,
-				Reviews: 1
-		});
 		
 		sql.query(
-			"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
-				Moderator: query.Role,
-				Dataset: query.Dataset
-		});
+			"SELECT sum(Updates) AS Earnings, max(Power) AS Strength FROM openv.journal WHERE ?", 
+			{Hawk:query.Hawk}, function (err,earns) {
+				var earn = earns[0] || {Earnings:0, Strength:0};
+				
+				sql.query(
+					"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE "
+					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?", [{
+						Client: req.client,
+						Hawk: query.Hawk,
+						Reviews: 1,
+						Earnings: earn.Earnings,
+						Strength: earn.Strength
+				}, earn.Earnings, earn.Strength] );
+
+				query.Datasets.split(",").each( function (n,dataset) {
+					sql.query(
+						"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
+							Hawk: query.Hawk,
+							Dataset: query.Dataset
+					});
+				});
+			});
 	}
 	else
 		res( new Error("Missing Reviewed")  );
