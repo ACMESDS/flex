@@ -85,6 +85,8 @@ var
 		timers: [],
 		sendMail: sendMail,
 		
+		fetch: null,
+		
 		errors: {
 			badbaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
@@ -176,9 +178,12 @@ var
 					executeJob,
 					hawkCatalog,
 					crude, 
-					flattenCatalog
+					flattenCatalog,
+					hawkJobs					
 				]);
 
+				sql.hawkJobs("flex");
+				
 				sql.release();
 			});
 			
@@ -472,7 +477,9 @@ FLEX.update.sql = function Update(req, res) {
 
 FLEX.execute.git = function Execute(req,res) {  // baseline changes
 
-	var ex = {
+	var	sql = req.sql, 
+		query = req.query,
+		ex = {
 		group: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} ${req.group} >admins/db/${req.group}.sql`,
 		openv: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} openv >admins/db/openv.sql`,
 		commit: `git commit -am "${req.client} baseline"`
@@ -487,7 +494,7 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 		sql.query("DELETE FROM openv.journal");
 	});
 	
-	if (0)
+	if (!query.nogit)
 	CP.exec(ex.group, function (err,log) {
 		
 		Trace("CHECKPT "+(err||"OK"));
@@ -498,10 +505,13 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 			
 			CP.exec(ex.commit, function (err,log) {
 				Trace("COMMIT "+(err||"OK"));
+				
+				if (!query.noexit)
+				process.exit();				
 			});
 		});
 	});
-
+	
 }
 
 FLEX.select.git = function Select(req, res) {
@@ -1176,6 +1186,7 @@ FLEX.select.history = function (req,res) {
 
 				Trace(sql.query(
 					"SELECT Hawk,"
+					+ "max(power) AS Power,"
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
 					+ "group_concat(distinct journal.dataset) AS Datasets,"
 					+ "group_concat(distinct journal.field) AS Fields,"
@@ -1195,7 +1206,7 @@ FLEX.select.history = function (req,res) {
 
 				Trace(sql.query(
 				"SELECT "
-				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Changes,"
+				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Activity,"
 				+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
 				+ "FROM journal "
 				+ "WHERE Updates "
@@ -1249,7 +1260,7 @@ console.log({
 });
 	
 	if (query.Reviewed) {
-		res( "ok" );
+		res( "Thank you for your review - check out your earnings "+"here".hyper("/moderate.view") );
 		
 		sql.query(
 			"SELECT sum(Updates) AS Earnings, max(Power) AS Strength FROM openv.journal WHERE ?", 
@@ -1258,20 +1269,50 @@ console.log({
 				
 				sql.query(
 					"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE "
-					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?", [{
+					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?", [{
 						Client: req.client,
 						Hawk: query.Hawk,
 						Reviews: 1,
 						Earnings: earn.Earnings,
-						Strength: earn.Strength
-				}, earn.Earnings, earn.Strength] );
+						Strength: earn.Strength,
+						Comment: query.Comment
+				}, earn.Earnings, earn.Strength, query.Comment] );
 
+				if (query.Datasets) 
 				query.Datasets.split(",").each( function (n,dataset) {
 					sql.query(
 						"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
 							Hawk: query.Hawk,
-							Dataset: query.Dataset
+							Dataset: dataset
 					});
+				});
+				
+				if (query.Power)
+				sql.query("SELECT Client FROM openv.roles WHERE Strength>=?", query.Power, function (err,ghawk) {
+				sql.query("SELECT Client FROM openv.roles WHERE Strength<?", query.Power, function (err,lhawk) {
+
+					var to=[], cc=[];
+					
+					ghawk.each(function (n,hawk) {
+						to.push( hawk.client );
+					});
+					lhawk.each(function (n,hawk) {
+						cc.push( hawk.client );
+					});
+
+					if (to.length)
+					sendMail({
+						to: to.join(";"),
+						cc: cc.join(";"),
+						subject: "review completed",
+						body: "for more information see " 
+							+ "moderator comments".hyper("/moderate.view") 
+							+ " and " 
+							+ "project status".hyper("/project.view")
+					}, function (err) {
+						console.log("Send="+err);
+					});
+				});
 				});
 			});
 	}
@@ -2783,8 +2824,7 @@ FLEX.execute.swaps = function Execute(req, res) {
 	
 }
 
-FLEX.execute.hawks =
-FLEX.execute.jobs = function Execute(req, res) {
+FLEX.execute.hawks = function Execute(req, res) {
 /*
  * Hawk over jobs in the queues table given {Action,Condition,Period} rules 
  * defined in the hawks table.  The rule is run on the interval specfied 
@@ -2799,156 +2839,11 @@ FLEX.execute.jobs = function Execute(req, res) {
  * 		set expression to revise queuing history of matched jobs	 
  * */
 
-	var sql = req.sql, log = req.log, query = req.query;
+	var sql = req.sql, query = req.query;
 	
-	function hawkjobs (sql, client)  {
-
-		function hawk(rule) {
-			FLEX.thread(function (sql) {
-
-				Trace(`HAWKING ${rule.Action} WHEN ${rule.Condition} EVERY ${rule.Period} mins`);
-				
-				sql.query("UPDATE hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
-
-				switch (rule.Action.toLowerCase()) {
-					case "scrape":
-					case "execute":
-						
-						FLEX.CRUDE({
-							query: {},
-							body: {},
-							param: function () { return ""; }
-							/*connection: {
-								listeners: function () {return "";},
-								on: function () {return this;},
-								setTimeout: function () {}
-							}*/
-						}, {
-							send: function (rtn) {
-								console.log(rtn);
-							} 
-						}, rule.Table, "execute");
-						
-						break;
-						
-					case "stop":
-					case "halt":
-					case "delete":
-					case "kill":
-
-						sql.jobs().delete(rule.Condition, function (job) {
-							sql.query("UPDATE hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-					
-						break;
-						
-					case "log":
-					case "notify":
-					case "tip":
-					case "warn":
-					case "flag":
-					
-						sql.jobs().select(rule.Condition, function (job) { 
-
-							sql.jobs().update({ID:job.ID}, { 	// reflect history
-								Flagged: 1,
-								Notes: "Clear your Flagged jobs to prevent these jobs from being purged"
-							}, function () {
-								
-								sendMail({
-									from: SITE.POC,
-									to:  job.Client,
-									subject: FLEX.SITE.title + " job status notice",
-									html: "Please "+"clear your job flag".tag("a",{href:"/rule.jade"})+" to keep your job running.",
-									alternatives: [{
-										contentType: 'text/html; charset="ISO-59-1"',
-										contents: ""
-									}]
-								}, function (err,info) {
-									if (err) Trace(err);
-								});
-
-							});
-						});
-						
-						break;
-						
-					case "promote":
-					case "improve":
-
-						sql.jobs().update(rule.Condition, +1, 0, function (job) {
-							sql.query("UPDATE hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-						
-						break;
-						
-					case "demote":
-					case "reduce":
-					
-						sql.jobs().update(rule.Condition, -1, 0, function (job) {
-							sql.query("UPDATE hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-						
-						break;
-						
-					case "start":
-					case "run":
-					
-						sql.query(
-							// "SELECT detectors.* FROM detectors LEFT JOIN queues ON queues.Job = detectors.Name WHERE length(NegCases) AND "+rule.Condition)
-							"SELECT * FROM ?? WHERE "+rule.Condition, 
-							rule.Table
-						).on("result", function (det) {
-							//det.Execute = "resample";
-							//console.log(det);
-							sql.query("UPDATE ?? SET Dirty=0 WHERE ?",[rule.Table,{ID: det.ID}]);
-							sql.jobs().execute(client,det);
-						});
-						break;
-					
-					case "":
-					case "skip":
-					case "ignore":
-						
-						break;
-						
-					default:
-						console.log(rule.Action);
-				}
-				
-				sql.release();
-			});
-		}
-				
-		FLEX.timers.each( function (n,id) { 	// kill existing hawks
-			clearInterval(id);
-		});
-		
-		FLEX.timers = [];
-		
-		//sql.query("DELETE FROM queues"); 		// flush job queues
-		
- 		sql.query("SELECT * FROM config WHERE Hawks")             // get hawk config options
-        .on("result", function (config) {
-            sql.query(
-                "SELECT * FROM hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
-				{Enabled:1, Name:config.SetPoint}, 
-				config.MaxFaults
-			])
-			.on("result", function (rule) {         // create a hawk
-				if (rule.Period)                     // hawk is periodic
-					FLEX.timers.push(
-						setInterval( hawk, rule.Period*60*1000, rule )
-					);
-				else                                 // one-time hawk
-					hawk(rule);
-			});
-        });
-	}
-
 	res(SUBMITTED);
 	
-	hawkjobs(sql, req.client);
+	sql.hawkJobs(req.client);
 }
 
 // JSON editor
@@ -3914,6 +3809,163 @@ function crude(req, res) {
 			
 		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
 		
+	});
+}
+
+//  job monitors 
+
+function hawkJobs (client)  {
+	var sql = this;
+
+	function hawk(rule) {
+		FLEX.thread(function (sql) {
+
+			sql.query("UPDATE app1.hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
+
+			if (rule.Action.charAt(0) == "/" && FLEX.execute)
+				FLEX.fetch(rule.Action, function (ack) {
+					console.log(ack);
+				});
+			
+			else
+				switch (rule.Action.toLowerCase()) {
+					case "scrape":
+					case "execute":
+
+						FLEX.CRUDE({
+							query: {},
+							body: {},
+							param: function () { return ""; }
+							/*connection: {
+								listeners: function () {return "";},
+								on: function () {return this;},
+								setTimeout: function () {}
+							}*/
+						}, {
+							send: function (rtn) {
+								console.log(rtn);
+							} 
+						}, rule.Table, "execute");
+
+						break;
+
+					case "stop":
+					case "halt":
+					case "delete":
+					case "kill":
+
+						sql.jobs().delete(rule.Condition, function (job) {
+							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+						});
+
+						break;
+
+					case "log":
+					case "notify":
+					case "tip":
+					case "warn":
+					case "flag":
+
+						sql.jobs().select(rule.Condition, function (job) { 
+
+							sql.jobs().update({ID:job.ID}, { 	// reflect history
+								Flagged: 1,
+								Notes: "Clear your Flagged jobs to prevent these jobs from being purged"
+							}, function () {
+
+								sendMail({
+									from: SITE.POC,
+									to:  job.Client,
+									subject: FLEX.SITE.title + " job status notice",
+									html: "Please "+"clear your job flag".tag("a",{href:"/rule.jade"})+" to keep your job running.",
+									alternatives: [{
+										contentType: 'text/html; charset="ISO-59-1"',
+										contents: ""
+									}]
+								}, function (err,info) {
+									if (err) Trace(err);
+								});
+
+							});
+						});
+
+						break;
+
+					case "promote":
+					case "improve":
+
+						sql.jobs().update(rule.Condition, +1, 0, function (job) {
+							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+						});
+
+						break;
+
+					case "demote":
+					case "reduce":
+
+						sql.jobs().update(rule.Condition, -1, 0, function (job) {
+							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+						});
+
+						break;
+
+					case "start":
+					case "run":
+
+						sql.query(
+							// "SELECT detectors.* FROM detectors LEFT JOIN queues ON queues.Job = detectors.Name WHERE length(NegCases) AND "+rule.Condition)
+							"SELECT * FROM ?? WHERE "+rule.Condition, 
+							rule.Table
+						).on("result", function (det) {
+							//det.Execute = "resample";
+							//console.log(det);
+							sql.query("UPDATE ?? SET Dirty=0 WHERE ?",[rule.Table,{ID: det.ID}]);
+							sql.jobs().execute(client,det);
+						});
+						break;
+
+					case "":
+					case "skip":
+					case "ignore":
+
+						break;
+
+					default:
+						console.log(rule.Action);
+				}
+
+			sql.release();
+		});
+	}
+
+	FLEX.timers.each( function (n,id) { 	// kill existing hawks
+		clearInterval(id);
+	});
+
+	FLEX.timers = [];
+
+	//sql.query("DELETE FROM queues"); 		// flush job queues
+	
+	sql.query("SELECT * FROM app1.config WHERE Hawks")             // get hawk config options
+	.on("result", function (config) {
+
+		sql.query(
+			"SELECT * FROM app1.hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
+			{Enabled:1, Name:config.SetPoint}, 
+			config.MaxFaults
+		])
+		
+			.on("result", function (rule) {         // create a hawk
+			
+			Trace(`HAWKING if[${rule.Condition}]then[${rule.Action}]  EVERY ${rule.Period} mins`);
+
+			if (rule.Period)                     // hawk is periodic
+				FLEX.timers.push(
+					setInterval( hawk, rule.Period*60*1000, rule )
+				);
+			else                                 // one-time hawk
+				hawk(rule);
+		});
 	});
 }
 
