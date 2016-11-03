@@ -85,8 +85,6 @@ var
 		timers: [],
 		sendMail: sendMail,
 		
-		fetch: null,
-		
 		errors: {
 			badbaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
@@ -137,9 +135,11 @@ var
 		insert: {ds: crude}, 
 		execute: {ds: crude}, 
 	
-		emit: null,		 				// Emitter to sync clients
+		fetcher: null, 					// http data fetcher
+		uploader: null,		 			// file uploader
+		emitter: null,		 			// Emitter to sync clients
 		thread: null, 					// FLEX connection threader
-		skin : null, 					// Jade renderer
+		skinner : null, 				// Jade renderer
 		
 		DEFTYPES : {
 			"#": "varchar(32)",
@@ -182,23 +182,23 @@ var
 					hawkJobs					
 				]);
 
-				sql.hawkJobs("flex");
+				sql.hawkJobs("flex", FLEX.site.url.master);
 				
 				sql.release();
 			});
 			
 			var
-				SITE = FLEX.SITE;
-				EMAIL = FLEX.EMAIL;
+				site = FLEX.site,
+				email = FLEX.email;
 				
 			if (CLUSTER.isMaster) {
 				
 				// setup news feeder
 				
 				NEWSFEED = new FEED({					// Establish news feeder
-					title:          SITE.nick,
-					description:    SITE.title,
-					link:           `${FLEX.URL.HOST}/feed.view`,
+					title:          site.nick,
+					description:    site.title,
+					link:           `${FLEX.paths.HOST}/feed.view`,
 					image:          'http://example.com/image.png',
 					copyright:      'All rights reserved 2013',
 					author: {
@@ -230,7 +230,7 @@ var
 					}, FLEX.LIKEUS.PING*(3600*24*1000) );
 
 				/*
-				if (opts.PULSE.PING)
+				if (opts.pulse.PING)
 					setInterval( function() {
 						
 						FLEX.thread(function (sql) {
@@ -243,8 +243,8 @@ var
 							.on("result", function (pigs) {
 							sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM dblogs")
 							.on("result", function (isps) {
-								var rtn = FLEX.PULSE.COUNTS = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
-								var lims = FLEX.PULSE.LIMITS;
+								var rtn = FLEX.pulse.COUNTS = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
+								var lims = FLEX.pulse.LIMITS;
 								
 								for (var n in lims) 
 									if ( rtn[n] > 5*lims[n] ) rtn.State = "critical";
@@ -258,63 +258,63 @@ var
 							});
 						});
 						
-					}, opts.PULSE.PING*(60*1000) );
+					}, opts.pulse.PING*(60*1000) );
 				*/
 				
-				EMAIL.HAWKS = SITE.distro.hawk; 
-				EMAIL.SUBJ = SITE.nick + "?JOB";
-				EMAIL.BODY = 
+				email.HAWKS = site.distro.hawk; 
+				email.SUBJ = site.nick + "?JOB";
+				email.BODY = 
 					("Click " 
 					+ "here".tag("a",{href:"?URLtipclear.db?ID=?JOBID"})
 					+ " to clear this tip."
 					).tag("p").tag("html");
 
-				var parts = (SITE.emailhost||"").split(":");
-				EMAIL.TX.HOST = parts[0];
-				EMAIL.TX.PORT = parseInt(parts[1]);
+				var parts = (site.emailhost||"").split(":");
+				email.TX.HOST = parts[0];
+				email.TX.PORT = parseInt(parts[1]);
 				
-				var parts = (SITE.emailuser||"").split(":");
-				EMAIL.USER = parts[0];
-				EMAIL.PASS = parts[1];
+				var parts = (site.emailuser||"").split(":");
+				email.USER = parts[0];
+				email.PASS = parts[1];
 				
-				if (EMAIL.TX.PORT) {  		// Establish server's email transport
+				if (email.TX.PORT) {  		// Establish server's email transport
 					
-					Trace(`EMAIL  ${EMAIL.TX.HOST} RE ${EMAIL.TX.PORT}`);
+					Trace(`email  ${email.TX.HOST} RE ${email.TX.PORT}`);
 					
-					EMAIL.TX.TRAN = EMAIL.USER
+					email.TX.TRAN = email.USER
 						? 
 						MAIL.createTransport({ //"SMTP",{
-							host: EMAIL.TX.HOST,
-							port: EMAIL.TX.PORT,
+							host: email.TX.HOST,
+							port: email.TX.PORT,
 							auth: {
-								user: EMAIL.USER,
-								pass: EMAIL.PASS
+								user: email.USER,
+								pass: email.PASS
 							}
 						})
 						: MAIL.createTransport({ //"SMTP",{
-							host: EMAIL.TX.HOST,
-							port: EMAIL.TX.PORT
+							host: email.TX.HOST,
+							port: email.TX.PORT
 						});
 						
 				}
 							
-				if (EMAIL.RX.PORT)
-					EMAIL.RX.TRAN = new IMAP({
-						  user: EMAIL.USER,
-						  password: EMAIL.PASS,
-						  host: EMAIL.RX.HOST,
-						  port: EMAIL.RX.PORT,
+				if (email.RX.PORT)
+					email.RX.TRAN = new IMAP({
+						  user: email.USER,
+						  password: email.PASS,
+						  host: email.RX.HOST,
+						  port: email.RX.PORT,
 						  secure: true,
 						  //debug: function (err) { console.warn(ME+">"+err); } ,
 						  connTimeout: 10000
 						});
 
-				if (EMAIL.RX.TRAN)					// Establish server's email inbox			
+				if (email.RX.TRAN)					// Establish server's email inbox			
 					openIMAP(function(err, mailbox) {
 					  if (err) killIMAP(err);
-					  EMAIL.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+					  email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
 						if (err) killIMAP(err);
-						EMAIL.RX.TRAN.fetch(results,
+						email.RX.TRAN.fetch(results,
 						  { headers: ['from', 'to', 'subject', 'date'],
 							cb: function(fetch) {
 							  fetch.on('message', function(msg) {
@@ -330,17 +330,17 @@ var
 						  }, function(err) {
 							if (err) throw err;
 							console.info(ME+'Done fetching all messages!');
-							EMAIL.RX.TRAN.logout();
+							email.RX.TRAN.logout();
 						  }
 						);
 					  });
 					});
 				
-				if (FLEX.EMAIL.ONSTART) 
+				if (FLEX.email.ONSTART) 
 					sendMail({
-						from: SITE.nick, 
-						to: EMAIL.HAWKS,
-						subject: SITE.title + " started", 
+						from: site.nick, 
+						to: email.HAWKS,
+						subject: site.title + " started", 
 						html: "Just FYI",
 						alternatives: [{
 							contentType: 'text/html; charset="ISO-59-1"',
@@ -548,7 +548,7 @@ FLEX.select.git = function Select(req, res) {
 						
 }
 
-// EMAIL peer-to-peer exchange interface
+// email peer-to-peer exchange interface
 	
 FLEX.select.email = function Select(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
@@ -791,7 +791,7 @@ FLEX.select.THEMES = function (req, res) {
 
 FLEX.select.SUMMARY = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
-	var cnts = FLEX.PULSE.COUNTS;
+	var cnts = FLEX.pulse.COUNTS;
 	
 	// Could check rtn.serverStatus and warningCount (become defined when a MySQL table corrupted).  
 	// Return selected record info (fieldCount, affectedRows, insertId, serverStatus, warningCount, msg)
@@ -1099,9 +1099,9 @@ FLEX.select.likeus = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	sendMail({
-		from: FLEX.SITE.POC,
-		to:  FLEX.EMAIL.HAWKS,
-		subject: req.client + " likes " + FLEX.SITE.title + " !!",
+		from: FLEX.site.POC,
+		to:  FLEX.email.HAWKS,
+		subject: req.client + " likes " + FLEX.site.title + " !!",
 		html: "Just FYI",
 		alternatives: [{
 			contentType: 'text/html; charset="ISO-59-1"',
@@ -1126,7 +1126,7 @@ FLEX.select.likeus = function Select(req, res) {
 		Trace(err);
 	});
 
-	res( `Thanks ${req.client} for liking ${FLEX.SITE.nick} !  Check out your new ` +
+	res( `Thanks ${req.client} for liking ${FLEX.site.nick} !  Check out your new ` +
 		"QoS profile".tag("a",{href:'/profile.jade'}) + " !" );
 
 }
@@ -1183,19 +1183,20 @@ FLEX.select.history = function (req,res) {
 		switch (query.return) {
 
 			case "signoffs":
-
+				var input = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
+				
 				Trace(sql.query(
-					"SELECT Hawk,"
-					+ "max(power) AS Power,"
+					"SELECT "
+					+ "Hawk, max(power) AS Power, concat(link(' ',concat('/shares/', Hawk, '.pdf')), ?) AS Comment, "
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
 					+ "group_concat(distinct journal.dataset) AS Datasets,"
 					+ "group_concat(distinct journal.field) AS Fields,"
 					+ "linkrole(hawk,max(updates),max(power)) AS Moderator,"
-					+ "false as Reviewed "
+					+ "false as Approved "
 					+ "FROM journal "
 					+ "LEFT JOIN viewers ON journal.Dataset=viewers.Dataset "
 					+ "WHERE Updates "
-					+ `GROUP BY hawk,${pivot}`, 
+					+ `GROUP BY hawk,${pivot}`, input,
 					function (err, recs) {
 						
 						res( err || recs );
@@ -1219,12 +1220,12 @@ FLEX.select.history = function (req,res) {
 				
 			case "earnings":
 				Trace(sql.query(
-					"SELECT Client, "
+					"SELECT Client, group_concat(distinct year(Reviewed),'/',month(Reviewed), ' ', Comment) AS Comments, "
 					+ "group_concat( distinct linkrole(roles.Hawk,roles.Earnings,roles.Strength)) AS Earnings "
 					+ "FROM roles "
 					+ "LEFT JOIN journal ON roles.Hawk=journal.Hawk "
 					+ "WHERE Updates "
-					+ "GROUP BY Client", 
+					+ "GROUP BY Client, roles.Hawk", 
 					function (err, recs) {
 					
 					res( err || recs );
@@ -1259,7 +1260,7 @@ console.log({
 	f: req.flags
 });
 	
-	if (query.Reviewed) {
+	if (query.Approved) {
 		res( "Thank you for your review - check out your earnings "+"here".hyper("/moderate.view") );
 		
 		sql.query(
@@ -1267,16 +1268,20 @@ console.log({
 			{Hawk:query.Hawk}, function (err,earns) {
 				var earn = earns[0] || {Earnings:0, Strength:0};
 				
+				earn.Comment = unescape(query.Comment);
+				earn.Reviewed = now();
+				
 				sql.query(
 					"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE "
-					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?", [{
+					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?, Reviewed:?", [{
 						Client: req.client,
 						Hawk: query.Hawk,
 						Reviews: 1,
-						Earnings: earn.Earnings,
+						Earnings: earn.Earnings*earn.Strength,
 						Strength: earn.Strength,
-						Comment: query.Comment
-				}, earn.Earnings, earn.Strength, query.Comment] );
+						Comment: earn.Comment,
+						Reviewed: earn.Reviewed
+				}, earn.Earnings, earn.Strength*earn.Strength, earn.Comment, earn.Reviewed] );
 
 				if (query.Datasets) 
 				query.Datasets.split(",").each( function (n,dataset) {
@@ -1486,37 +1491,40 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 	}
 }
 
+FLEX.update.stores = FLEX.insert.stores =
 FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 	
 	var sql = req.sql, log = req.log, query = req.query, body = req.body;
 	
-	var area = req.table,
-		client = req.client,
-		name = body.name || "undefined",
-		tag = body.tag || "",
-		classif = body.classif || "TBD",
-		image = body.image,
-		geo = body.geo || "POINT(0 0)",
+	var 
 		canvas = body.canvas || {objects:[]},
 		attach = [],
 		now = new Date(),
-		files = [];
-
-	if (image)
-		files.push({
+		image = body.image,
+		area = req.table,
+		files = image ? [{
 			name: name, // + ( files.length ? "_"+files.length : ""), 
 			size: image.length/8, 
 			image: image
-		});
+		}] : req.files || body.files || [];
+
+	/*if (image)
+		files.push();
 	else
-		Each(req.files, function (n,file) {
+		Each(req.files || body.files, function (n,file) {
 			files.push({ 
 				name: file.name,
 				size: file.size,
 				path: file.path
 			});
-		});
-				
+		}); */
+console.log({
+	q: query,
+	b: body,
+	f: files,
+	a: area
+});
+					
 	res(SUBMITTED);
 	
 	canvas.objects.each(function (n,obj) {
@@ -1542,20 +1550,24 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 		}
 	});
 
-	FLEX.uploader(sql, files, area, function (file) {
+	if (FLEX.uploader)
+	FLEX.uploader(files, area, function (file) {
 
-		file.Tagger = client;
-		file.Tag = tag || "";
+		return;
+		
+		file.Tagger = req.client;
+		file.Tag = query.tag || "";
 		file.Enabled = 1;
-		file.Classif = classif;
+		file.Classif = query.classif || "";
 		file.Revs = 0;
 		file.Attach = JSON.stringify(canvas);
 
 		canvas.objects = attach;
-
+		var geo = req.location || "POINT(0 0)";
+		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
 			"INSERT INTO files SET ?,address=geomfromtext(?) ON DUPLICATE KEY UPDATE ?,Revs=Revs+1,address=geomfromtext(?)", 
-			[file,geo,{ Tagger: file.Tagger, Added:file.Added }, geo]);
+			[file, geo, { Tagger: file.Tagger, Added:file.Added }, geo]);
 
 		if (file.image)
 			switch (area) {
@@ -1723,7 +1735,7 @@ FLEX.execute.engines = function Execute(req, res) {
 						
 						break;
 						
-					case "jade":			// update jade skin
+					case "jade":			// update jade skinner
 						
 						if (eng.Enabled)
 							res( FLEX.errors.disableEngine );
@@ -1838,7 +1850,7 @@ FLEX.execute.news = function Execute(req, res) {
 				default:
 
 					sendMail({
-						from: SITE.POC,
+						from: site.POC,
 						to:  to,
 						subject: subj,
 						html: body.format(mask),
@@ -1913,10 +1925,10 @@ FLEX.execute.milestones = function Execute(req, res) {
 FLEX.execute.sockets = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	if (FLEX.emit)
+	if (FLEX.emitter)
 		sql.query("SELECT * FROM sockets WHERE length(Message)")
 		.on("result", function (sock) {
-			FLEX.emit("alert", {msg: sock.Message, to: sock.Client, from: req.client});
+			FLEX.emitter("alert", {msg: sock.Message, to: sock.Client, from: req.client});
 			sql.query("UPDATE sockets SET ? WHERE ?",[{Message:""},{ID:sock.ID}]);
 		});
 		
@@ -2756,8 +2768,8 @@ FLEX.execute.swaps = function Execute(req, res) {
 			sql.query("UPDATE swaps SET ? WHERE ?",[{Submitted: new Date()}, {ID:swap.ID}]);
 			
 			sendMail({
-				from: SITE.POC,
-				to:  SITE.POC,
+				from: site.POC,
+				to:  site.POC,
 				subject: "SWAP "+package,
 				html: "Please find attached SWAP.  Delivery of  "+swap.Product+" is conditional on NGA/OCIO acceptance of this deviation request. ",
 				alternatives: [{
@@ -2843,7 +2855,7 @@ FLEX.execute.hawks = function Execute(req, res) {
 	
 	res(SUBMITTED);
 	
-	sql.hawkJobs(req.client);
+	sql.hawkJobs(req.client,FLEX.site.url.master);
 }
 
 // JSON editor
@@ -3311,17 +3323,17 @@ function feedNews(sql, engine) {
 	.on("result", function (feature) {
 		NEWSFEED.addItem({
 			title:          feature.feature,
-			link:           `${FLEX.URL.HOST}/feed.jade`,
+			link:           `${FLEX.paths.HOST}/feed.jade`,
 			description:    JSON.stringify(feature),
 			author: [{
-				name:   FLEX.SITE.title,
-				email:  FLEX.EMAIL.SOURCE,
-				link:   FLEX.URL.HOST
+				name:   FLEX.site.title,
+				email:  FLEX.email.SOURCE,
+				link:   FLEX.paths.HOST
 			}],
 			/*contributor: [{
 				name:   FLEX.TITLE,
-				email:  site.EMAIL.SOURCE,
-				link:   FLEX.URL.HOST
+				email:  site.email.SOURCE,
+				link:   FLEX.paths.HOST
 			}],*/
 			date:           feature.found
 			//image:          posts[key].image
@@ -3402,17 +3414,17 @@ function killIMAP(err) {
 }
 
 function openIMAP(cb) {
-	FLEX.EMAIL.RX.TRAN.connect(function(err) {  // login cb
+	FLEX.email.RX.TRAN.connect(function(err) {  // login cb
 		if (err) killIMAP(err);
-		FLEX.EMAIL.RX.TRAN.openBox('INBOX', true, cb);
+		FLEX.email.RX.TRAN.openBox('INBOX', true, cb);
 	});
 }
 
 function sendMail(opts, cb) {
 	
-	Trace(`EMAIL ${opts.to} RE ${opts.subject}`);
+	Trace(`email ${opts.to} RE ${opts.subject}`);
 		
-	if (x = FLEX.EMAIL)
+	if (x = FLEX.email)
 		if (x = x.TX.TRAN)
 			x.sendMail(opts,cb);
 }
@@ -3814,7 +3826,7 @@ function crude(req, res) {
 
 //  job monitors 
 
-function hawkJobs (client)  {
+function hawkJobs (client, url)  {
 	var sql = this;
 
 	function hawk(rule) {
@@ -3823,7 +3835,7 @@ function hawkJobs (client)  {
 			sql.query("UPDATE app1.hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
 
 			if (rule.Action.charAt(0) == "/" && FLEX.execute)
-				FLEX.fetch(rule.Action, function (ack) {
+				FLEX.fetcher(url + rule.Action, function (ack) {
 					console.log(ack);
 				});
 			
@@ -3874,9 +3886,9 @@ function hawkJobs (client)  {
 							}, function () {
 
 								sendMail({
-									from: SITE.POC,
+									from: site.POC,
 									to:  job.Client,
-									subject: FLEX.SITE.title + " job status notice",
+									subject: FLEX.site.title + " job status notice",
 									html: "Please "+"clear your job flag".tag("a",{href:"/rule.jade"})+" to keep your job running.",
 									alternatives: [{
 										contentType: 'text/html; charset="ISO-59-1"',
