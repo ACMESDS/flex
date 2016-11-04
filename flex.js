@@ -179,7 +179,7 @@ var
 					hawkCatalog,
 					crude, 
 					flattenCatalog,
-					hawkJobs					
+					hawkJobs
 				]);
 
 				sql.hawkJobs("flex", FLEX.site.url.master);
@@ -1187,7 +1187,8 @@ FLEX.select.history = function (req,res) {
 				
 				Trace(sql.query(
 					"SELECT "
-					+ "Hawk, max(power) AS Power, concat(link(' ',concat('/shares/', Hawk, '.pdf')), ?) AS Comment, "
+					+ "Hawk, max(power) AS Power, 'approved' AS Comment, "
+					+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComment"
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
 					+ "group_concat(distinct journal.dataset) AS Datasets,"
 					+ "group_concat(distinct journal.field) AS Fields,"
@@ -1269,11 +1270,11 @@ console.log({
 				var earn = earns[0] || {Earnings:0, Strength:0};
 				
 				earn.Comment = unescape(query.Comment);
-				earn.Reviewed = now();
+				earn.Reviewed = new Date();
 				
 				sql.query(
 					"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE "
-					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?, Reviewed:?", [{
+					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?, Reviewed=?", [{
 						Client: req.client,
 						Hawk: query.Hawk,
 						Reviews: 1,
