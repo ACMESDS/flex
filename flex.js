@@ -740,7 +740,7 @@ FLEX.select.LINKS = function Select(req, res) {
 								ID: id++,
 								Name: (file.substr(1)+" &rrarr; "+name).tag("a",{
 									href: `${name}.view`
-										/*(FLEX.STATEFUL[name] ? FLEX.WORKER : "") + area + name +".view"*/
+										/*(FLEX.statefulViews[name] ? FLEX.WORKER : "") + area + name +".view"*/
 								})
 							});
 							taken[name] = 1;
@@ -761,7 +761,7 @@ FLEX.select.LINKS = function Select(req, res) {
 						ID: id++,
 						Name: name.tag("a",{
 							href: `${name}.view`
-							/*(FLEX.STATEFUL[name] ? FLEX.WORKER : "") + area + file*/
+							/*(FLEX.statefulViews[name] ? FLEX.WORKER : "") + area + file*/
 						})
 					});
 			}
