@@ -182,7 +182,7 @@ var
 					hawkJobs
 				]);
 
-				sql.hawkJobs("flex", FLEX.site.url.master);
+				sql.hawkJobs("flex", FLEX.site.masterURL);
 				
 				sql.release();
 			});
@@ -1188,7 +1188,7 @@ FLEX.select.history = function (req,res) {
 				Trace(sql.query(
 					"SELECT "
 					+ "Hawk, max(power) AS Power, 'approved' AS Comment, "
-					+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComment"
+					+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
 					+ "group_concat(distinct journal.dataset) AS Datasets,"
 					+ "group_concat(distinct journal.field) AS Fields,"
@@ -2857,7 +2857,7 @@ FLEX.execute.hawks = function Execute(req, res) {
 	
 	res(SUBMITTED);
 	
-	sql.hawkJobs(req.client,FLEX.site.url.master);
+	sql.hawkJobs(req.client,FLEX.site.masterURL);
 }
 
 // JSON editor
