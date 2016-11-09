@@ -46,6 +46,7 @@ var 											// globals
 	SUBMITTED = "submitted";
 
 var 											// totem bindings
+	READ = require("reader"),
 	ENUM = require("enum").extend({
 		Array: [
 			function escape() {
@@ -128,6 +129,8 @@ var
 			}
 		},
 		
+		watch: null,
+		
 		// CRUDE interface
 		select: {ds: crude}, 
 		delete: {ds: crude}, 
@@ -163,8 +166,40 @@ var
 		 * */
 		config: function (opts) {
 			
+			console.log(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+			
 			if (opts) Copy(opts,FLEX);
 			
+			if (watch = FLEX.watch) 
+			FS.readdir( watch, function (err, files) {
+				files.each(function (n,file) {
+					Trace("WATCHING "+file);
+					FS.watch(watch + file, function (ev, file) {  //{persistent: false, recursive: false}, 
+
+						console.log([ev,file, FLEX.thread]);
+						Trace(ev.toUpperCase()+" "+file);
+
+						if (file && FLEX.thread)
+						switch (ev) {
+							case "change":
+								FLEX.thread( function (sql) {
+									READ.reader(sql, watch+file, function (keys) {
+										console.log("keys=");
+										console.log(keys);
+									});
+									sql.release();
+								});
+								
+								break;
+
+							case "x":
+							default:
+							
+						}
+					});
+				});
+			});				
+				
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
@@ -183,6 +218,8 @@ var
 				]);
 
 				sql.hawkJobs("flex", FLEX.site.masterURL);
+
+				READ.config(sql);			
 				
 				sql.release();
 			});
@@ -1509,23 +1546,13 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 			image: image
 		}] : req.files || body.files || [];
 
-	/*if (image)
-		files.push();
-	else
-		Each(req.files || body.files, function (n,file) {
-			files.push({ 
-				name: file.name,
-				size: file.size,
-				path: file.path
-			});
-		}); */
-if (false)
-console.log({
-	q: query,
-	b: body,
-	f: files,
-	a: area
-});
+	if (false)
+		console.log({
+		q: query,
+		b: body,
+		f: files,
+		a: area
+	});
 					
 	res(SUBMITTED);
 	
@@ -1555,21 +1582,22 @@ console.log({
 	if (FLEX.uploader)
 	FLEX.uploader(files, area, function (file) {
 
-		return;
-		
-		file.Tagger = req.client;
-		file.Tag = query.tag || "";
-		file.Enabled = 1;
-		file.Classif = query.classif || "";
-		file.Revs = 0;
-		file.Attach = JSON.stringify(canvas);
-
-		canvas.objects = attach;
-		var geo = req.location || "POINT(0 0)";
+		var geoloc = req.location || "POINT(0 0)";
 		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
-			"INSERT INTO files SET ?,address=geomfromtext(?) ON DUPLICATE KEY UPDATE ?,Revs=Revs+1,address=geomfromtext(?)", 
-			[file, geo, { Tagger: file.Tagger, Added:file.Added }, geo]);
+			   "INSERT INTO files SET ?,address=geomfromtext(?) "
+			+ "ON DUPLICATE KEY UPDATE ?,Revs=Revs+1,address=geomfromtext(?)", [{
+				Client: req.client,
+				Name: file.filename,
+				Area: area,
+				Added: new Date(),
+				Classif: file.classif || "",
+				Revs: 1,
+				Tag: file.Tag || ""
+			}, geoloc, { Client: req.client, Added:new Date() }, geoloc], function (err) {
+				if (err)
+					console.log(err);
+			});
 
 		if (file.image)
 			switch (area) {
@@ -3797,7 +3825,7 @@ function insertJob(job, cb) {
 function executeJob(req, exe) {
 }
 
-// CRUDE interface
+// Database CRUDE interface
 
 function crude(req, res) {
 		
