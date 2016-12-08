@@ -2,11 +2,11 @@
 @class flex [![Forked from SourceForge](https://sourceforge.net)]
 # FLEX
 
-The FLEX NodeJS module provides a CRUDE interface on FLEX[ select | update | delete | insert | execute ].table for
-searching and editing a database (default MySQL cluster) that scales with the  underlying
-VM architecture.  FLEX provides this capability via the following tables:
+FLEX provides a CRUDE interface on FLEX[ select | update | delete | insert | execute ][X] to
+query (both MySQL and emulated) datasets X distributed across multiple virtual machines.  FLEX 
+uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) in it's default 
+MySQL Cluster setup.  FLEX provides the following virtual tables:
 
-	+ dsvar	MySQL cluster tables via the [database agnosticator](https://git.geointapps.org/acmesds/dsvar)
 	+ git			local repo history, commit changes, sync with remote repo
 	+ uploads	get/upload file(s) into one-time file upload area
 	+ stores	get/upload file(s) into monitored file store area
@@ -18,29 +18,15 @@ VM architecture.  FLEX provides this capability via the following tables:
  	+ job		get, add, stop, and update a job placed in qos-priority queues
 	+ sql		crude engines to sql tables
 
-FLEX also provides limited CRUDE support to the following virtual tables:
+CRUDE-execute support is provided to the following virtual tables:
  
-		table		import/export/sync of records on x=execute
-		============================================================
- 		parms		
- 		roles		
- 		lookups		
- 		searches
- 		swaps		
- 		news		
- 		milestones	
- 		sockets		
- 		engines	
- 		collects	
- 		events		
- 		issues		
- 		aspreqts	
- 		ispreqts	
+ 		parms		 		roles			lookups				searches
+ 		swaps		 		news			milestones 		sockets		 		
+		engines	 		collects	 		events		 		issues		
+ 		aspreqts	 		ispreqts		likeus
  		
-		table		information returned on x=select
-		======================================================================
-		likeus	gives us a like
- 		tips	...
+and CRUDE-select suppport is provided at:
+
  		ACTIVITY	system activity
  		CATALOG	catalog of tables
  		VIEWS		areas containing skinning files
@@ -50,12 +36,18 @@ FLEX also provides limited CRUDE support to the following virtual tables:
  		ENGINES		status of simulation engines
  		CONFIG		system sw/hw configuration
  		TABLES		status of mysql table sources
- 		ADMIN		...
+ 		ADMIN		system admin data
  		QUEUES		status of qos-priority queues	
  		CLIQUES		cliques formed between tables and users
  		HEALTH		system health
 		
-## Examples
+## Installation
+
+Download the latest version with
+
+	git clone https://git.geointapps.org/acmesds/flex
+	
+## Usage
 
 Require FELX and add interval for virtual table X are needed:
 
@@ -69,17 +61,6 @@ Require FELX and add interval for virtual table X are needed:
 	
 There is nothing to configure if the default MySQL-Cluster support suffices. 
 
-## Installation
-
-Download the latest version with
-
-	git clone https://git.geointapps.org/acmesds/flex
-	
-Typically, you will want to redirect the following to your project/master
-
-	ln -s ../master/test.js test.js
-	ln -s ../master/maint.sh maint.sh
-	
 ## License
 
 [MIT](LICENSE)
