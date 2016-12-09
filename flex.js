@@ -66,13 +66,13 @@ var 											// totem bindings
 function Trace(msg,arg) {
 	
 	if (msg.constructor == String)
-		console.log("S>"+msg);
+		console.log("F>"+msg);
 	else
 	if (msg.constructor == Error)
-		console.log("S>ERROR",msg);
+		console.log("F>ERROR",msg);
 	
 	else
-		console.log("S>"+msg.sql);
+		console.log("F>"+msg.sql);
 
 	if (arg) console.log(arg);
 		
@@ -166,8 +166,6 @@ var
 		 * */
 		config: function (opts) {
 			
-			console.log(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-			
 			if (opts) Copy(opts,FLEX);
 			
 			if (watch = FLEX.watch) 
@@ -226,7 +224,7 @@ var
 			
 			var
 				site = FLEX.site,
-				email = FLEX.email;
+				email = FLEX.mailer;
 				
 			if (CLUSTER.isMaster) {
 				
@@ -246,7 +244,7 @@ var
 				});
 
 				// setup likeus table hawk
-				if (FLEX.LIKEUS.PING)
+				if (FLEX.likeus.PING)
 					setInterval( function() {
 						
 						FLEX.thread(function (sql) {
@@ -255,7 +253,7 @@ var
 							
 							sql.query(
 								"SELECT *, datediff(now(),Updated) AS Age FROM openv.profiles WHERE LikeUs HAVING Age>=?",
-								[FLEX.LIKEUS.BILLING]
+								[FLEX.likeus.BILLING]
 							)
 							.on("result", function (rec) {		
 								sql.query("UPDATE openv.profiles SET LikeUs=LikeUs-1 WHERE ?",{ID:rec.ID} );
@@ -264,7 +262,7 @@ var
 							
 						});
 						
-					}, FLEX.LIKEUS.PING*(3600*24*1000) );
+					}, FLEX.likeus.PING*(3600*24*1000) );
 
 				/*
 				if (opts.pulse.PING)
@@ -298,94 +296,86 @@ var
 					}, opts.pulse.PING*(60*1000) );
 				*/
 				
-				email.HAWKS = site.distro.hawk; 
-				email.SUBJ = site.nick + "?JOB";
-				email.BODY = 
-					("Click " 
-					+ "here".tag("a",{href:"?URLtipclear.db?ID=?JOBID"})
-					+ " to clear this tip."
-					).tag("p").tag("html");
+				if (email) {
+					var parts = (site.emailhost||"").split(":");
+					email.TX.HOST = parts[0];
+					email.TX.PORT = parseInt(parts[1]);
 
-				var parts = (site.emailhost||"").split(":");
-				email.TX.HOST = parts[0];
-				email.TX.PORT = parseInt(parts[1]);
-				
-				var parts = (site.emailuser||"").split(":");
-				email.USER = parts[0];
-				email.PASS = parts[1];
-				
-				if (email.TX.PORT) {  		// Establish server's email transport
-					
-					Trace(`email  ${email.TX.HOST} RE ${email.TX.PORT}`);
-					
-					email.TX.TRAN = email.USER
-						? 
-						MAIL.createTransport({ //"SMTP",{
-							host: email.TX.HOST,
-							port: email.TX.PORT,
-							auth: {
-								user: email.USER,
-								pass: email.PASS
-							}
-						})
-						: MAIL.createTransport({ //"SMTP",{
-							host: email.TX.HOST,
-							port: email.TX.PORT
+					var parts = (site.emailuser||"").split(":");
+					email.USER = parts[0];
+					email.PASS = parts[1];
+
+					if (email.TX.PORT) {  		// Establish server's email transport
+
+						Trace(`MAILHOST  ${email.TX.HOST} PORT ${email.TX.PORT}`);
+
+						email.TX.TRAN = email.USER
+							? MAIL.createTransport({ //"SMTP",{
+								host: email.TX.HOST,
+								port: email.TX.PORT,
+								auth: {
+									user: email.USER,
+									pass: email.PASS
+								}
+							})
+							: MAIL.createTransport({ //"SMTP",{
+								host: email.TX.HOST,
+								port: email.TX.PORT
+							});
+
+					}
+
+					if (email.RX.PORT)
+						email.RX.TRAN = new IMAP({
+							  user: email.USER,
+							  password: email.PASS,
+							  host: email.RX.HOST,
+							  port: email.RX.PORT,
+							  secure: true,
+							  //debug: function (err) { console.warn(ME+">"+err); } ,
+							  connTimeout: 10000
+							});
+
+					if (email.RX.TRAN)					// Establish server's email inbox			
+						openIMAP(function(err, mailbox) {
+						  if (err) killIMAP(err);
+						  email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+							if (err) killIMAP(err);
+							email.RX.TRAN.fetch(results,
+							  { headers: ['from', 'to', 'subject', 'date'],
+								cb: function(fetch) {
+								  fetch.on('message', function(msg) {
+									console.info(ME+'Saw message no. ' + msg.seqno);
+									msg.on('headers', function(hdrs) {
+									  console.info(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
+									});
+									msg.on('end', function() {
+									  console.info(ME+'Finished message no. ' + msg.seqno);
+									});
+								  });
+								}
+							  }, function(err) {
+								if (err) throw err;
+								console.info(ME+'Done fetching all messages!');
+								email.RX.TRAN.logout();
+							  }
+							);
+						  });
 						});
-						
+
+					if (FLEX.mailer.ONSTART) 
+						sendMail({
+							to: site.distro.hawk,
+							subject: site.title + " started", 
+							html: "Just FYI",
+							alternatives: [{
+								contentType: 'text/html; charset="ISO-59-1"',
+								contents: ""
+							}]
+						}, function (err,info) {
+							if (err) Trace(err);
+						});
 				}
-							
-				if (email.RX.PORT)
-					email.RX.TRAN = new IMAP({
-						  user: email.USER,
-						  password: email.PASS,
-						  host: email.RX.HOST,
-						  port: email.RX.PORT,
-						  secure: true,
-						  //debug: function (err) { console.warn(ME+">"+err); } ,
-						  connTimeout: 10000
-						});
-
-				if (email.RX.TRAN)					// Establish server's email inbox			
-					openIMAP(function(err, mailbox) {
-					  if (err) killIMAP(err);
-					  email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
-						if (err) killIMAP(err);
-						email.RX.TRAN.fetch(results,
-						  { headers: ['from', 'to', 'subject', 'date'],
-							cb: function(fetch) {
-							  fetch.on('message', function(msg) {
-								console.info(ME+'Saw message no. ' + msg.seqno);
-								msg.on('headers', function(hdrs) {
-								  console.info(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
-								});
-								msg.on('end', function() {
-								  console.info(ME+'Finished message no. ' + msg.seqno);
-								});
-							  });
-							}
-						  }, function(err) {
-							if (err) throw err;
-							console.info(ME+'Done fetching all messages!');
-							email.RX.TRAN.logout();
-						  }
-						);
-					  });
-					});
-				
-				if (FLEX.email.ONSTART) 
-					sendMail({
-						from: site.nick, 
-						to: email.HAWKS,
-						subject: site.title + " started", 
-						html: "Just FYI",
-						alternatives: [{
-							contentType: 'text/html; charset="ISO-59-1"',
-							contents: ""
-						}]
-					}, function (err,info) {
-						if (err) Trace(err);
-					});
 			}			
 		}
 
@@ -606,7 +596,6 @@ FLEX.execute.email = function Execute(req,res) {
 	if (false)
 	requestService(srv, function (rec) {
 		sendMail({
-			from:  rec.From, //"g5120089@trbvm.com",
 			to:  rec.To,
 			subject: rec.Subject,
 			html: rec.Body,
@@ -1136,8 +1125,7 @@ FLEX.select.likeus = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	sendMail({
-		from: FLEX.site.POC,
-		to:  FLEX.email.HAWKS,
+		to:  FLEX.site.distro.hawk,
 		subject: req.client + " likes " + FLEX.site.title + " !!",
 		html: "Just FYI",
 		alternatives: [{
@@ -1880,7 +1868,6 @@ FLEX.execute.news = function Execute(req, res) {
 				default:
 
 					sendMail({
-						from: site.POC,
 						to:  to,
 						subject: subj,
 						html: body.format(mask),
@@ -2798,7 +2785,6 @@ FLEX.execute.swaps = function Execute(req, res) {
 			sql.query("UPDATE swaps SET ? WHERE ?",[{Submitted: new Date()}, {ID:swap.ID}]);
 			
 			sendMail({
-				from: site.POC,
 				to:  site.POC,
 				subject: "SWAP "+package,
 				html: "Please find attached SWAP.  Delivery of  "+swap.Product+" is conditional on NGA/OCIO acceptance of this deviation request. ",
@@ -3357,7 +3343,7 @@ function feedNews(sql, engine) {
 			description:    JSON.stringify(feature),
 			author: [{
 				name:   FLEX.site.title,
-				email:  FLEX.email.SOURCE,
+				email:  FLEX.mailer.SOURCE,
 				link:   FLEX.paths.HOST
 			}],
 			/*contributor: [{
@@ -3444,19 +3430,22 @@ function killIMAP(err) {
 }
 
 function openIMAP(cb) {
-	FLEX.email.RX.TRAN.connect(function(err) {  // login cb
+	FLEX.mailer.RX.TRAN.connect(function(err) {  // login cb
 		if (err) killIMAP(err);
-		FLEX.email.RX.TRAN.openBox('INBOX', true, cb);
+		FLEX.mailer.RX.TRAN.openBox('INBOX', true, cb);
 	});
 }
 
 function sendMail(opts, cb) {
 	
-	Trace(`email ${opts.to} RE ${opts.subject}`);
+	Trace(`MAIL ${opts.to} RE ${opts.subject}`);
 		
-	if (x = FLEX.email)
-		if (x = x.TX.TRAN)
-			x.sendMail(opts,cb);
+	if (x = FLEX.mailer)
+		if (x = x.TX.TRAN) 
+			if (opts.to) {
+				opts.from = "noreply@nga.ic.gov";
+				x.sendMail(opts,cb);
+			}
 }
 
 /**
@@ -3916,7 +3905,6 @@ function hawkJobs (client, url)  {
 							}, function () {
 
 								sendMail({
-									from: site.POC,
 									to:  job.Client,
 									subject: FLEX.site.title + " job status notice",
 									html: "Please "+"clear your job flag".tag("a",{href:"/rule.jade"})+" to keep your job running.",
