@@ -2,10 +2,14 @@
 @class flex [![Forked from SourceForge](https://sourceforge.net)]
 # FLEX
 
-FLEX provides a CRUDE interface on FLEX[ select | update | delete | insert | execute ][X] to
-query (both MySQL and emulated) datasets X distributed across multiple virtual machines.  FLEX 
-uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) in it's default 
-MySQL Cluster setup.  FLEX provides the following virtual tables:
+FLEX provides a CRUDE = select | update | delete | insert | execute query interface to a dataset DS on 
+FLEX[ CRUD ][ DS ].  This interface supports both MySQL and emulated) datasets distributed across 
+multiple virtual machines.  
+
+FLEX uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) 
+defaulted for a MySQL Cluster.  
+
+FLEX provides the following emulated tables:
 
 	+ git			local repo history, commit changes, sync with remote repo
 	+ uploads	get/upload file(s) into one-time file upload area
