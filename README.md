@@ -2,9 +2,9 @@
 @class flex [![Forked from SourceForge](https://sourceforge.net)]
 # FLEX
 
-FLEX provides a CRUDE = select | update | delete | insert | execute query interface to a dataset DS on 
+FLEX provides a CRUDE (select | update | delete | insert | execute) query interface to a dataset DS on 
 FLEX[ CRUD ][ DS ].  This interface supports both MySQL and emulated) datasets distributed across 
-multiple virtual machines.  
+an elastic virtual machine cloud.  
 
 FLEX uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) 
 defaulted for a MySQL Cluster.  
@@ -45,15 +45,7 @@ and CRUDE-select suppport is provided at:
  		CLIQUES		cliques formed between tables and users
  		HEALTH		system health
 		
-## Installation
-
-Download the latest version with
-
-	git clone https://git.geointapps.org/acmesds/flex
-	
-## Usage
-
-Require FELX and add interval for virtual table X are needed:
+To use, simply require FLEX and add interfaces for the virtual table X you need:
 
 	var FLEX = require("sql").config({ 
 		select: { X: function (req,res), ... },
@@ -65,6 +57,12 @@ Require FELX and add interval for virtual table X are needed:
 	
 There is nothing to configure if the default MySQL-Cluster support suffices. 
 
+## Installation
+
+Download the latest version with
+
+	git clone https://git.geointapps.org/acmesds/flex
+	
 ## License
 
 [MIT](LICENSE)
