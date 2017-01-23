@@ -297,6 +297,9 @@ var
 				*/
 				
 				if (email) {
+					email.TX = {};
+					email.RX = {};
+					
 					var parts = (site.emailhost||"").split(":");
 					email.TX.HOST = parts[0];
 					email.TX.PORT = parseInt(parts[1]);
