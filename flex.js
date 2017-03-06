@@ -46,7 +46,7 @@ var 											// globals
 	SUBMITTED = "submitted";
 
 var 											// totem bindings
-	READ = require("reader"),
+	READ = require("../reader"),
 	ENUM = require("enum").extend({
 		Array: [
 			function escape() {
@@ -2877,7 +2877,8 @@ FLEX.execute.hawks = function Execute(req, res) {
 	sql.hawkJobs(req.client,FLEX.site.masterURL);
 }
 
-// JSON editor
+/*
+// legacy JSON editor for mysql cluster < 7.5
 
 FLEX.select.json = 
 FLEX.update.json = 
@@ -3003,7 +3004,8 @@ console.log({
 	});
 	
 }
-	
+*/
+
 // Detectors 
 
 FLEX.execute.detectors = function Execute(req, res) { 
