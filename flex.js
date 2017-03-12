@@ -132,11 +132,11 @@ var
 		watch: null,
 		
 		// CRUDE interface
-		select: {ds: crude}, 
-		delete: {ds: crude}, 
-		update: {ds: crude}, 
-		insert: {ds: crude}, 
-		execute: {ds: crude}, 
+		select: {ds: runQuery}, 
+		delete: {ds: runQuery}, 
+		update: {ds: runQuery}, 
+		insert: {ds: runQuery}, 
+		execute: {ds: runQuery}, 
 	
 		fetcher: null, 					// http data fetcher
 		uploader: null,		 			// file uploader
@@ -210,7 +210,7 @@ var
 					insertJob,
 					executeJob,
 					hawkCatalog,
-					crude, 
+					runQuery, 
 					flattenCatalog,
 					hawkJobs
 				]);
@@ -1747,7 +1747,7 @@ FLEX.execute.engines = function Execute(req, res) {
 
 			if (eng.Found)  				// existing engine
 				switch (eng.Engine) {
-					case "select":			// update FLEX crude interface
+					case "select":			// update FLEX runQuery interface
 					case "delete":
 					case "update":
 					case "insert":
@@ -1797,7 +1797,7 @@ FLEX.execute.engines = function Execute(req, res) {
 				}
 			else 							// create new engine
 				switch (Engine) {
-					case "select":		// create crude interface
+					case "select":		// create runQuery interface
 					case "delete":
 					case "update":
 					case "insert":
@@ -3825,7 +3825,7 @@ function executeJob(req, exe) {
 
 // Database CRUDE interface
 
-function crude(req, res) {
+function runQuery(req, res) {
 		
 	var 
 		sql = req.sql,							// sql connection
@@ -3842,7 +3842,7 @@ function crude(req, res) {
 			group: 	flags.group || flags.tree,
 			score:	flags.score,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-			index: 	{has:flags.has, nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
+			index: 	{geo:flags.geo, has:flags.has, nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
 			data:	body,
 			client: req.client
 		}}, function (ctx) {
