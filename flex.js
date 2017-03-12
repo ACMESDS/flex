@@ -519,7 +519,7 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 		if (err)
 			res( FLEX.errors.badbaseline );
 		else
-			res( "Baselined "+recs[0].Changes+" changes" );
+			res( (recs[0].Changes || 0)+" changes since last baseline - restart server" );
 
 		sql.query("DELETE FROM openv.journal");
 	});
@@ -1728,7 +1728,12 @@ FLEX.update.engines = function Update(req, res) {
 
 FLEX.execute.engines = function Execute(req, res) {
 	var sql = req.sql, query = req.query, body = req.body;
-	var Engine = query.Engine, Name = query.Name;
+	var 
+		Engine = query.Engine, 
+		Name = query.Name, 
+		Path = `./public/${Engine}/${Name}.${Engine}`;
+	
+	Trace(`ACCESSING ${Name}.${Engine}`);
 	
 	if (Engine && Name)
 		sql.query(
@@ -1812,9 +1817,7 @@ FLEX.execute.engines = function Execute(req, res) {
 
 					default:
 					
-						FS.readFile(
-							`.public/${Engine}/${Name}.${Engine}`,
-							'utf-8', function (err,buf) {
+						FS.readFile(Path, 'utf-8', function (err,buf) {
 							
 							if (err) 
 								res(err);
@@ -1832,6 +1835,7 @@ FLEX.execute.engines = function Execute(req, res) {
 				}
 			
 		});
+	
 	else
 		res( FLEX.errors.missingEngine );
 }
@@ -1902,7 +1906,7 @@ FLEX.execute.news = function Execute(req, res) {
 			  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
 			+ "link('dashboard',concat('/',lower(intake.Name),'.jade')) AS Dashboard, "
 			+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
-			+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
+			//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
 			+ "link(states.Name,'/parms.jade') AS State "
 			+ "FROM intake "
 			+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
