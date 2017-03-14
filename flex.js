@@ -94,6 +94,9 @@ var
 			protectedQueue: new Error("action not allowed on this job queues")
 		},
 		
+		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
+		},
+		
 		listify: function (hash, idxkey, valkey) {
 			var list = [];
 			var n = 0;
@@ -509,11 +512,15 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 
 	var	sql = req.sql, 
 		query = req.query,
+		user = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
 		ex = {
-		group: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} ${req.group} >admins/db/${req.group}.sql`,
-		openv: `mysqldump -u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS} openv >admins/db/openv.sql`,
-		commit: `git commit -am "${req.client} baseline"`
-	};
+			group: `mysqldump ${user} ${req.group} >admins/db/${req.group}.sql`,
+			openv: `mysqldump ${user} openv >admins/db/openv.sql`,
+			clear: `mysql ${user} -e "drop database baseline"`,
+			prime: `mysql ${user} -e "create database baseline"`,
+			rebase: `mysql ${user} baseline<admins/db/openv.sql`,
+			commit: `git commit -am "${req.client} baseline"`
+		};
 	
 	sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
 		if (err)
@@ -524,22 +531,32 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 		sql.query("DELETE FROM openv.journal");
 	});
 	
-	if (!query.nogit)
+	if (!query.noarchive)
 	CP.exec(ex.group, function (err,log) {
+	Trace("BASELINE GROUP "+(err||"OK"));
+
+	CP.exec(ex.openv, function (err,log) {
+	Trace("BASELINE OPENV "+(err||"OK"));
+
+	CP.exec(ex.clear, function (err,log) {
+	Trace("BASELINE CLEAR "+(err||"OK"));
+
+	CP.exec(ex.prime, function (err,log) {
+	Trace("BASELINE PRIME "+(err||"OK"));
+
+	CP.exec(ex.rebase, function (err,log) {
+	Trace("BASELINE REBASE "+(err||"OK"));
+
+	CP.exec(ex.commit, function (err,log) {
+	Trace("BASELINE COMMIT "+(err||"OK"));
+
+		if (!query.noexit) process.exit();				
 		
-		Trace("CHECKPT "+(err||"OK"));
-		
-		CP.exec(ex.openv, function (err,log) {
-			
-			Trace("CHECKPT "+(err||"OK"));
-			
-			CP.exec(ex.commit, function (err,log) {
-				Trace("COMMIT "+(err||"OK"));
-				
-				if (!query.noexit)
-				process.exit();				
-			});
-		});
+	});
+	});
+	});
+	});
+	});
 	});
 	
 }
@@ -3842,7 +3859,15 @@ function runQuery(req, res) {
 			group: 	flags.group || flags.tree,
 			score:	flags.score,
 			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-			index: 	{geo:flags.geo, has:flags.has, nlp:flags.nlp, bin:flags.bin, qex:flags.qex, browse:flags.browse, pivot:flags.pivot, idx: flags.index},
+			index: 	{
+				has:flags.has, 
+				nlp:flags.nlp, 
+				bin:flags.bin, 
+				qex:flags.qex, 
+				browse:flags.browse, 
+				pivot:flags.pivot, 
+				select: flags.index ? flags.index.split(",") : "*"
+			},
 			data:	body,
 			client: req.client
 		}}, function (ctx) {
