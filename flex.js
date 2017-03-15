@@ -914,7 +914,7 @@ FLEX.select.TABLES = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
-	sql.eachTable( {from:"app1"}, function (table) {
+	sql.indexTables( "app1", function (table) {
 		rtns.push({
 			Name: table.tag("a",{href:"/"+table+".db"}),
 			ID: ID++
@@ -2506,7 +2506,7 @@ FLEX.execute.parms = function Execute(req, res) {
 	res(SUBMITTED);
 	
 	var allparms = {}, ntables = 0;
-	sql.eachTable({from:"app1",where: "Tables_in_app1 NOT LIKE '\\_%' "}, function (tname) {
+	sql.indexTables("app1", function (tname) {
 		
 		sql.query("DESCRIBE ??",[tname], function (err, parms) {
 
