@@ -177,7 +177,7 @@ var
 					Trace("WATCHING "+file);
 					FS.watch(watch + file, function (ev, file) {  //{persistent: false, recursive: false}, 
 
-						console.log([ev,file, FLEX.thread]);
+						//console.log([ev,file, FLEX.thread]);
 						Trace(ev.toUpperCase()+" "+file);
 
 						if (file && FLEX.thread)
@@ -185,8 +185,7 @@ var
 							case "change":
 								FLEX.thread( function (sql) {
 									READ.reader(sql, watch+file, function (keys) {
-										console.log("keys=");
-										console.log(keys);
+										console.log(["keys",keys]);
 									});
 									sql.release();
 								});
@@ -659,18 +658,19 @@ FLEX.execute.email = function Execute(req,res) {
 */
 
 FLEX.execute.catalog = function Execute(req, res) {
-	var sql = req.sql, log = req.log, query = req.query, flags = req.flags,
-			catalog = FLEX.flatten.catalog || {},
-			limits = FLEX.flatten.limits || {};
+	var 
+		sql = req.sql, log = req.log, query = req.query, flags = req.flags,
+		catalog = FLEX.flatten.catalog || {},
+		limits = FLEX.flatten.limits || {};
 	
 	limits.pivots = flags.pivot || "";
 	limits.stamp = new Date();
 
 	if (false)
-	console.log({
-		cat: catalog,
-		lim: limits
-	});
+		console.log({
+			cat: catalog,
+			lim: limits
+		});
 	
 	res(SUBMITTED);
 	
@@ -1764,7 +1764,7 @@ FLEX.execute.engines = function Execute(req, res) {
 
 			if (eng.Found)  				// existing engine
 				switch (eng.Engine) {
-					case "select":			// update FLEX runQuery interface
+					case "select":			// update CRUDE interface
 					case "delete":
 					case "update":
 					case "insert":
@@ -1814,7 +1814,7 @@ FLEX.execute.engines = function Execute(req, res) {
 				}
 			else 							// create new engine
 				switch (Engine) {
-					case "select":		// create runQuery interface
+					case "select":		// create CRUDE interface
 					case "delete":
 					case "update":
 					case "insert":
