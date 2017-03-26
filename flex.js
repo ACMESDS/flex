@@ -82,6 +82,9 @@ function Trace(msg,arg) {
 var
 	FLEX = module.exports = {
 		
+		copy: Copy,
+		each: Each,
+		
 		// Job hawking  etc
 		timers: [],
 		sendMail: sendMail,
@@ -211,6 +214,13 @@ var
 					updateJob,
 					insertJob,
 					executeJob,
+					/*
+					selectData,
+					deleteData,
+					updateData,
+					insertData,
+					executeData,
+					*/
 					hawkCatalog,
 					runQuery, 
 					flattenCatalog,
@@ -3839,6 +3849,39 @@ function insertJob(job, cb) {
 	
 function executeJob(req, exe) {
 }
+
+/*
+function selectData(req, ds, cb) {
+	this.query("SELECT Data FROM contexts WHERE least(?,1) LIMIT 0,1", {
+		Client: req.client,
+		Dataset: req.table
+	}, function (err,recs) {
+		var def = {};
+		
+		if (err)
+			cb( def );
+		else
+			try {
+				cb( JSON.parse(recs[0].Data) );
+			}
+			catch (err) {
+				cb( def );
+			});		
+	});		
+}
+function insertData(req, ds) {
+}
+function deleteData(req, cb) {
+}
+function updateData(req, ds) {
+	this.query("UPDATE contexts SET ? WHERE least(?,1)", [ds, {		
+		Client: req.client,
+		Dataset: req.table
+	}]);		
+}
+function executeData(req, cb) {
+}
+*/
 
 // Database CRUDE interface
 
