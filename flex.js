@@ -828,22 +828,21 @@ FLEX.select.LINKS = function Select(req, res) {
 	res(links);
 }
 
-/*
 FLEX.select.THEMES = function (req, res) {
-	var sql = req.sql, log = req.log, query = req.query;	
 	var themes = [];
 	var path = ENV.THEMES;
 
-	FLEX.indexer( path , function (n,file) {
-		var stats = FS.statSync(path + file);		
-		
-		if (!stats.isDirectory())
-			themes.push( {ID: n, Name: file, theme: file} );
+	FLEX.indexer( path , function (files) {
+		files.each( function (n,file) {
+			var stats = FS.statSync(path + "/"+file);
+
+			if (!stats.isDirectory())
+				themes.push( {ID: n, Name: file, Path: file} );
+		});
 	});
 	
 	res(themes);	
 }
-*/
 
 FLEX.select.SUMMARY = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
