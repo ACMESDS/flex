@@ -38,6 +38,7 @@ var 									// 3rd party bindings
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
 	ENGINE = require("engine"), 		// tauif simulation engines
+	RAN = require("randpr"), 		// random process
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
@@ -4072,6 +4073,78 @@ function hawkJobs (client, url)  {
 				);
 			else                                 // one-time hawk
 				hawk(rule);
+		});
+	});
+}
+
+FLEX.execute.mixgaus = function (req, res) {
+
+	var 
+		sql = req.sql;
+
+	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
+	.on("result", function (test) {
+		console.log(test);
+
+		res("submitted");
+
+		var 
+			mvp = JSON.parse(test.Mix); //{"mu": [1,2], "sigma": [[.9,.6],[.6,.7]]},
+			mvd = RAN.MVN( mvp.mu, mvp.sigma );
+	
+		RAN.config({
+			N: test.Ensemble,
+			A: JSON.parse(test.JumpRates),
+			sym: JSON.parse(test.Syms),
+			nyquist: test.Nyquist,
+			//A: [[0,1,2],[3,0,4],[5,6,0]],
+			//sym: [-1,0,1],
+
+			//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
+			//sym: [-1,1],
+			//nyquist: 10,
+
+			x: [],
+			y: [],
+
+			cb: {
+				jump: function (n,fr,to,h,x) {
+					//x.push( mvd.sample() );
+					//console.log(["jump",RAN.jumps,RAN.steps,n,fr,to]);
+					//console.log(RAN.R);
+					//console.log([RAN.steps,n,fr,to,RAN.T]);
+					//console.log(["jump",n]);
+				},
+				save: function (x,name) {
+					console.log(["save",name,x.length]);
+	
+					sql.query("REPLACE INTO app1.results SET ?", {
+						Result: JSON.stringify(x, function (key,val) {
+							return val.toPrecision ? val.toPrecision(6) : val;
+						}),
+						Engine: "mixgaus",
+						Test: "mix1" + name
+					});
+				}
+			}
+		});
+
+		console.log({
+			jumpRates: RAN.A,
+			cumTxPr: RAN.P,
+			jumpCounts: RAN.T,
+			holdTimes: RAN.R,
+			eqPr: RAN.pi,
+			Tc: RAN.Tc,
+			p: RAN.p,
+			dt: RAN.dt,
+			cor: RAN.gamma
+		});
+
+		RAN.run(20, function (y) {
+			//console.log( [RAN.t,RAN.gamma, Math.exp(-n)] );
+			var n = RAN.t / RAN.Tc;
+			y.push( [n, RAN.gamma, Math.exp(-n)] );
 		});
 	});
 }
