@@ -4088,16 +4088,18 @@ FLEX.execute.mixgaus = function (req, res) {
 		res("submitted");
 
 		var 
-			mvp = JSON.parse(test.Mix); //{"mu":[1,2],"sigma":[[.9,.6],[.6,.7]]},
-			mvd = RAN.MVN( mvp.mu, mvp.sigma );
+			mix = JSON.parse(test.Mix), 
+			mvd = [],
+			K = mix.length;
+
+		for (var k=0; k<K; k++)
+			mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 	
 		RAN.config({
 			N: test.Ensemble,
 			A: JSON.parse(test.JumpRates),
 			sym: JSON.parse(test.Symbols),
 			nyquist: test.Nyquist,
-			//A: [[0,1,2],[3,0,4],[5,6,0]],
-			//sym: [-1,0,1],
 
 			//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
 			//sym: [-1,1],
@@ -4108,22 +4110,22 @@ FLEX.execute.mixgaus = function (req, res) {
 
 			cb: {
 				jump: function (n,fr,to,h,x) {
-					x.push( mvd.sample() );
-					//console.log(["jump",RAN.jumps,RAN.steps,n,fr,to]);
-					//console.log(RAN.R);
-					//console.log([RAN.steps,n,fr,to,RAN.T]);
-					//console.log(["jump",n]);
+					x.push( mvd[to].sample() );
 				},
 
 				save: function (x,name) {
-					console.log(["save",name,x.length]);
+					var dsname = "mixgaus_" + name + "_test"+test.ID;
 	
 					sql.query("REPLACE INTO app1.results SET ?", {
-						Result: JSON.stringify(x), /*, function (key,val) {
-							return val.toPrecision ? val.toPrecision(6) : val;
-						}),*/
-						Name: "mixgaus_" + name + "_test"+test.ID
+						Result: JSON.stringify(x),
+						Name: dsname
+					}, function (err) {
+						console.log(err || "saved " + dsname);
 					});
+
+					if (name == "jumpobs") {
+						console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
+					}
 				}
 			}
 		});
@@ -4137,12 +4139,14 @@ FLEX.execute.mixgaus = function (req, res) {
 			Tc: RAN.Tc,
 			p: RAN.p,
 			dt: RAN.dt,
+			symbols: RAN.sym,
 			cor: RAN.gamma
 		});
 
-		RAN.run(20, function (y) {
+		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
 			var n = RAN.t / RAN.Tc;
-			y.push( [n, RAN.gamma, Math.exp(-n)] );
+			y.push( [n, RAN.gamma, Math.exp(-n/2)] );
+			//console.log( [n, RAN.gamma, Math.exp(-n)] );
 		});
 	});
 }
