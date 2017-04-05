@@ -4088,13 +4088,13 @@ FLEX.execute.mixgaus = function (req, res) {
 		res("submitted");
 
 		var 
-			mvp = JSON.parse(test.Mix); //{"mu": [1,2], "sigma": [[.9,.6],[.6,.7]]},
+			mvp = JSON.parse(test.Mix); //{"mu":[1,2],"sigma":[[.9,.6],[.6,.7]]},
 			mvd = RAN.MVN( mvp.mu, mvp.sigma );
 	
 		RAN.config({
 			N: test.Ensemble,
 			A: JSON.parse(test.JumpRates),
-			sym: JSON.parse(test.Syms),
+			sym: JSON.parse(test.Symbols),
 			nyquist: test.Nyquist,
 			//A: [[0,1,2],[3,0,4],[5,6,0]],
 			//sym: [-1,0,1],
@@ -4108,21 +4108,21 @@ FLEX.execute.mixgaus = function (req, res) {
 
 			cb: {
 				jump: function (n,fr,to,h,x) {
-					//x.push( mvd.sample() );
+					x.push( mvd.sample() );
 					//console.log(["jump",RAN.jumps,RAN.steps,n,fr,to]);
 					//console.log(RAN.R);
 					//console.log([RAN.steps,n,fr,to,RAN.T]);
 					//console.log(["jump",n]);
 				},
+
 				save: function (x,name) {
 					console.log(["save",name,x.length]);
 	
 					sql.query("REPLACE INTO app1.results SET ?", {
-						Result: JSON.stringify(x, function (key,val) {
+						Result: JSON.stringify(x), /*, function (key,val) {
 							return val.toPrecision ? val.toPrecision(6) : val;
-						}),
-						Engine: "mixgaus",
-						Test: "mix1" + name
+						}),*/
+						Name: "mixgaus_" + name + "_test"+test.ID
 					});
 				}
 			}
@@ -4141,7 +4141,6 @@ FLEX.execute.mixgaus = function (req, res) {
 		});
 
 		RAN.run(20, function (y) {
-			//console.log( [RAN.t,RAN.gamma, Math.exp(-n)] );
 			var n = RAN.t / RAN.Tc;
 			y.push( [n, RAN.gamma, Math.exp(-n)] );
 		});
