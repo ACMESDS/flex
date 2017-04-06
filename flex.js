@@ -3891,7 +3891,9 @@ function runQuery(req, res) {
 		sql = req.sql,							// sql connection
 		flags = req.flags,
 		query = req.query,
-		body = req.body;
+		body = Copy(query,req.body);
+
+	delete body.ID;
 
 	sql.context({ds: {
 			table:	req.table,
@@ -4081,54 +4083,58 @@ FLEX.execute.mixgaus = function (req, res) {
 	var 
 		sql = req.sql;
 
+	res("submitted");
+
 	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
 	.on("result", function (test) {
 		console.log(test);
 
-		res("submitted");
+		try {
+			var 
+				mix = JSON.parse(test.Mix) || [], 
+				mvd = [],
+				K = mix.length;
 
-		var 
-			mix = JSON.parse(test.Mix), 
-			mvd = [],
-			K = mix.length;
-
-		for (var k=0; k<K; k++)
-			mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
+			for (var k=0; k<K; k++)
+				mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 	
-		RAN.config({
-			N: test.Ensemble,
-			A: JSON.parse(test.JumpRates),
-			sym: JSON.parse(test.Symbols),
-			nyquist: test.Nyquist,
+			RAN.config({
+				N: test.Ensemble,
+				A: JSON.parse(test.JumpRates || "[]"),
+				sym: JSON.parse(test.Symbols || "null"),
+				nyquist: test.Nyquist,
+				x: K ? [] : null,
+				y: [],
 
-			//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
-			//sym: [-1,1],
-			//nyquist: 10,
+				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
+				//sym: [-1,1],
+				//nyquist: 10,
 
-			x: [],
-			y: [],
+				cb: {
+					jump: function (n,fr,to,h,x) {
+						x.push( mvd[to].sample() );
+					},
 
-			cb: {
-				jump: function (n,fr,to,h,x) {
-					x.push( mvd[to].sample() );
-				},
-
-				save: function (x,name) {
-					var dsname = "mixgaus_" + name + "_test"+test.ID;
+					save: function (x,name) {
+						var dsname = "mixgaus_" + name + "_"+(test.Name||"");
 	
-					sql.query("REPLACE INTO app1.results SET ?", {
-						Result: JSON.stringify(x),
-						Name: dsname
-					}, function (err) {
-						console.log(err || "saved " + dsname);
-					});
+						sql.query("REPLACE INTO app1.results SET ?", {
+							Result: JSON.stringify(x),
+							Name: dsname
+						}, function (err) {
+							console.log(err || "saved " + dsname);
+						});
 
-					if (name == "jumpobs") {
-						console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
+						if (name == "jumpobs") {
+							console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
+						}
 					}
 				}
-			}
-		});
+			});
+		}
+		catch (err) {
+			console.log(err);
+		}
 
 		console.log({
 			jumpRates: RAN.A,
@@ -4145,7 +4151,7 @@ FLEX.execute.mixgaus = function (req, res) {
 
 		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
 			var n = RAN.t / RAN.Tc;
-			y.push( [n, RAN.gamma, Math.exp(-n/2)] );
+			y.push( [n, RAN.gamma, Math.exp(-n)] );
 			//console.log( [n, RAN.gamma, Math.exp(-n)] );
 		});
 	});
