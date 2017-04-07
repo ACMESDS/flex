@@ -4150,8 +4150,11 @@ FLEX.execute.mixgaus = function (req, res) {
 		});
 
 		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
-			var n = RAN.t / RAN.Tc;
-			y.push( [n, RAN.gamma, Math.exp(-n)] );
+			var n = RAN.t / RAN.Tc, E = RAN.E;
+			for (var cnt=0,m=0,M=RAN.N; m<M; m++) cnt += (E[m]>0);
+
+			y.push( [n, RAN.gamma, Math.exp(-n), cnt] );
+			
 			//console.log( [n, RAN.gamma, Math.exp(-n)] );
 		});
 	});
