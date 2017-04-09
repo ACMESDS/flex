@@ -4083,11 +4083,9 @@ FLEX.execute.mixgaus = function (req, res) {
 	var 
 		sql = req.sql;
 
-	res("submitted");
-
 	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
 	.on("result", function (test) {
-		console.log(test);
+		//console.log(test);
 
 		try {
 			var 
@@ -4116,10 +4114,27 @@ FLEX.execute.mixgaus = function (req, res) {
 					},
 
 					save: function (x,name) {
-						var dsname = "mixgaus_" + name + "_"+(test.Name||"");
-	
+						function poisson(m,a) {
+							var log = Math.log, exp = Math.exp;
+							// a^m e(-a) / m!
+							for (var sum=0,k=m; k; k--) sum += log(k);
+							return exp( m*log(a) - a - sum );							
+						}
+						
+						var 
+							dsname = "mixgaus_" + name + "_"+(test.Name || ""),
+							p = 1-RAN.piEq[0],  // equilb activity
+							N = RAN.N,
+							avg = N*p,
+							stats = [],
+							steps = RAN.steps,
+							lambda0 = avg / RAN.dt;
+						
+						for (var n=0,N=hist.length; n<N; n++) stats.push( [n, hist[n]/steps, poisson(n,avg) ] );
+						
+						
 						sql.query("REPLACE INTO app1.results SET ?", {
-							Result: JSON.stringify(x),
+							Result: JSON.stringify({sams: x, stats: stats}),
 							Name: dsname
 						}, function (err) {
 							console.log(err || "saved " + dsname);
@@ -4133,27 +4148,44 @@ FLEX.execute.mixgaus = function (req, res) {
 			});
 		}
 		catch (err) {
-			console.log(err);
+			return res(err);
 		}
+
+		res("submitted");
 
 		console.log({
 			jumpRates: RAN.A,
 			cumTxPr: RAN.P,
 			jumpCounts: RAN.T,
 			holdTimes: RAN.R,
-			eqPr: RAN.pi,
+			ensembleSize: RAN.N,
+			simIntervals: test.Steps,
+			initPr: RAN.pi,
 			Tc: RAN.Tc,
 			p: RAN.p,
 			dt: RAN.dt,
+			avgLoad: RAN.lambda,
 			symbols: RAN.sym,
 			cor: RAN.gamma
 		});
 
+		var 
+			cumcnt = 0, 
+			nbins = 50,
+			hist = new Array(nbins);
+		
+		for (var n=0; n<nbins; n++) hist[n] = 0;
+		
 		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
-			var n = RAN.t / RAN.Tc, E = RAN.E;
-			for (var cnt=0,m=0,M=RAN.N; m<M; m++) cnt += (E[m]>0);
-
-			y.push( [n, RAN.gamma, Math.exp(-n), cnt] );
+			var  
+				t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
+				cnt = N-RAN.E[0], lambda = (cumcnt+=cnt)/t, 
+				lambda0 = N/RAN.dt;
+				//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
+			
+			hist[ Math.floor( (cnt-1) * nbins / (N-1) ) ]++;
+			
+			y.push( [ n, RAN.gamma, Math.exp(-n), cnt, lambda / lambda0 ] );
 			
 			//console.log( [n, RAN.gamma, Math.exp(-n)] );
 		});
