@@ -536,7 +536,11 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 		if (err)
 			res( FLEX.errors.badbaseline );
 		else
-			res( (recs[0].Changes || 0)+" changes since last baseline - restart server" );
+			res( 
+				(query.noarchive ? "Bypass database commit" : "Database commited. ") +
+				(recs[0].Changes || 0)+" changes since last baseline.  Service restarted.  " +
+				"Return "+"here".link("/home.view")
+			);
 
 		sql.query("DELETE FROM openv.journal");
 	});
@@ -1154,6 +1158,8 @@ FLEX.select.HEALTH = function Select(req, res) {
 FLEX.select.likeus = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
+console.log(FLEX.site);
+	
 	sendMail({
 		to:  FLEX.site.distro.hawk,
 		subject: req.client + " likes " + FLEX.site.title + " !!",
@@ -4081,7 +4087,8 @@ function hawkJobs (client, url)  {
 FLEX.execute.mixgaus = function (req, res) {
 
 	var 
-		sql = req.sql;
+		sql = req.sql,
+		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor;
 
 	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
 	.on("result", function (test) {
@@ -4091,17 +4098,76 @@ FLEX.execute.mixgaus = function (req, res) {
 			var 
 				mix = JSON.parse(test.Mix) || [], 
 				mvd = [],
-				K = mix.length;
+				K = mix.length,	
+				mode = K ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "mg" : "na",
+				sampler = {
+					na: function (n,fr,to,h,x) {
+					},
+					
+					wi: function (n,fr,to,h,x) {  // wiener
+						var 
+							wi = mix[0],
+							mu = wi.mu,
+							sigma = wi.sigma,
+						
+							t = RAN.s, 
+							Wt = W[floor(t)],
+							xt = mu + sigma * Wt;
+						
+						x.push( xt );
+					},
+					
+					oo: function (n,fr,to,h,x) {  // ornstein-uhlenbeck
+						var 
+							oo = mix[0],
+							mu = oo.mu,
+							sigma = oo.sigma,
+							theta = oo.theta, 
+							x0 = oo.x0,
+							a = sigma / sqrt(2*theta),
+						
+							t = RAN.s, 
+							Et = exp(-theta*t),
+							Et2 = exp(2*theta*t),
+							Wt = W[floor(Et2 - 1)],
+							xt = x0 ? x0 * Et + mu*(1-Et) + a * Et * Wt : mu + a * Et * Wt;
+						
+						x.push( xt );
+					},
+						
+					br: function (n,fr,to,h,x) { // geometric brownian
+						var 
+							br = mix[0],
+							mu = br.mu,
+							sigma = br.sigma,
+							a = sigma*sigma / 2,
 
-			for (var k=0; k<K; k++)
-				mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
-	
+							t = RAN.s, 
+							Wt = W[floor(t)],
+							xt = exp( (mu-a)*t + sigma*Wt );
+						
+						x.push( xt );
+					},
+						
+					mg: function (n,fr,to,h,x) {  // mixed gaussian
+						var xt = mvd[to].sample();
+						
+						x.push( xt );
+					}
+				};
+
+			console.log([K,mode]);
+			
+			if (mode == "mg")
+				for (var k=0; k<K; k++)
+					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
+
 			RAN.config({
 				N: test.Ensemble,
 				A: JSON.parse(test.JumpRates || "[]"),
 				sym: JSON.parse(test.Symbols || "null"),
 				nyquist: test.Nyquist,
-				x: K ? [] : null,
+				x: [],
 				y: [],
 
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
@@ -4109,20 +4175,16 @@ FLEX.execute.mixgaus = function (req, res) {
 				//nyquist: 10,
 
 				cb: {
-					jump: function (n,fr,to,h,x) {
-						x.push( mvd[to].sample() );
-					},
-
+					jump: sampler[mode],
 					save: function (x,name) {
 						function poisson(m,a) {
-							var log = Math.log, exp = Math.exp;
 							// a^m e(-a) / m!
 							for (var sum=0,k=m; k; k--) sum += log(k);
 							return exp( m*log(a) - a - sum );							
 						}
 						
 						var 
-							dsname = "mixgaus_" + name + "_"+(test.Name || ""),
+							dsname = "mixgaus_" + name + "_" + (test.Name || ""),
 							p = 1-RAN.piEq[0],  // equilb activity
 							N = RAN.N,
 							avg = N*p,
@@ -4131,7 +4193,6 @@ FLEX.execute.mixgaus = function (req, res) {
 							lambda0 = avg / RAN.dt;
 						
 						for (var n=0,N=hist.length; n<N; n++) stats.push( [n, hist[n]/steps, poisson(n,avg) ] );
-						
 						
 						sql.query("REPLACE INTO app1.results SET ?", {
 							Result: JSON.stringify({sams: x, stats: stats}),
