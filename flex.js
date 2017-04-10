@@ -4110,7 +4110,7 @@ FLEX.execute.mixgaus = function (req, res) {
 							sigma = wi.sigma,
 						
 							t = RAN.s, 
-							Wt = RAN.W, //W[floor(t)],
+							Wt = RAN.W[0], 
 							xt = mu + sigma * Wt;
 						
 						x.push( xt );
@@ -4142,7 +4142,7 @@ FLEX.execute.mixgaus = function (req, res) {
 							a = sigma*sigma / 2,
 
 							t = RAN.s, 
-							Wt = RAN.W, //W[floor(t)],
+							Wt = RAN.W[0],
 							xt = exp( (mu-a)*t + sigma*Wt );
 						
 						x.push( xt );
@@ -4159,7 +4159,6 @@ FLEX.execute.mixgaus = function (req, res) {
 				for (var k=0; k<K; k++)
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
-			console.log([K,mode]);
 			RAN.config({
 				N: test.Ensemble,
 				wiener: 100,
@@ -4244,7 +4243,7 @@ FLEX.execute.mixgaus = function (req, res) {
 			
 			hist[ floor( (cnt-1) * nbins / (N-1) ) ]++;
 			
-			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, RAN.W ] );
+			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, RAN.W[0] ] );
 			
 			//console.log( [n, RAN.corr(), exp(-n)] );
 		});
