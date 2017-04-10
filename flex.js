@@ -4243,7 +4243,7 @@ FLEX.execute.mixgaus = function (req, res) {
 			
 			hist[ floor( (cnt-1) * nbins / (N-1) ) ]++;
 			
-			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, test.wiener ? RAN.W[0] : 0 ] );
+			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, RAN.wiener ? RAN.W[0] : 0 ] );
 			
 			//console.log( [n, RAN.corr(), exp(-n)] );
 		});
