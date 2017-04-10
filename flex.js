@@ -4069,8 +4069,7 @@ function hawkJobs (client, url)  {
 			{Enabled:1, Name:config.SetPoint}, 
 			config.MaxFaults
 		])
-		
-			.on("result", function (rule) {         // create a hawk
+		.on("result", function (rule) {         // create a hawk
 			
 			Trace(`HAWKING if[${rule.Condition}]then[${rule.Action}]  EVERY ${rule.Period} mins`);
 
@@ -4111,7 +4110,7 @@ FLEX.execute.mixgaus = function (req, res) {
 							sigma = wi.sigma,
 						
 							t = RAN.s, 
-							Wt = W[floor(t)],
+							Wt = RAN.W, //W[floor(t)],
 							xt = mu + sigma * Wt;
 						
 						x.push( xt );
@@ -4143,7 +4142,7 @@ FLEX.execute.mixgaus = function (req, res) {
 							a = sigma*sigma / 2,
 
 							t = RAN.s, 
-							Wt = W[floor(t)],
+							Wt = RAN.W, //W[floor(t)],
 							xt = exp( (mu-a)*t + sigma*Wt );
 						
 						x.push( xt );
@@ -4156,18 +4155,18 @@ FLEX.execute.mixgaus = function (req, res) {
 					}
 				};
 
-			console.log([K,mode]);
-			
 			if (mode == "mg")
 				for (var k=0; k<K; k++)
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
+			console.log([K,mode]);
 			RAN.config({
 				N: test.Ensemble,
+				wiener: 100,
 				A: JSON.parse(test.JumpRates || "[]"),
 				sym: JSON.parse(test.Symbols || "null"),
 				nyquist: test.Nyquist,
-				x: [],
+				x: K ? [] : null,
 				y: [],
 
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
@@ -4226,8 +4225,7 @@ FLEX.execute.mixgaus = function (req, res) {
 			p: RAN.p,
 			dt: RAN.dt,
 			avgLoad: RAN.lambda,
-			symbols: RAN.sym,
-			cor: RAN.gamma
+			symbols: RAN.sym
 		});
 
 		var 
@@ -4244,11 +4242,11 @@ FLEX.execute.mixgaus = function (req, res) {
 				lambda0 = N/RAN.dt;
 				//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
 			
-			hist[ Math.floor( (cnt-1) * nbins / (N-1) ) ]++;
+			hist[ floor( (cnt-1) * nbins / (N-1) ) ]++;
 			
-			y.push( [ n, RAN.gamma, Math.exp(-n), cnt, lambda / lambda0 ] );
+			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, RAN.W ] );
 			
-			//console.log( [n, RAN.gamma, Math.exp(-n)] );
+			//console.log( [n, RAN.corr(), exp(-n)] );
 		});
 	});
 }
