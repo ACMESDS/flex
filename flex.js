@@ -4174,7 +4174,7 @@ FLEX.execute.mixgaus = function (req, res) {
 
 				cb: {
 					jump: sampler[mode],
-					save: function (x,name) {
+					save: function (res) {
 						function poisson(m,a) {
 							// a^m e(-a) / m!
 							for (var sum=0,k=m; k; k--) sum += log(k);
@@ -4182,26 +4182,27 @@ FLEX.execute.mixgaus = function (req, res) {
 						}
 						
 						var 
-							dsname = "mixgaus_" + name + "_" + (test.Name || ""),
+							dsname = "mixgaus_" + (test.Name || ""),
 							p = 1-RAN.piEq[0],  // equilb activity
 							N = RAN.N,
 							avg = N*p,
-							stats = [],
+							stats = res.stats = [],
 							steps = RAN.steps,
 							lambda0 = avg / RAN.dt;
 						
 						for (var n=0,N=hist.length; n<N; n++) stats.push( [n, hist[n]/steps, poisson(n,avg) ] );
 						
+						if (res.jumps) {
+							console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
+						}
+
 						sql.query("REPLACE INTO app1.results SET ?", {
-							Result: JSON.stringify({sams: x, stats: stats}),
+							Result: JSON.stringify(res),
 							Name: dsname
 						}, function (err) {
 							console.log(err || "saved " + dsname);
 						});
 
-						if (name == "jumpobs") {
-							console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
-						}
 					}
 				}
 			});
@@ -4243,7 +4244,7 @@ FLEX.execute.mixgaus = function (req, res) {
 			
 			hist[ floor( (cnt-1) * nbins / (N-1) ) ]++;
 			
-			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0, RAN.wiener ? RAN.W[0] : 0 ] );
+			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
 			
 			//console.log( [n, RAN.corr(), exp(-n)] );
 		});
