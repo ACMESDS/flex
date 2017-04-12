@@ -4167,7 +4167,8 @@ FLEX.execute.mixgaus = function (req, res) {
 				nyquist: test.Nyquist,
 				x: K ? [] : null,
 				y: [],
-
+				bins: 50,
+				
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
 				//sym: [-1,1],
 				//nyquist: 10,
@@ -4214,19 +4215,10 @@ FLEX.execute.mixgaus = function (req, res) {
 			symbols: RAN.sym
 		});
 
-		var 
-			cumcnt = 0, 
-			nbins = 50,
-			dbins = nbins / (N-1),
-			dcounts = 1/dbins,
-			hist = new Array(nbins);
-		
-		for (var n=0; n<nbins; n++) hist[n] = 0;
-		
 		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
 			var  
 				t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
-				cnt = N-RAN.E[0], lambda = (cumcnt+=cnt)/t, 
+				cnt = N-RAN.E[0], lambda = RAN.G[0]/t, 
 				lambda0 = N/RAN.dt;
 				//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
 			
