@@ -4176,11 +4176,35 @@ FLEX.execute.mixgaus = function (req, res) {
 				cb: {
 					jump: sampler[mode],
 					save: function (rtn) {
-						var 
-							dsname = "mixgaus_" + (test.Name || "");
 						
+						function dist(a,b) { 
+							var d = [ a[0]-b[0], a[1]-b[1] ];
+							return sqrt( d[0]*d[0] + d[1]*d[1] );
+						}
+
+						Array.prototype.nearest = function (a,metric) {
+							var nmin = 0, min = 1e99, a = [];
+
+							this.each( function (n,a) {
+
+							for (var n=0,N=a.length; n<N; n++)
+								if ( metric( a[0] ) < min) { nmin = 
+
+						var 
+							dsname = "mixgaus_" + (test.Name || ""),
+							sqrt = Math.sqrt;						
+
 						if (res.jumps) {
-							console.log(JSON.stringify({ mle: RAN.MLE(x, 2) }));
+							var 
+								gmms = rtn.gmm = RAN.MLE(x, K),
+								match = [];
+
+console.log(gmms);
+							gmms.each( function k,gmm) {
+								match.push( gmm.nearest( function (test) {
+										return dist( test.mu, gmm.mu );
+								});
+							});
 						}
 
 						sql.query("REPLACE INTO app1.results SET ?", {
