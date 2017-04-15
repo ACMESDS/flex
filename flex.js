@@ -4097,8 +4097,8 @@ FLEX.execute.mixgaus = function (req, res) {
 			var 
 				mix = JSON.parse(test.Mix) || [], 
 				mvd = [],
-				K = mix.length,	
-				mode = K ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "mg" : "na",
+				mixes = mix.length,	
+				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "mg" : "na",
 				sampler = {
 					na: function (n,fr,to,h,x) {
 					},
@@ -4156,7 +4156,7 @@ FLEX.execute.mixgaus = function (req, res) {
 				};
 
 			if (mode == "mg")
-				for (var k=0; k<K; k++)
+				for (var k=0; k<mixes; k++)
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
 			RAN.config({
@@ -4165,8 +4165,8 @@ FLEX.execute.mixgaus = function (req, res) {
 				A: JSON.parse(test.JumpRates || "[]"),
 				sym: JSON.parse(test.Symbols || "null"),
 				nyquist: test.Nyquist,
-				x: K ? [] : null,
-				y: [],
+				x: mixes ? [] : null,  // jump obs
+				y: [],  // step obs
 				bins: 50,
 				
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
@@ -4182,29 +4182,33 @@ FLEX.execute.mixgaus = function (req, res) {
 							return sqrt( d[0]*d[0] + d[1]*d[1] );
 						}
 
-						Array.prototype.nearest = function (a,metric) {
-							var nmin = 0, min = 1e99, a = [];
+						Array.prototype.nearestOf = function (metric) {
+							var imin = 0, emin = 1e99;
 
-							this.each( function (n,a) {
-
-							for (var n=0,N=a.length; n<N; n++)
-								if ( metric( a[0] ) < min) { nmin = 
+							this.each( function (i,test) {
+								var e = metric( test );
+								if (  e < emin) { imin = i; emin = e; }
+							});
+							return {idx: imin, err: emin};
+						}
 
 						var 
 							dsname = "mixgaus_" + (test.Name || ""),
-							sqrt = Math.sqrt;						
+							sqrt = Math.sqrt;
 
-						if (res.jumps) {
+						if (rtn.jumps) {  // generate, grade and sort gauss mixing mle results
 							var 
-								gmms = rtn.gmm = RAN.MLE(x, K),
-								match = [];
+								gmms = rtn.jumps = RAN.MLE(rtn.jumps, mixes);
 
-console.log(gmms);
-							gmms.each( function k,gmm) {
-								match.push( gmm.nearest( function (test) {
-										return dist( test.mu, gmm.mu );
+							gmms.each( function (k,gmm) {
+								gmm.find = mix.nearestOf(function (test) {
+									return dist( test.mu, gmm.mu );
 								});
 							});
+							gmms.sort( function (a,b) {
+								return a.find.idx < b.find.idx ? 1 : -1;
+							});
+console.log(JSON.stringify(gmms)); 
 						}
 
 						sql.query("REPLACE INTO app1.results SET ?", {
@@ -4225,6 +4229,8 @@ console.log(gmms);
 		res("submitted");
 
 		console.log({
+			mixes: mixes,
+			sampleMode: mode,
 			jumpRates: RAN.A,
 			cumTxPr: RAN.P,
 			jumpCounts: RAN.T,
@@ -4246,7 +4252,7 @@ console.log(gmms);
 				lambda0 = N/RAN.dt;
 				//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
 			
-			hist[ floor( (cnt-1) * dbins ) ]++;
+			//hist[ floor( (cnt-1) * dbins ) ]++;
 			
 			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
 			
