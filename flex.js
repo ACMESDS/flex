@@ -4083,22 +4083,20 @@ function hawkJobs (client, url)  {
 	});
 }
 
+// plot:
+// /plot.view?src=mixgaus&json=Results.steps&legend=test1
+// 
+
 FLEX.execute.mixgaus = function (req, res) {
-
-	var 
-		sql = req.sql,
-		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor;
-
-	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
-	.on("result", function (test) {
-		//console.log(test);
-
+	
+	function rungaus (test,run) {
+		
 		try {
 			var 
 				mix = JSON.parse(test.Mix) || [], 
 				mvd = [],
 				mixes = mix.length,	
-				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "mg" : "na",
+				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "gm" : "na",
 				sampler = {
 					na: function (n,fr,to,h,x) {
 					},
@@ -4148,14 +4146,14 @@ FLEX.execute.mixgaus = function (req, res) {
 						x.push( xt );
 					},
 						
-					mg: function (n,fr,to,h,x) {  // mixed gaussian
+					gm: function (n,fr,to,h,x) {  // mixed gaussian
 						var xt = mvd[to].sample();
 						
 						x.push( xt );
 					}
 				};
 
-			if (mode == "mg")
+			if (mode == "gm")
 				for (var k=0; k<mixes; k++)
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
@@ -4173,64 +4171,32 @@ FLEX.execute.mixgaus = function (req, res) {
 				//sym: [-1,1],
 				//nyquist: 10,
 
-				cb: {
+				on: {
 					jump: sampler[mode],
-					save: function (rtn) {
-						
-						function dist(a,b) { 
-							var d = [ a[0]-b[0], a[1]-b[1] ];
-							return sqrt( d[0]*d[0] + d[1]*d[1] );
-						}
+					
+					step: function (y) {
+						var  
+							t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
+							cnt = N-RAN.E[0], lambda = RAN.G[0]/t, lambda0 = N/RAN.dt;
+							//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
 
-						Array.prototype.nearestOf = function (metric) {
-							var imin = 0, emin = 1e99;
+						//hist[ floor( (cnt-1) * dbins ) ]++;
 
-							this.each( function (i,test) {
-								var e = metric( test );
-								if (  e < emin) { imin = i; emin = e; }
-							});
-							return {idx: imin, err: emin};
-						}
+						y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
 
-						var 
-							dsname = "mixgaus_" + (test.Name || ""),
-							sqrt = Math.sqrt;
-
-						if (rtn.jumps) {  // generate, grade and sort gauss mixing mle results
-							var 
-								gmms = rtn.jumps = RAN.MLE(rtn.jumps, mixes);
-
-							gmms.each( function (k,gmm) {
-								gmm.find = mix.nearestOf(function (test) {
-									return dist( test.mu, gmm.mu );
-								});
-							});
-							gmms.sort( function (a,b) {
-								return a.find.idx < b.find.idx ? 1 : -1;
-							});
-console.log(JSON.stringify(gmms)); 
-						}
-
-						sql.query("REPLACE INTO app1.results SET ?", {
-							Result: JSON.stringify(rtn),
-							Name: dsname
-						}, function (err) {
-							console.log(err || "saved " + dsname);
-						});
-
+						//console.log( [n, RAN.corr(), exp(-n)] );
 					}
 				}
 			});
 		}
 		catch (err) {
-			return res(err);
+			console.log (err);
 		}
 
-		res("submitted");
-
-		console.log({
+		var info = {
 			mixes: mixes,
 			sampleMode: mode,
+			wienerSteps: RAN.wiener,
 			jumpRates: RAN.A,
 			cumTxPr: RAN.P,
 			jumpCounts: RAN.T,
@@ -4243,20 +4209,70 @@ console.log(JSON.stringify(gmms));
 			dt: RAN.dt,
 			avgLoad: RAN.lambda,
 			symbols: RAN.sym
-		});
+		};
+		
+		console.log(info);
 
-		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (y) {
-			var  
-				t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
-				cnt = N-RAN.E[0], lambda = RAN.G[0]/t, 
-				lambda0 = N/RAN.dt;
-				//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
+		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (x,y,stats) {
+
+			function dist(a,b) { 
+				var d = [ a[0]-b[0], a[1]-b[1] ];
+				return sqrt( d[0]*d[0] + d[1]*d[1] );
+			}
+
+			Array.prototype.nearestOf = function (metric) {
+				var imin = 0, emin = 1e99;
+
+				this.each( function (i,test) {
+					var e = metric( test );
+					if (  e < emin) { imin = i; emin = e; }
+				});
+				return {idx: imin, err: emin};
+			}
+
+			if (RAN.x) {  // generate, grade and sort gauss mixing mle results
+				var 
+					gmms = RAN.MLE(RAN.x, mixes);
+
+				gmms.each( function (k,gmm) {
+					gmm.find = mix.nearestOf(function (test) {
+						return dist( test.mu, gmm.mu );
+					});
+				});
+
+				gmms.sort( function (a,b) {
+					return a.find.idx < b.find.idx ? 1 : -1;
+				});
+console.log(JSON.stringify(gmms)); 
+			}
 			
-			//hist[ floor( (cnt-1) * dbins ) ]++;
-			
-			y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
-			
-			//console.log( [n, RAN.corr(), exp(-n)] );
+			Copy({
+				jumps: x,
+				steps: y,
+				stats: stats,
+				info: info
+			}, run);
+		});
+	}
+	
+	var 
+		sql = req.sql,
+		run = {},
+		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor;
+
+	res("submitted");
+	
+	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
+	.on("result", function (test) {
+		
+//console.log(test);
+		rungaus(test,run);
+		
+		sql.query("UPDATE app1.mixgaus SET ? WHERE ?", [{
+			Result: JSON.stringify(run)}, {
+			Name: test.Name
+		}], function (err) {
+			console.log(err || "saved " + test.Name);
 		});
 	});
 }
