@@ -4239,15 +4239,23 @@ FLEX.execute.mixgaus = function (req, res) {
 				gmms.sort( function (a,b) {
 					return a.find.idx < b.find.idx ? 1 : -1;
 				});
+
+				Copy({
+					mles: gmms,
+					steps: y,
+					stats: stats,
+					info: info
+				}, run);
+
 console.log(JSON.stringify(gmms)); 
 			}
-			
-			Copy({
-				jumps: x,
-				steps: y,
-				stats: stats,
-				info: info
-			}, run);
+			else
+				Copy({
+					jumps: x,
+					steps: y,
+					stats: stats,
+					info: info
+				}, run);
 		});
 	}
 	
