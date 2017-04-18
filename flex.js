@@ -867,7 +867,7 @@ FLEX.select.SUMMARY = function Select(req, res) {
 FLEX.select.USERS = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,userinfo(Client,Org,Location) AS Name FROM sockets WHERE least(?,1) ORDER BY Client", 
+	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM sockets WHERE least(?,1) ORDER BY Client", 
 		guardQuery(query,true),
 		function (err, recs) {
 			res(err || recs);
@@ -4095,18 +4095,25 @@ FLEX.execute.mixgaus = function (req, res) {
 			var 
 				mix = JSON.parse(test.Mix) || [], 
 				mvd = [],
+				ooW = [],
 				mixes = mix.length,	
 				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "gm" : "na",
+				mix0 = mix[0] || {},
+				mu = mix0.mu,
+				sigma = mix0.sigma,
+				theta = mix0.theta, 
+				x0 = mix0.x0,
+				a = {
+					br: sigma*sigma / 2,
+					oo: sigma / sqrt(2*theta)
+				},
+
 				sampler = {
 					na: function (n,fr,to,h,x) {
 					},
 					
 					wi: function (n,fr,to,h,x) {  // wiener
 						var 
-							wi = mix[0],
-							mu = wi.mu,
-							sigma = wi.sigma,
-						
 							t = RAN.s, 
 							Wt = RAN.W[0], 
 							xt = mu + sigma * Wt;
@@ -4116,32 +4123,21 @@ FLEX.execute.mixgaus = function (req, res) {
 					
 					oo: function (n,fr,to,h,x) {  // ornstein-uhlenbeck
 						var 
-							oo = mix[0],
-							mu = oo.mu,
-							sigma = oo.sigma,
-							theta = oo.theta, 
-							x0 = oo.x0,
-							a = sigma / sqrt(2*theta),
-						
 							t = RAN.s, 
 							Et = exp(-theta*t),
 							Et2 = exp(2*theta*t),
-							Wt = W[floor(Et2 - 1)],
-							xt = x0 ? x0 * Et + mu*(1-Et) + a * Et * Wt : mu + a * Et * Wt;
+							Wt = ooW[floor(Et2 - 1)] || 0,
+							xt = x0 ? x0 * Et + mu*(1-Et) + a.oo * Et * Wt : mu + a.oo * Et * Wt;
 						
+						ooW.push( W[0] );
 						x.push( xt );
 					},
 						
 					br: function (n,fr,to,h,x) { // geometric brownian
 						var 
-							br = mix[0],
-							mu = br.mu,
-							sigma = br.sigma,
-							a = sigma*sigma / 2,
-
 							t = RAN.s, 
 							Wt = RAN.W[0],
-							xt = exp( (mu-a)*t + sigma*Wt );
+							xt = exp( (mu-a.br)*t + sigma*Wt );
 						
 						x.push( xt );
 					},
