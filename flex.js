@@ -867,7 +867,7 @@ FLEX.select.SUMMARY = function Select(req, res) {
 FLEX.select.USERS = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM sockets WHERE least(?,1) ORDER BY Client", 
+	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM openv.sockets WHERE least(?,1) ORDER BY Client", 
 		guardQuery(query,true),
 		function (err, recs) {
 			res(err || recs);
