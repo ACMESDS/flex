@@ -4084,31 +4084,34 @@ function hawkJobs (client, url)  {
 }
 
 // plot:
-// /plot.view?src=mixgaus&json=Results.steps&legend=test1
+// /plot.view?src=gaussmix&json=Results.steps&legend=test1
 // 
 
-FLEX.execute.mixgaus = function (req, res) {
+FLEX.execute.gaussmix = function (req, res) {
 	
 	function rungaus (test,run) {
 		
 		try {
 			var 
-				mix = JSON.parse(test.Mix) || [], 
-				mvd = [],
-				ooW = [],
-				mixes = mix.length,	
-				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "gm" : "na",
-				mix0 = mix[0] || {},
-				mu = mix0.mu,
-				sigma = mix0.sigma,
-				theta = mix0.theta, 
-				x0 = mix0.x0,
-				a = {
+				mix = JSON.parse(test.Mix) || [],  // gauss mixing parameters
+				mvd = [], 	// multivariate distribution parms
+				ooW = [], // wiener/oo process look ahead
+				mixes = mix.length,	// number of mixes
+				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "gm" : "na",  // mix mode
+				
+				mix0 = mix[0] || {},  // wiener/oo parms (using mix[0] now)
+				mu = mix0.mu,	// mean 
+				sigma = mix0.sigma,  // covariance
+				theta = mix0.theta,  	// oo time lag
+				x0 = mix0.x0, 		// oo initial pos
+				a = {  // process fixed parms
+					wi: 0,
+					gm: 0,
 					br: sigma*sigma / 2,
 					oo: sigma / sqrt(2*theta)
 				},
 
-				sampler = {
+				sampler = {  // sampling method during RAN jumps
 					na: function (n,fr,to,h,x) {
 					},
 					
@@ -4163,6 +4166,7 @@ FLEX.execute.mixgaus = function (req, res) {
 				y: [],  // step obs
 				bins: 50,
 				
+				// debugging
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
 				//sym: [-1,1],
 				//nyquist: 10,
@@ -4174,13 +4178,8 @@ FLEX.execute.mixgaus = function (req, res) {
 						var  
 							t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
 							cnt = N-RAN.E[0], lambda = RAN.G[0]/t, lambda0 = N/RAN.dt;
-							//lambda0 = (1-RAN.piEq[0])*N/RAN.dt;
-
-						//hist[ floor( (cnt-1) * dbins ) ]++;
 
 						y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
-
-						//console.log( [n, RAN.corr(), exp(-n)] );
 					}
 				}
 			});
@@ -4190,21 +4189,16 @@ FLEX.execute.mixgaus = function (req, res) {
 		}
 
 		var info = {
-			mixes: mixes,
+			cellCount: mixes,
 			sampleMode: mode,
-			wienerSteps: RAN.wiener,
-			jumpRates: RAN.A,
-			cumTxPr: RAN.P,
-			jumpCounts: RAN.T,
-			holdTimes: RAN.R,
+			randomWalks: RAN.wiener,
 			ensembleSize: RAN.N,
-			simIntervals: test.Steps,
-			initPr: RAN.pi,
-			Tc: RAN.Tc,
-			p: RAN.p,
-			dt: RAN.dt,
-			avgLoad: RAN.lambda,
-			symbols: RAN.sym
+			coherenceTime: RAN.Tc,
+			coherenceIntervals: test.Steps,
+			ensembleActivity: RAN.p,
+			ensembleLoad: RAN.lambda,
+			sampleTime: RAN.dt,
+			testName: test.Name			
 		};
 		
 		console.log(info);
@@ -4226,7 +4220,7 @@ FLEX.execute.mixgaus = function (req, res) {
 				return {idx: imin, err: emin};
 			}
 
-			if (RAN.x) {  // generate, grade and sort gauss mixing mle results
+			if (RAN.x) {  // generate, grade, sort and store gauss mixing mle results
 				var 
 					gmms = RAN.MLE(RAN.x, mixes);
 
@@ -4240,15 +4234,58 @@ FLEX.execute.mixgaus = function (req, res) {
 					return a.find.idx < b.find.idx ? 1 : -1;
 				});
 
+				var grec = Copy(info, {
+					processStats: JSON.stringify({
+						jumpRates: RAN.A,
+						cumTxPr: RAN.P,
+						jumpCounts: RAN.T,
+						holdTimes: RAN.R,
+						symbols: RAN.sym,
+						initPr: RAN.pi						
+					})
+				});
+
+				gmms.each(function (n,gmm) {
+					Copy({
+						cellIndex: gmm.find.idx,
+						cellType: "mle",
+						cellError: gmm.find.err * 100,
+						cellParms: JSON.stringify({
+							mu: gmm.mu,
+							sigma: gmm.sigma
+						})
+					}, grec);
+						
+					sql.query("REPLACE INTO gaussruns SET ?", grec, function (err) {
+						console.log(err || "cell saved");
+					});
+				});
+
+				mix.each(function (n,mix) {					
+					Copy({
+						cellIndex: n,
+						cellType: "true",
+						cellError: 0,
+						cellParms: JSON.stringify({
+							mu: mix.mu,
+							sigma: mix.sigma
+						})
+					}, grec);
+						
+					sql.query("REPLACE INTO gaussruns SET ?", grec, function (err) {
+						console.log(err || "cell saved");
+					});
+				});
+
 				Copy({
-					mles: gmms,
 					steps: y,
 					stats: stats,
 					info: info
 				}, run);
-
+				
 console.log(JSON.stringify(gmms)); 
 			}
+			
 			else
 				Copy({
 					jumps: x,
@@ -4266,13 +4303,13 @@ console.log(JSON.stringify(gmms));
 
 	res("submitted");
 	
-	sql.query("SELECT * FROM app1.mixgaus WHERE least(?,1)", req.query)
+	sql.query("SELECT * FROM app1.gaussmix WHERE least(?,1)", req.query)
 	.on("result", function (test) {
 		
 //console.log(test);
 		rungaus(test,run);
 		
-		sql.query("UPDATE app1.mixgaus SET ? WHERE ?", [{
+		sql.query("UPDATE app1.gaussmix SET ? WHERE ?", [{
 			Result: JSON.stringify(run)}, {
 			Name: test.Name
 		}], function (err) {
