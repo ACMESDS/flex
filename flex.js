@@ -4089,11 +4089,35 @@ function hawkJobs (client, url)  {
 
 FLEX.execute.gaussmix = function (req, res) {
 	
+	var 
+		sql = req.sql,
+		run = {},
+		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
+
+	function randint() {
+		return floor(rand() * 10);
+	}
+	
 	function rungaus (test,run) {
 		
 		try {
 			var 
-				mix = JSON.parse(test.Mix) || [],  // gauss mixing parameters
+				mix = JSON.parse(test.Mix) || [];  // gauss mixing parameters
+			
+			if (mix.constructor == Object) {
+				var K = mix.K, mix = [];
+				
+				for (var k=0; k<K; k++) {
+					var xx = 0.9, yy = 0.7, xy = yx = 0.4;
+					mix.push({
+						mu: [randint(), randint()],
+						sigma: [[xx,xy],[yx,yy]]
+					});
+				}
+				console.log(mix);
+			}
+			
+			var
 				mvd = [], 	// multivariate distribution parms
 				ooW = [], // wiener/oo process look ahead
 				mixes = mix.length,	// number of mixes
@@ -4220,6 +4244,19 @@ FLEX.execute.gaussmix = function (req, res) {
 				return {idx: imin, err: emin};
 			}
 
+			Copy({
+				processSteps: RAN.steps,
+				processSamples: RAN.jumps,
+				processStats: JSON.stringify({
+					jumpRates: RAN.A,
+					cumTxPr: RAN.P,
+					jumpCounts: RAN.T,
+					holdTimes: RAN.R,
+					symbols: RAN.sym,
+					initPr: RAN.pi						
+				})
+			}, info);
+
 			if (RAN.x) {  // generate, grade, sort and store gauss mixing mle results
 				var 
 					gmms = RAN.MLE(RAN.x, mixes);
@@ -4232,17 +4269,6 @@ FLEX.execute.gaussmix = function (req, res) {
 
 				gmms.sort( function (a,b) {
 					return a.find.idx < b.find.idx ? 1 : -1;
-				});
-
-				var grec = Copy(info, {
-					processStats: JSON.stringify({
-						jumpRates: RAN.A,
-						cumTxPr: RAN.P,
-						jumpCounts: RAN.T,
-						holdTimes: RAN.R,
-						symbols: RAN.sym,
-						initPr: RAN.pi						
-					})
 				});
 
 				gmms.each(function (n,gmm) {
@@ -4296,11 +4322,6 @@ console.log(JSON.stringify(gmms));
 		});
 	}
 	
-	var 
-		sql = req.sql,
-		run = {},
-		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor;
-
 	res("submitted");
 	
 	sql.query("SELECT * FROM app1.gaussmix WHERE least(?,1)", req.query)
