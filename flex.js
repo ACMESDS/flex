@@ -1766,6 +1766,17 @@ FLEX.execute.engines = function Execute(req, res) {
 		Name = query.Name, 
 		Path = `./public/${Engine}/${Name}.${Engine}`;
 	
+	function compileEngine(engine, name, code, res) {
+		try {
+			VM.runInContext( "FLEX."+engine+"."+name+"="+code, VM.createContext({FLEX:FLEX})  );
+
+			if (res) res("ok");
+		}
+		catch (err) {
+			if (res) res(new Error(err+""));
+		}
+	}			
+		
 	Trace(`ACCESSING ${Name}.${Engine}`);
 	
 	if (Engine && Name)
@@ -3365,17 +3376,6 @@ function statRepo(sql) {
 	
 }
 
-function compileEngine(engine, name, code, res) {
-	try {
-		VM.runInContext( "FLEX."+engine+"."+name+"="+code, VM.createContext({FLEX:FLEX})  );
-		
-		if (res) res("ok");
-	}
-	catch (err) {
-		if (res) res(new Error(err+""));
-	}
-}			
-	
 function feedNews(sql, engine) {
 	sql.query("SELECT * FROM features WHERE NOT ad")
 	.on("result", function (feature) {
@@ -4083,10 +4083,6 @@ function hawkJobs (client, url)  {
 	});
 }
 
-// plot:
-// /plot.view?src=gaussmix&json=Results.steps&legend=test1
-// 
-
 FLEX.execute.gaussmix = function (req, res) {
 	
 	var 
@@ -4280,9 +4276,9 @@ FLEX.execute.gaussmix = function (req, res) {
 							mu: gmm.mu,
 							sigma: gmm.sigma
 						})
-					}, grec);
+					}, info);
 						
-					sql.query("REPLACE INTO gaussruns SET ?", grec, function (err) {
+					sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
 						console.log(err || "cell saved");
 					});
 				});
@@ -4296,9 +4292,9 @@ FLEX.execute.gaussmix = function (req, res) {
 							mu: mix.mu,
 							sigma: mix.sigma
 						})
-					}, grec);
+					}, info);
 						
-					sql.query("REPLACE INTO gaussruns SET ?", grec, function (err) {
+					sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
 						console.log(err || "cell saved");
 					});
 				});
