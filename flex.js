@@ -4253,9 +4253,9 @@ FLEX.execute.gaussmix = function (req, res) {
 				})
 			}, info);
 
-			if (RAN.x) {  // generate, grade, sort and store gauss mixing mle results
+			if (x) {  // generate, grade, sort and store gauss mixing mle results
 				var 
-					gmms = RAN.MLE(RAN.x, mixes);
+					gmms = RAN.MLE(x, mixes);
 
 				gmms.each( function (k,gmm) {
 					gmm.find = mix.nearestOf(function (test) {
