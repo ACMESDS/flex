@@ -1250,8 +1250,8 @@ FLEX.select.history = function (req,res) {
 					"SELECT "
 					+ "Hawk, max(power) AS Power, 'approved' AS Comment, "
 					+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
-					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Links,"
-					+ "group_concat(distinct journal.dataset) AS Datasets,"
+					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Datasets,"
+					//+ "group_concat(distinct journal.dataset) AS Datasets,"
 					+ "group_concat(distinct journal.field) AS Fields,"
 					+ "linkrole(hawk,max(updates),max(power)) AS Moderator,"
 					+ "false as Approved "
@@ -1269,7 +1269,7 @@ FLEX.select.history = function (req,res) {
 
 				Trace(sql.query(
 				"SELECT "
-				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Activity,"
+				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Datasets,"
 				+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
 				+ "FROM journal "
 				+ "WHERE Updates "
@@ -1345,7 +1345,7 @@ console.log({
 						Reviewed: earn.Reviewed
 				}, earn.Earnings, earn.Strength*earn.Strength, earn.Comment, earn.Reviewed] );
 
-				if (query.Datasets) 
+				if (query.Datasets) // reset journalled updates
 				query.Datasets.split(",").each( function (n,dataset) {
 					sql.query(
 						"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
@@ -1354,9 +1354,9 @@ console.log({
 					});
 				});
 				
-				if (query.Power)
-				sql.query("SELECT Client FROM openv.roles WHERE Strength>=?", query.Power, function (err,ghawk) {
-				sql.query("SELECT Client FROM openv.roles WHERE Strength<?", query.Power, function (err,lhawk) {
+				if (query.Power) // notify greater and lesser hawks of approval
+				sql.query("SELECT Client FROM openv.roles WHERE Strength>=?", query.Power, function (err,ghawk) { // greater hawks
+				sql.query("SELECT Client FROM openv.roles WHERE Strength<?", query.Power, function (err,lhawk) { // lesser hawks
 
 					var to=[], cc=[];
 					
@@ -1384,7 +1384,7 @@ console.log({
 			});
 	}
 	else
-		res( new Error("Missing Reviewed")  );
+		res( new Error("Missing &Approved parameter")  );
 
 }
 
