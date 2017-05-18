@@ -1241,24 +1241,29 @@ FLEX.select.history = function (req,res) {
 	
 	sql.query("USE openv", function () {
 		
-		switch (query.return) {
+		switch (query.option) {
 
 			case "signoffs":
-				var input = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
+				var comment = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
 				
 				Trace(sql.query(
 					"SELECT "
-					+ "Hawk, max(power) AS Power, 'approved' AS Comment, "
-					+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
-					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Datasets,"
-					//+ "group_concat(distinct journal.dataset) AS Datasets,"
+					+ "Hawk, max(power) AS Power, "
+					+ "? AS Comment, "
+					//+ 'approved' AS Comment, "
+					//+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
+					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Changes,"
+					+ "link('Approve', concat('/history.db', char(63), 'option=approve'," 
+					+ 		" '&Power=', Power,"
+					+ 		" '&Hawk=', Hawk,"
+					+ 		" '&Datasets=', group_concat(distinct journal.dataset))) AS Approve,"
 					+ "group_concat(distinct journal.field) AS Fields,"
 					+ "linkrole(hawk,max(updates),max(power)) AS Moderator,"
 					+ "false as Approved "
 					+ "FROM journal "
 					+ "LEFT JOIN viewers ON journal.Dataset=viewers.Dataset "
 					+ "WHERE Updates "
-					+ `GROUP BY hawk,${pivot}`, input,
+					+ `GROUP BY hawk,${pivot}`, comment,
 					function (err, recs) {
 						
 						res( err || recs );
@@ -1294,6 +1299,71 @@ FLEX.select.history = function (req,res) {
 				}));
 				break;
 				
+			case "approve":
+				res( "Thank you for your review -" 
+						+ " revise your comments".hyper(`/roles.view?client=${req.client}`)
+						+ " as needed" );
+		
+				sql.query(
+					"SELECT sum(Updates)*? AS Earnings FROM journal WHERE ?", [
+					query.Power, {Hawk:query.Hawk}], function (err,earns) {
+						var 
+							earn = earns[0] || {Earnings: 0},
+							log = {
+								Client: req.client,
+								Hawk: query.Hawk,
+								Reviews: 1,
+								Datasets: query.Datasets,
+								Earnings: earn.Earnings,
+								Comment: "Approved",
+								Power: query.Power,
+								Reviewed: new Date()
+							};
+						
+						sql.query(
+							"INSERT INTO roles SET ? ON DUPLICATE KEY UPDATE "
+							+ "Reviews=Reviews+1, Earnings=Earnings+?, Comment=?, Reviewed=?, Datasets=?", [
+								log, log.Earnings, log.Comment, log.Reviewed, log.Datasets] );
+						
+						if (query.Datasets) // reset journalled updates
+						query.Datasets.split(",").each( function (n,dataset) {
+							sql.query(
+								"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
+									Hawk: query.Hawk,
+									Dataset: dataset
+							});
+						});
+
+						if (query.Power) // notify greater and lesser hawks of approval
+						sql.query("SELECT Client FROM roles WHERE Power>=?", query.Power, function (err,ghawk) { // greater hawks
+						sql.query("SELECT Client FROM roles WHERE Power<?", query.Power, function (err,lhawk) { // lesser hawks
+
+							var to=[], cc=[];
+
+							ghawk.each(function (n,hawk) {
+								to.push( hawk.client );
+							});
+							lhawk.each(function (n,hawk) {
+								cc.push( hawk.client );
+							});
+
+							if (to.length)
+							sendMail({
+								to: to.join(";"),
+								cc: cc.join(";"),
+								subject: "review completed",
+								body: "for more information see " 
+									+ "moderator comments".hyper("/moderate.view") 
+									+ " and " 
+									+ "project status".hyper("/project.view")
+							}, function (err) {
+								console.log("Send="+err);
+							});
+						});
+						});
+				});
+				break;
+				
 			case "itemized":
 			default:
 					
@@ -1310,81 +1380,6 @@ FLEX.select.history = function (req,res) {
 
 		}
 	});
-
-}
-
-FLEX.execute.history = function (req,res) {
-	var sql = req.sql, query = req.query, body = req.body;
-
-console.log({
-	q: query,
-	b: body,
-	f: req.flags
-});
-	
-	if (query.Approved) {
-		res( "Thank you for your review - check out your earnings "+"here".hyper("/moderate.view") );
-		
-		sql.query(
-			"SELECT sum(Updates) AS Earnings, max(Power) AS Strength FROM openv.journal WHERE ?", 
-			{Hawk:query.Hawk}, function (err,earns) {
-				var earn = earns[0] || {Earnings:0, Strength:0};
-				
-				earn.Comment = unescape(query.Comment);
-				earn.Reviewed = new Date();
-				
-				sql.query(
-					"INSERT INTO openv.roles SET ? ON DUPLICATE KEY UPDATE "
-					+ "Reviews=Reviews+1, Earnings=Earnings+?, Strength=?, Comment=?, Reviewed=?", [{
-						Client: req.client,
-						Hawk: query.Hawk,
-						Reviews: 1,
-						Earnings: earn.Earnings*earn.Strength,
-						Strength: earn.Strength,
-						Comment: earn.Comment,
-						Reviewed: earn.Reviewed
-				}, earn.Earnings, earn.Strength*earn.Strength, earn.Comment, earn.Reviewed] );
-
-				if (query.Datasets) // reset journalled updates
-				query.Datasets.split(",").each( function (n,dataset) {
-					sql.query(
-						"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
-							Hawk: query.Hawk,
-							Dataset: dataset
-					});
-				});
-				
-				if (query.Power) // notify greater and lesser hawks of approval
-				sql.query("SELECT Client FROM openv.roles WHERE Strength>=?", query.Power, function (err,ghawk) { // greater hawks
-				sql.query("SELECT Client FROM openv.roles WHERE Strength<?", query.Power, function (err,lhawk) { // lesser hawks
-
-					var to=[], cc=[];
-					
-					ghawk.each(function (n,hawk) {
-						to.push( hawk.client );
-					});
-					lhawk.each(function (n,hawk) {
-						cc.push( hawk.client );
-					});
-
-					if (to.length)
-					sendMail({
-						to: to.join(";"),
-						cc: cc.join(";"),
-						subject: "review completed",
-						body: "for more information see " 
-							+ "moderator comments".hyper("/moderate.view") 
-							+ " and " 
-							+ "project status".hyper("/project.view")
-					}, function (err) {
-						console.log("Send="+err);
-					});
-				});
-				});
-			});
-	}
-	else
-		res( new Error("Missing &Approved parameter")  );
 
 }
 
