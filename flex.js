@@ -1015,10 +1015,10 @@ FLEX.select.HEALTH = function Select(req, res) {
 
 	sql.query(
 		"SELECT "
-		+ "round(avg(LinkSpeed)*1e-3,2) AS avg_KBPS, "
-		+ "round(max(LinkSpeed)*1e-3,2) AS max_KBPS, "
+		+ "round(avg(Transfer/Delay)*1e-3,2) AS avg_KBPS, "
+		+ "round(max(Transfer/Delay)*1e-3,2) AS max_KBPS, "
 		+ "sum(Fault !='') AS faults, "
-		+ "round(sum(Overhead)*1e-9,2) AS tot_GB, "
+		+ "round(sum(Transfer)*1e-9,2) AS tot_GB, "
 		+ "count(DISTINCT Client) AS clients, "
 		+ "count(ID) AS logs "
 		+ "FROM dblogs")
@@ -1244,12 +1244,12 @@ FLEX.select.history = function (req,res) {
 		switch (query.option) {
 
 			case "signoffs":
-				var comment = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
+				//var comment = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
 				
 				Trace(sql.query(
 					"SELECT "
 					+ "Hawk, max(power) AS Power, "
-					+ "? AS Comment, "
+					//+ "? AS Comment, "
 					//+ 'approved' AS Comment, "
 					//+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Changes,"
@@ -1263,7 +1263,7 @@ FLEX.select.history = function (req,res) {
 					+ "FROM journal "
 					+ "LEFT JOIN viewers ON journal.Dataset=viewers.Dataset "
 					+ "WHERE Updates "
-					+ `GROUP BY hawk,${pivot}`, comment,
+					+ `GROUP BY hawk,${pivot}`,
 					function (err, recs) {
 						
 						res( err || recs );
