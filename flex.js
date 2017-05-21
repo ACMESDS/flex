@@ -715,7 +715,12 @@ FLEX.select.ACTIVITY = function Select(req, res) {
 		function (err,attrs) {
 			
 	sql.query(
-		'SELECT `Table`,sum(action="Insert") AS INSERTS,sum(action="Updates") as UPDATES, sum(action="Select") as SELECTS,sum(action="Delete") as DELETES,sum(action="Execute") as EXECUTES  FROM dblogs WHERE datediff(now(),Event)<30 GROUP BY `Table`',
+		'SELECT `Table`,sum(action="Insert") AS INSERTS,'
+	+ 'sum(action="Updates") as UPDATES,'
+	+ 'sum(action="Select") as SELECTS,'
+	+ 'sum(action="Delete") as DELETES,'
+	+ 'sum(action="Execute") as EXECUTES  FROM dblogs '
+	+ 'WHERE datediff(now(),Event)<30 GROUP BY `Table`',
 		[],
 		function (err,acts) {
 			
@@ -1019,7 +1024,6 @@ FLEX.select.HEALTH = function Select(req, res) {
 		+ "round(max(Transfer/Delay)*1e-3,2) AS max_KBPS, "
 		+ "sum(Fault !='') AS faults, "
 		+ "round(sum(Transfer)*1e-9,2) AS tot_GB, "
-		+ "count(DISTINCT Client) AS clients, "
 		+ "count(ID) AS logs "
 		+ "FROM dblogs")
 	.on("error", function (err) {
@@ -1776,7 +1780,7 @@ FLEX.execute.engines = function Execute(req, res) {
 	
 	if (Engine && Name)
 		sql.query(
-			"SELECT *,count(ID) AS Found FROM engines WHERE LEAST(?) LIMIT 0,1",
+			"SELECT *,count(ID) AS Count FROM engines WHERE LEAST(?) LIMIT 0,1",
 			{Engine:Engine,Name:Name}
 		)
 		.on("error", function (err) {
@@ -1784,7 +1788,7 @@ FLEX.execute.engines = function Execute(req, res) {
 		})
 		.on("result", function (eng) {
 
-			if (eng.Found)  				// existing engine
+			if (eng.Count)  				// execute existing engine
 				switch (eng.Engine) {
 					case "select":			// update CRUDE interface
 					case "delete":
@@ -1834,7 +1838,8 @@ FLEX.execute.engines = function Execute(req, res) {
 						req.table = eng.Name;
 						ENGINE.read(req, res);
 				}
-			else 							// create new engine
+			
+			else 							// prime new engine
 				switch (Engine) {
 					case "select":		// create CRUDE interface
 					case "delete":
@@ -1849,28 +1854,39 @@ FLEX.execute.engines = function Execute(req, res) {
 							Updated: new Date(),
 							Engine: Engine
 						}, function (err) {
-							res(err || "ok");
+							res(err || "primed");
 						});
 							
 						break;
 
-					default:
+					default:  // prime from flex or from engine db
 					
-						FS.readFile(Path, 'utf-8', function (err,buf) {
+						if ( builtin = FLEX.execute[Name] ) 
+							sql.query("INSERT into engines SET ?", {
+								Code: builtin+"",
+								Enabled: 0,
+								Name: Name,
+								Engine: "js"
+							}, function (err) {
+								res(err || "primed");
+							});
 							
-							if (err) 
-								res(err);
-								
-							else
-								sql.query("INSERT into engines SET ?", {
-									Code: buf,
-									Enabled: 0,
-									Name: Name,
-									Engine: Engine
-								}, function (err) {
-									res(err || "ok");
-								});
-						});
+						else
+							FS.readFile(Path, 'utf-8', function (err,buf) {
+
+								if (err) 
+									res(err);
+
+								else
+									sql.query("INSERT into engines SET ?", {
+										Code: buf,
+										Enabled: 0,
+										Name: Name,
+										Engine: Engine
+									}, function (err) {
+										res(err || "primed");
+									});
+							});
 				}
 			
 		});
