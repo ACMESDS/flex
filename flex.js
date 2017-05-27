@@ -1,4 +1,4 @@
-// UNCLASSIFIED
+﻿// UNCLASSIFIED
 
 /*
  * @class flex
@@ -1896,6 +1896,13 @@ FLEX.execute.engines = function Execute(req, res) {
 }
 
 FLEX.execute.news = function Execute(req, res) {  
+	
+	function fixnews(req, res) {
+		req.Message.split("\n").each( function (n,line) {
+			res(line);
+		});
+	}
+	
 	var sql = req.sql, log = req.log, query = req.query;
 	var mask = {
 		today: new Date(),
@@ -1906,16 +1913,17 @@ FLEX.execute.news = function Execute(req, res) {
 
 	res(SUBMITTED);
 	
-	sql.query("SELECT * FROM news WHERE New AND least(?,1)", query)
+	sql.query("SELECT * FROM news ", query)
 	.on("result", function (news) {
 		//sql.query("UPDATE news SET ? WHERE ?",[{New:false},{ID:news.ID}]);
 
-		news.Message.split("\n").each( function (n,line) {
-
-			var parts = line.split("@"),
+		viaAgent(news, fixnews, req, function (msg, sql) {
+			var 
+				parts = msg.split("@"),
 				subj = parts[0],
-				to = parts[1].substr(0,parts[1].indexOf(" ")),
-				body = parts[1].substr(to.length);
+				rhs = parts[1] || "",
+				to = rhs.substr(0,rhs.indexOf(" ")),
+				body = rhs.substr(to.length);
 
 			Trace(`NEWS ${to}`);
 
@@ -1927,6 +1935,9 @@ FLEX.execute.news = function Execute(req, res) {
 				case "jira":
 					break;
 
+				case "":
+					break;
+					
 				default:
 
 					sendMail({
@@ -1939,6 +1950,7 @@ FLEX.execute.news = function Execute(req, res) {
 						}]
 					});
 			}
+			
 		});
 	});
 		
@@ -4098,18 +4110,18 @@ FLEX.execute.gaussmix = function (req, res) {
 	
 	var 
 		sql = req.sql,
-		run = {},
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 	function randint() {
 		return floor(rand() * 10);
 	}
 	
-	function rungaus (test,run) {
-		
+	function gaussmix (req,res) {
+		var run = {};
+
 		try {
 			var 
-				mix = JSON.parse(test.Mix) || [];  // gauss mixing parameters
+				mix = JSON.parse(req.Mix) || [];  // gauss mixing parameters
 			
 			if (mix.constructor == Object) {
 				var K = mix.K, mix = [];
@@ -4188,11 +4200,11 @@ FLEX.execute.gaussmix = function (req, res) {
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
 			RAN.config({
-				N: test.Ensemble,
-				wiener: test.Wiener,
-				A: JSON.parse(test.JumpRates || "[]"),
-				sym: JSON.parse(test.Symbols || "null"),
-				nyquist: test.Nyquist,
+				N: req.Ensemble,
+				wiener: req.Wiener,
+				A: JSON.parse(req.JumpRates || "[]"),
+				sym: JSON.parse(req.Symbols || "null"),
+				nyquist: req.Nyquist,
 				x: mixes ? [] : null,  // jump obs
 				y: [],  // step obs
 				bins: 50,
@@ -4225,16 +4237,16 @@ FLEX.execute.gaussmix = function (req, res) {
 			randomWalks: RAN.wiener,
 			ensembleSize: RAN.N,
 			coherenceTime: RAN.Tc,
-			coherenceIntervals: test.Steps,
+			coherenceIntervals: req.Steps,
 			ensembleActivity: RAN.p,
 			ensembleLoad: RAN.lambda,
 			sampleTime: RAN.dt,
-			testName: test.Name			
+			reqName: req.Name			
 		};
 		
 		console.log(info);
 
-		RAN.run(test.Steps * RAN.Tc/RAN.dt, function (x,y,stats) {
+		RAN.run(req.Steps * RAN.Tc/RAN.dt, function (x,y,stats) {
 
 			function dist(a,b) { 
 				var d = [ a[0]-b[0], a[1]-b[1] ];
@@ -4244,8 +4256,8 @@ FLEX.execute.gaussmix = function (req, res) {
 			Array.prototype.nearestOf = function (metric) {
 				var imin = 0, emin = 1e99;
 
-				this.each( function (i,test) {
-					var e = metric( test );
+				this.each( function (i,req) {
+					var e = metric( req );
 					if (  e < emin) { imin = i; emin = e; }
 				});
 				return {idx: imin, err: emin};
@@ -4269,8 +4281,8 @@ FLEX.execute.gaussmix = function (req, res) {
 					gmms = RAN.MLE(x, mixes);
 
 				gmms.each( function (k,gmm) {
-					gmm.find = mix.nearestOf(function (test) {
-						return dist( test.mu, gmm.mu );
+					gmm.find = mix.nearestOf(function (req) {
+						return dist( req.mu, gmm.mu );
 					});
 				});
 
@@ -4310,40 +4322,114 @@ FLEX.execute.gaussmix = function (req, res) {
 					});
 				});
 
-				Copy({
+				res( Copy({
 					steps: y,
 					stats: stats,
 					info: info
-				}, run);
+				}, run) );
 				
 console.log(JSON.stringify(gmms)); 
 			}
 			
 			else
-				Copy({
+				res( Copy({
 					jumps: x,
 					steps: y,
 					stats: stats,
 					info: info
-				}, run);
+				}, run) );
 		});
 	}
 	
 	res("submitted");
 	
 	sql.query("SELECT * FROM app1.gaussmix WHERE least(?,1)", req.query)
-	.on("result", function (test) {
+	.on("result", function (mix) {
 		
-//console.log(test);
-		rungaus(test,run);
-		
-		sql.query("UPDATE app1.gaussmix SET ? WHERE ?", [{
-			Result: JSON.stringify(run)}, {
-			Name: test.Name
-		}], function (err) {
-			console.log(err || "saved " + test.Name);
+//console.log(mix);
+		viaAgent(mix, gaussmix, req, function (rtn, sql) {
+			
+			sql.query("UPDATE app1.gaussmix SET ? WHERE ?", [{
+				Result: JSON.stringify(rtn)}, {
+				Name: mixreq.Name
+			}], function (err) {
+				console.log(err || "GAUSSMIX " + mixreq.Name);
+			});
+			
 		});
+
 	});
 }
 
+function viaAgent(args, job, req, res) {
+	var
+		fetch = FLEX.fetcher,
+		sql = req.sql,
+		query = req.query,
+		jobname = "totem."+ req.client + "." + job.name + "." + query.ID;
+	
+	if (agent = query.agent) {
+			
+		Trace("AGENT QUEUEING "+jobname);
+		sql.query("INSERT INTO queues SET ?", {
+			class: agent,
+			client: req.client,
+			qos: 0,
+			priority: 0,
+			name: job.name
+		});
+		
+		fetch(agent+"?push="+jobname+" "+JSON.stringify(args), function (jobid) {
+			
+			if (jobid)
+				if (jobid.constructor == Error)
+					Trace(jobid);
+
+				else
+				if ( poll = parseInt(query.poll) )
+					var timer = setInterval(function (req) {
+
+						console.log(["pull",req.agent,jobid]);
+
+						fetch(req.agent+"?pull="+jobid, function (rtn) {
+
+							console.log(["pull",jobid,rtn]);
+
+							if (rtn) 
+								if (rtn.constructor == Error) {
+									Trace(rtn);
+									clearInterval(timer);
+								}
+
+								else
+									FLEX.thread( function (sql) {
+										Trace("AGENT RETURNED "+jobid);
+										sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
+										req.cb( rtn, sql );
+									});
+
+							else
+								Trace("AGENT POLLED "+jobid);
+
+						});
+
+					}, poll*1000, Copy({
+							job: job,
+							cb: res}, req));
+				
+				else
+					Trace("AGENT FORKED "+jobid);
+			
+			else
+				Trace("AGENT REJECTED "+jobname);
+	
+		});
+	}
+
+	else 
+		job(args, function (rtn) {
+			res(rtn,sql);
+		});
+}
+			
 // UNCLASSIFIED
