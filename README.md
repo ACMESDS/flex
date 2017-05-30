@@ -3,13 +3,13 @@
 # FLEX
 
 FLEX provides a CRUDE (select | update | delete | insert | execute) query interface to a dataset DS on 
-FLEX[ CRUD ][ DS ].  This interface supports both MySQL and emulated) datasets distributed across 
-an elastic virtual machine cloud.  
+FLEX[ CRUD ][ DS ].  This interface supports both MySQL and emulated datasets distributed across 
+a virtual machine cloud.  
 
 FLEX uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) 
-defaulted for a MySQL Cluster.  
+which defaults to a MySQL Cluster.  
 
-FLEX provides the following emulated tables:
+By default, FLEX provides the following emulated datasets:
 
 	+ git			local repo history, commit changes, sync with remote repo
 	+ uploads	get/upload file(s) into one-time file upload area
@@ -17,19 +17,19 @@ FLEX provides the following emulated tables:
 	+ email		send/get SMTP email
 	+ feed		send/get RSS feeds
 	+ engine 	run simulation engine 
-	+ catalog	read/flatten the marster catalog
+	+ catalog	read/flatten the master catalog
  	+ json		edit a json formatted string
  	+ job		get, add, stop, and update a job placed in qos-priority queues
-	+ sql		crude engines to sql tables
+	+ sql		crude engines to sql datasets
 
-CRUDE-execute support is provided to the following virtual tables:
+By default, FLEX provides the CRUDE-execute (both direct or via an agent) on datasets:
  
- 		parms		 		roles			lookups				searches
- 		swaps		 		news			milestones 		sockets		 		
-		engines	 		collects	 		events		 		issues		
- 		aspreqts	 		ispreqts		likeus
+ 		parms		 	roles			lookups				searches
+ 		swaps		 	news			milestones 		sockets	
+		engines	 		collects	 	events		 		issues
+ 		aspreqts	 	ispreqts		likeus
  		
-and CRUDE-select suppport is provided at:
+and CRUDE-select on datasets:
 
  		ACTIVITY	system activity
  		CATALOG	catalog of tables
@@ -45,7 +45,7 @@ and CRUDE-select suppport is provided at:
  		CLIQUES		cliques formed between tables and users
  		HEALTH		system health
 		
-To use, simply require FLEX and add interfaces for the virtual table X you need:
+To use, simply require FLEX and add interfaces for the virtual table X:
 
 	var FLEX = require("sql").config({ 
 		select: { X: function (req,res), ... },

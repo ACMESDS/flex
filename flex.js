@@ -4361,6 +4361,46 @@ console.log(JSON.stringify(gmms));
 	});
 }
 
+FLEX.select.agent = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query,
+		push = query.push,
+		pull = query.pull;
+	
+	if (push) 
+		CRYPTO.randomBytes(64, function (err, jobid) {
+
+			try {
+				var args = JSON.parse(query.args);
+			}
+			catch (parserr) {
+				err = parserr;
+			}
+			
+			if (err) 
+				res( "" );
+
+			else
+				res( jobid.toString("hex") );
+
+		});
+	
+	else
+	if (pull) {
+		var jobid = query.jobid;
+		
+		if (jobid) 
+			res( {result: 123} );
+		
+		else
+			res( "Missing jobid" );
+	}
+	else
+		res( "Missing push/pull" );
+	
+}
+
 function viaAgent(args, job, req, res) {
 	var
 		fetch = FLEX.fetcher,
@@ -4379,7 +4419,7 @@ function viaAgent(args, job, req, res) {
 			name: job.name
 		});
 		
-		fetch(agent+"?push="+jobname+" "+JSON.stringify(args), function (jobid) {
+		fetch(agent+"&push="+jobname+"&args="+JSON.stringify(args), function (jobid) {
 			
 			if (jobid)
 				if (jobid.constructor == Error)
@@ -4389,11 +4429,9 @@ function viaAgent(args, job, req, res) {
 				if ( poll = parseInt(query.poll) )
 					var timer = setInterval(function (req) {
 
-						console.log(["pull",req.agent,jobid]);
-
+						Trace("AGENT POLLING "+jobid);
+						
 						fetch(req.agent+"?pull="+jobid, function (rtn) {
-
-							console.log(["pull",jobid,rtn]);
 
 							if (rtn) 
 								if (rtn.constructor == Error) {
@@ -4407,9 +4445,6 @@ function viaAgent(args, job, req, res) {
 										sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
 										req.cb( rtn, sql );
 									});
-
-							else
-								Trace("AGENT POLLED "+jobid);
 
 						});
 
