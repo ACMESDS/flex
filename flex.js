@@ -4408,58 +4408,56 @@ function viaAgent(args, job, req, res) {
 		query = req.query,
 		jobname = "totem."+ req.client + "." + job.name + "." + query.ID;
 	
-	if (agent = query.agent) {
-			
-		Trace("AGENT QUEUEING "+jobname);
-		sql.query("INSERT INTO queues SET ?", {
-			class: agent,
-			client: req.client,
-			qos: 0,
-			priority: 0,
-			name: job.name
-		});
-		
+	if (agent = query.agent) 
 		fetch(agent+"&push="+jobname+"&args="+JSON.stringify(args), function (jobid) {
 			
 			if (jobid)
 				if (jobid.constructor == Error)
 					Trace(jobid);
 
-				else
-				if ( poll = parseInt(query.poll) )
-					var timer = setInterval(function (req) {
+				else {
+					Trace("AGENT FORKED "+jobname);
+		
+					sql.query("INSERT INTO queues SET ?", {
+						class: agent,
+						client: req.client,
+						qos: 0,
+						priority: 0,
+						name: job.name
+					});
 
-						Trace("AGENT POLLING "+jobid);
-						
-						fetch(req.agent+"?pull="+jobid, function (rtn) {
+					if ( poll = parseInt(query.poll) )
+						var timer = setInterval(function (req) {
 
-							if (rtn) 
-								if (rtn.constructor == Error) {
-									Trace(rtn);
-									clearInterval(timer);
-								}
+							Trace("AGENT POLLING "+jobid);
 
-								else
-									FLEX.thread( function (sql) {
-										Trace("AGENT RETURNED "+jobid);
-										sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
+							fetch(req.agent+"?pull="+jobid, function (rtn) {
+
+								if (rtn) 
+									if (rtn.constructor == Error) {
+										Trace("AGENT FAILED");
+										clearInterval(timer);
 										req.cb( rtn, sql );
-									});
+									}
 
-						});
+									else
+										FLEX.thread( function (sql) {
+											Trace("AGENT RETURNED "+jobid);
+											sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
+											req.cb( rtn, sql );
+										});
 
-					}, poll*1000, Copy({
-							job: job,
-							cb: res}, req));
-				
-				else
-					Trace("AGENT FORKED "+jobid);
+							});
+
+						}, poll*1000, Copy({
+								job: job,
+								cb: res}, req));
+				}
 			
 			else
 				Trace("AGENT REJECTED "+jobname);
 	
 		});
-	}
 
 	else 
 		job(args, function (rtn) {
