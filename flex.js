@@ -379,7 +379,7 @@ var
 						  });
 						});
 
-					if (FLEX.mailer.ONSTART) 
+					if (email.ONSTART) 
 						sendMail({
 							to: site.distro.hawk,
 							subject: site.title + " started", 
@@ -388,8 +388,6 @@ var
 								contentType: 'text/html; charset="ISO-59-1"',
 								contents: ""
 							}]
-						}, function (err,info) {
-							if (err) Trace(err);
 						});
 				}
 			}			
@@ -637,8 +635,6 @@ FLEX.execute.email = function Execute(req,res) {
 				contentType: 'text/html; charset="ISO-59-1"',
 				contents: ""
 			}]
-		}, function (err,info) {
-			if (err) Trace(err);
 		});
 	});
 	
@@ -1172,8 +1168,6 @@ console.log(FLEX.site);
 			contentType: 'text/html; charset="ISO-59-1"',
 			contents: ""
 		}]
-	}, function (err,info) {
-		if (err) Trace(err);
 	});
 	
 	sql.query(
@@ -1245,7 +1239,7 @@ FLEX.select.history = function (req,res) {
 	
 	sql.query("USE openv", function () {
 		
-		switch (query.option) {
+		switch (query.options) {
 
 			case "signoffs":
 				//var comment = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
@@ -1257,7 +1251,7 @@ FLEX.select.history = function (req,res) {
 					//+ 'approved' AS Comment, "
 					//+ "link(concat('Files|Upload|', Hawk, '.pdf'), concat('/uploads/', Hawk, '.pdf')) AS DetailedComments, "
 					+ "group_concat(distinct ifnull(link(journal.dataset,concat('/',viewers.viewer,'.view')),journal.dataset)) AS Changes,"
-					+ "link('Approve', concat('/history.db', char(63), 'option=approve'," 
+					+ "link('Approve', concat('/history.db', char(63), 'options=approve'," 
 					+ 		" '&Power=', Power,"
 					+ 		" '&Hawk=', Hawk,"
 					+ 		" '&Datasets=', group_concat(distinct journal.dataset))) AS Approve,"
@@ -1352,17 +1346,15 @@ FLEX.select.history = function (req,res) {
 							});
 
 							if (to.length)
-							sendMail({
-								to: to.join(";"),
-								cc: cc.join(";"),
-								subject: "review completed",
-								body: "for more information see " 
-									+ "moderator comments".hyper("/moderate.view") 
-									+ " and " 
-									+ "project status".hyper("/project.view")
-							}, function (err) {
-								console.log("Send="+err);
-							});
+								sendMail({
+									to: to.join(";"),
+									cc: cc.join(";"),
+									subject: "review completed",
+									body: "for more information see " 
+										+ "moderator comments".hyper("/moderate.view") 
+										+ " and " 
+										+ "project status".hyper("/project.view")
+								});
 						});
 						});
 				});
@@ -1484,7 +1476,7 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 									rtns.push({
 										Name	: 
 											file.tag("a", {
-												href:"/files.jade?goto=ELT&option="+`${area}.${file}`
+												href:"/files.jade?goto=ELT&options="+`${area}.${file}`
 											}) 	+ 
 												"".tag("img",{src:link, width: 32, height: 32}),
 										File	: file,
@@ -2866,8 +2858,6 @@ FLEX.execute.swaps = function Execute(req, res) {
 					contentType: 'text/html; charset="ISO-59-1"',
 					contents: ""
 				}]
-			}, function (err,info) {
-				if (err) Trace(err);
 			});
 			
 		});
@@ -3501,16 +3491,23 @@ function openIMAP(cb) {
 	});
 }
 
-function sendMail(opts, cb) {
+function sendMail(opts) {
 	
 	Trace(`MAIL ${opts.to} RE ${opts.subject}`);
+
+	opts.from = "noreply@nga.ic.gov";
+	
+	if (opts.to) {
+		if (x = FLEX.mailer)
+			if (x = x.TX.TRAN) 
+				x.sendMail(opts,function (err) {
+					Trace("MAIL "+ (err || opts.to) );
+				});
 		
-	if (x = FLEX.mailer)
-		if (x = x.TX.TRAN) 
-			if (opts.to) {
-				opts.from = "noreply@nga.ic.gov";
-				x.sendMail(opts,cb);
-			}
+			else
+				CP.exec(`echo -e "${opts.body}\n\d" | mail -s "${opts.subject}" ${opts.to}`, function (err) {
+					Trace("MAIL "+ (err || opts.to) );
+				});
 }
 
 /**
@@ -4020,8 +4017,6 @@ function hawkJobs (client, url)  {
 										contentType: 'text/html; charset="ISO-59-1"',
 										contents: ""
 									}]
-								}, function (err,info) {
-									if (err) Trace(err);
 								});
 
 							});
