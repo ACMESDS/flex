@@ -3495,7 +3495,7 @@ function sendMail(opts) {
 	
 	Trace(`MAIL ${opts.to} RE ${opts.subject}`);
 
-	opts.from = "noreply@nga.ic.gov";
+	opts.from = "totem@noreply.gov";
 	
 	if (opts.to) 
 		if (x = FLEX.mailer)
@@ -3505,7 +3505,7 @@ function sendMail(opts) {
 				});
 		
 			else
-				CP.exec(`echo -e "${opts.body}\n\d" | mail -s "${opts.subject}" ${opts.to}`, function (err) {
+				CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
 					Trace("MAIL "+ (err || opts.to) );
 				});
 }
