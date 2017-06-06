@@ -381,7 +381,7 @@ var
 
 					if (email.ONSTART) 
 						sendMail({
-							to: site.distro.hawk,
+							to: site.pocs.admin,
 							subject: site.title + " started", 
 							html: "Just FYI",
 							alternatives: [{
@@ -1161,7 +1161,7 @@ FLEX.select.likeus = function Select(req, res) {
 console.log(FLEX.site);
 	
 	sendMail({
-		to:  FLEX.site.distro.hawk,
+		to:  FLEX.site.pocs.admin,
 		subject: req.client + " likes " + FLEX.site.title + " !!",
 		html: "Just FYI",
 		alternatives: [{
@@ -3497,7 +3497,7 @@ function sendMail(opts) {
 
 	opts.from = "noreply@nga.ic.gov";
 	
-	if (opts.to) {
+	if (opts.to) 
 		if (x = FLEX.mailer)
 			if (x = x.TX.TRAN) 
 				x.sendMail(opts,function (err) {
