@@ -1828,7 +1828,8 @@ FLEX.execute.engines = function Execute(req, res) {
 					default:				// run simulation engine against located engine
 						req.query = (eng.Vars.query||"").parse({});
 						req.table = eng.Name;
-						ENGINE.read(req, res);
+						req.type = eng.Engine;
+						ENGINE.select(req, res);
 				}
 			
 			else 							// prime new engine
