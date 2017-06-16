@@ -4108,6 +4108,16 @@ FLEX.execute.gaussmix = function (req, res) {
 		sql = req.sql,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
+	String.prototype.push = function(x) {
+		if (x.Location) {
+			var u = x.Location[0], v = x.Location[1];
+			delete x.Location;
+			sql.query(this, [u,v,x]);
+		}
+		else
+			sql.query(this,x);
+	}
+	
 	function randint() {
 		return floor(rand() * 10);
 	}
@@ -4150,20 +4160,26 @@ FLEX.execute.gaussmix = function (req, res) {
 					oo: sigma / sqrt(2*theta)
 				},
 
-				sampler = {  // sampling method during RAN jumps
-					na: function (n,fr,to,h,x) {  // ignore
+				sampler = {  // sampling method during state jumps
+					na: function (u) {  // ignore
 					},
 					
-					wi: function (n,fr,to,h,x) {  // wiener
+					wi: function (u) {  // wiener
 						var 
 							t = RAN.s, 
 							Wt = RAN.W[0], 
 							xt = mu + sigma * Wt;
 						
-						x.push( xt );
+						x.push({
+							Location: [xt[0],xt[1]],
+							Height: xt[2],
+							Name: "synthetic",
+							State: u,
+							t: rand()
+						});
 					},
 					
-					oo: function (n,fr,to,h,x) {  // ornstein-uhlenbeck
+					oo: function (u) {  // ornstein-uhlenbeck
 						var 
 							t = RAN.s, 
 							Et = exp(-theta*t),
@@ -4172,31 +4188,39 @@ FLEX.execute.gaussmix = function (req, res) {
 							xt = x0 ? x0 * Et + mu*(1-Et) + a.oo * Et * Wt : mu + a.oo * Et * Wt;
 						
 						ooW.push( W[0] );
-						x.push( xt );
+						x.push({
+							Location: [xt[0],xt[1]],
+							Height: xt[2],
+							Name: "synthetic",
+							State: u,
+							t: rand()
+						});
 					},
 						
-					br: function (n,fr,to,h,x) { // geometric brownian
+					br: function (u) { // geometric brownian
 						var 
 							t = RAN.s, 
 							Wt = RAN.W[0],
 							xt = exp( (mu-a.br)*t + sigma*Wt );
 						
-						x.push( xt );
+						x.push({
+							Location: [xt[0],xt[1]],
+							Height: xt[2],
+							Name: "synthetic",
+							State: u,
+							t: rand()
+						});
 					},
 						
-					gm: function (n,fr,to,h,x) {  // mixed gaussian
-						var xt = mvd[to].sample();
-						
-						if (x.constructor == String)
-							sql.query(x, [
-								`POINT(${xt[0]} ${xt[1]})`, {
-									Height: 0,
-									Attr: "synthetic",
-									Index: to,
-									t: rand()
-							}]);
-						else								
-							x.push( xt );
+					gm: function (u) {  // mixed gaussian
+						var xt = mvd[u].sample();
+						x.push({
+							Location: [xt[0],xt[1]],
+							Height: xt[2],
+							Name: "synthetic",
+							State: u,
+							t: rand()
+						});
 					}
 				};
 
@@ -4210,8 +4234,13 @@ FLEX.execute.gaussmix = function (req, res) {
 				A: JSON.parse(req.JumpRates || "[]"),
 				sym: JSON.parse(req.Symbols || "null"),
 				nyquist: req.Nyquist, // sampling rate
-				x: mixes ? [] : null,  // state-jump observations
-				y: [],  // time-step observations
+				x: null,  // store for state-jump observations
+				u: mixes // store for ensemble-sweep observations
+					? // []  // array store 
+						"INSERT INTO events SET Location=st_geomfromtext('POINT(? ?)'),?"  // db store 
+					: null,  
+				
+				y: [],  // store for time-step observations
 				bins: 50,  // bins to create stats
 				
 				// debugging
@@ -4220,9 +4249,9 @@ FLEX.execute.gaussmix = function (req, res) {
 				//nyquist: 10,
 
 				on: {
-					jump: sampler[mode], // mode-based callback to sample process on state changes
+					sweep: sampler[mode], // mode-based callback to sample process on ensemble sweep
 					
-					step: function (y) { // callback to monitor process after being froward stepped
+					step: function (y) { // callback to monitor process after being forward stepped
 						var  
 							t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
 							cnt = N-RAN.E[0], lambda = RAN.G[0]/t, lambda0 = N/RAN.dt;
