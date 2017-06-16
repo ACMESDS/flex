@@ -4151,7 +4151,7 @@ FLEX.execute.gaussmix = function (req, res) {
 				},
 
 				sampler = {  // sampling method during RAN jumps
-					na: function (n,fr,to,h,x) {
+					na: function (n,fr,to,h,x) {  // ignore
 					},
 					
 					wi: function (n,fr,to,h,x) {  // wiener
@@ -4187,7 +4187,16 @@ FLEX.execute.gaussmix = function (req, res) {
 					gm: function (n,fr,to,h,x) {  // mixed gaussian
 						var xt = mvd[to].sample();
 						
-						x.push( xt );
+						if (x.constructor == String)
+							sql.query(x, [
+								`POINT(${xt[0]} ${xt[1]})`, {
+									Height: 0,
+									Attr: "synthetic",
+									Index: to,
+									t: rand()
+							}]);
+						else								
+							x.push( xt );
 					}
 				};
 
@@ -4195,15 +4204,15 @@ FLEX.execute.gaussmix = function (req, res) {
 				for (var k=0; k<mixes; k++)
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
 
-			RAN.config({
-				N: req.Ensemble,
-				wiener: req.Wiener,
+			RAN.config({ // configure the random process generator
+				N: req.Ensemble,  // ensemble size
+				wiener: req.Wiener,  // wiener process switch
 				A: JSON.parse(req.JumpRates || "[]"),
 				sym: JSON.parse(req.Symbols || "null"),
-				nyquist: req.Nyquist,
-				x: mixes ? [] : null,  // jump obs
-				y: [],  // step obs
-				bins: 50,
+				nyquist: req.Nyquist, // sampling rate
+				x: mixes ? [] : null,  // state-jump observations
+				y: [],  // time-step observations
+				bins: 50,  // bins to create stats
 				
 				// debugging
 				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
@@ -4211,9 +4220,9 @@ FLEX.execute.gaussmix = function (req, res) {
 				//nyquist: 10,
 
 				on: {
-					jump: sampler[mode],
+					jump: sampler[mode], // mode-based callback to sample process on state changes
 					
-					step: function (y) {
+					step: function (y) { // callback to monitor process after being froward stepped
 						var  
 							t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
 							cnt = N-RAN.E[0], lambda = RAN.G[0]/t, lambda0 = N/RAN.dt;
