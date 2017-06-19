@@ -4118,8 +4118,12 @@ FLEX.execute.gaussmix = function (req, res) {
 			sql.query(this,x);
 	}
 	
-	function randint() {
-		return floor(rand() * 10);
+	function randint(a) {
+		return floor((rand() - 0.5)*2*a);
+	}
+	
+	function addvec(x,y) {
+		return [ x[0]+y[0], x[1]+y[1], x[2]+y[2] ];
 	}
 	
 	function gaussmix (req,res) {
@@ -4135,14 +4139,15 @@ FLEX.execute.gaussmix = function (req, res) {
 				for (var k=0; k<K; k++) {
 					var xx = 0.9, yy = 0.7, xy = yx = 0.4;
 					mix.push({
-						mu: [randint(), randint()],
-						sigma: [[xx,xy],[yx,yy]]
+						mu: [randint(a), randint(a), randint(a)],
+						sigma: [[xx*a/2,xy*a/2,0],[yx*/2,yy*a/2,0],[0,0,1]]
 					});
 				}
 				console.log(mix);
 			}
 			
 			var
+				voxel = [], // voxel centroids
 				mvd = [], 	// multivariate distribution parms
 				ooW = [], // wiener/oo process look ahead
 				mixes = mix.length,	// number of mixes
@@ -4189,7 +4194,7 @@ FLEX.execute.gaussmix = function (req, res) {
 						
 						ooW.push( W[0] );
 						x.push({
-							Location: [xt[0],xt[1]],
+							Location: xt,
 							Height: xt[2],
 							Name: "synthetic",
 							State: u,
@@ -4204,7 +4209,7 @@ FLEX.execute.gaussmix = function (req, res) {
 							xt = exp( (mu-a.br)*t + sigma*Wt );
 						
 						x.push({
-							Location: [xt[0],xt[1]],
+							Location: xt,
 							Height: xt[2],
 							Name: "synthetic",
 							State: u,
@@ -4213,9 +4218,9 @@ FLEX.execute.gaussmix = function (req, res) {
 					},
 						
 					gm: function (u) {  // mixed gaussian
-						var xt = mvd[u].sample();
+						var xt = addvec( mvd[u].sample(), voxel[u] );
 						x.push({
-							Location: [xt[0],xt[1]],
+							Location: xt,
 							Height: xt[2],
 							Name: "synthetic",
 							State: u,
@@ -4225,22 +4230,34 @@ FLEX.execute.gaussmix = function (req, res) {
 				};
 
 			if (mode == "gm")
-				for (var k=0; k<mixes; k++)
+				for (var k=0; k<mixes; k++) {
+					voxel.push( x = new Array(3) );
+					
 					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
+				}
 
 			RAN.config({ // configure the random process generator
 				N: req.Ensemble,  // ensemble size
 				wiener: req.Wiener,  // wiener process switch
 				A: JSON.parse(req.JumpRates || "[]"),
+				/*
+				A: {
+					dt: 1,
+					agent: "/someagent.domain",
+					n: 400,
+					fetch: TOTEM.fetch.http
+				},
+				*/
 				sym: JSON.parse(req.Symbols || "null"),
 				nyquist: req.Nyquist, // sampling rate
-				x: null,  // store for state-jump observations
-				u: mixes // store for ensemble-sweep observations
-					? // []  // array store 
-						"INSERT INTO events SET Location=st_geomfromtext('POINT(? ?)'),?"  // db store 
-					: null,  
-				
-				y: [],  // store for time-step observations
+				store: {  // stores for ...
+					jump: null,  // state-jump observations
+					sweep: mixes // ensemble-sweep observations
+						? // []  // array store 
+							"INSERT INTO events SET Location=st_geomfromtext('POINT(? ?)'),?"  // db store 
+						: null,  
+					step: []  // time-step observations
+				},
 				bins: 50,  // bins to create stats
 				
 				// debugging
