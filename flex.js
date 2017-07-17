@@ -136,8 +136,6 @@ var
 			}
 		},
 		
-		watch: null,
-		
 		// CRUDE interface
 		select: {ds: runQuery}, 
 		delete: {ds: runQuery}, 
@@ -175,35 +173,6 @@ var
 			
 			if (opts) Copy(opts,FLEX);
 			
-			if (watch = FLEX.watch) 
-			FS.readdir( watch, function (err, files) {
-				files.each(function (n,file) {
-					Trace("WATCHING "+file);
-					FS.watch(watch + file, function (ev, file) {  //{persistent: false, recursive: false}, 
-
-						//console.log([ev,file, FLEX.thread]);
-						Trace(ev.toUpperCase()+" "+file);
-
-						if (file && FLEX.thread)
-						switch (ev) {
-							case "change":
-								FLEX.thread( function (sql) {
-									READ.reader(sql, watch+file, function (keys) {
-										console.log(["keys",keys]);
-									});
-									sql.release();
-								});
-								
-								break;
-
-							case "x":
-							default:
-							
-						}
-					});
-				});
-			});				
-				
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
