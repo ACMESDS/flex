@@ -64,22 +64,6 @@ var 											// totem bindings
 	Copy = ENUM.copy,
 	Each = ENUM.each;
 
-function Trace(msg,arg) {
-	
-	if (msg.constructor == String)
-		console.log("F>"+msg);
-	else
-	if (msg.constructor == Error)
-		console.log("F>ERROR",msg);
-	
-	else
-		console.log("F>"+msg.sql);
-
-	if (arg) console.log(arg);
-		
-	return msg;
-}
-
 var
 	FLEX = module.exports = {
 		
@@ -4485,4 +4469,8 @@ function viaAgent(args, job, req, res) {
 		});
 }
 			
+function Trace(msg,arg) {
+	ENUM.trace("F>",msg,arg);
+}
+
 // UNCLASSIFIED
