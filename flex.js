@@ -3717,10 +3717,10 @@ function insertJob(job, cb) {
 			Trace("MAKE QUEUE", queue = FLEX.queues[job.qos] = {
 				timer: 0,
 				batch: {},
-				rate: 2e3*(10-job.qos)
+				rate: job.qos
 			} );
 			
-		if (queue.rate > 0) { 				// regulated job
+		if (queue.rate) { 				// regulated job
 			var batch = queue.batch[job.priority]; 		// get job's priority batch
 			if (!batch) 
 				Trace("MAKE BATCH", batch = queue.batch[job.priority] = [] );
@@ -3772,6 +3772,7 @@ function insertJob(job, cb) {
 				
 			return true;
 		}
+		
 		else 						// unregulated job
 			return false;
 	}
