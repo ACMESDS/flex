@@ -769,7 +769,7 @@ FLEX.select.LINKS = function Select(req, res) {
 						})
 					});
 			else {
-				var name = file.replace(".jade","");
+				var name = file.replace(".view","");
 				
 				if (!taken[name])
 					links.push({
@@ -1010,7 +1010,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 //console.log(dbstats);
 
 		Each(qstats, function (n,stat) {
-			rtns.push({ID:ID++, Name:"job "+n.tag("a",{href:"/admin.jade?goto=Jobs"})+" "+stat});
+			rtns.push({ID:ID++, Name:"job "+n.tag("a",{href:"/admin.view?goto=Jobs"})+" "+stat});
 		});
 
 		var stats = {
@@ -1023,11 +1023,11 @@ FLEX.select.HEALTH = function Select(req, res) {
 		};
 			
 		Each(stats, function (n,stat) {
-			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.jade?goto=Logs"})+" "+stat});
+			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.view?goto=Logs"})+" "+stat});
 		});
 
 		Each(lstats, function (n,stat) {
-			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.jade?goto=Logs"})+" "+stat});
+			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.view?goto=Logs"})+" "+stat});
 		});
 
 		var stats = {
@@ -1041,7 +1041,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 		};
 			
 		Each(stats, function (n,stat) {
-			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.jade?goto=DB Config"})+" "+stat});
+			rtns.push({ID:ID++, Name:isp+" "+n.tag("a",{href:"/admin.view?goto=DB Config"})+" "+stat});
 		});
 
 		var nouts = nsout ? nsout.split("\n") : ["",""],
@@ -1066,7 +1066,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 		stats.mysql = vstats.Value;
 
 		Each(stats, function (n,stat) {
-			rtns.push({ID:ID++, Name:asp+" "+n.tag("a",{href:"/admin.jade?goto=SWAPs"})+" "+stat});
+			rtns.push({ID:ID++, Name:asp+" "+n.tag("a",{href:"/admin.view?goto=SWAPs"})+" "+stat});
 		});
 
 		res(rtns);
@@ -1122,25 +1122,35 @@ console.log(FLEX.site);
 			contents: ""
 		}]
 	});
+
+	var user = {
+		expired: "your free subscription has expired",
+		0: "elite first class",
+		1: "grand",
+		2: "wonderful",
+		3: "better than average",
+		4: "suffering",
+		5: "first class hobo",
+		default: "hobo"
+	}			
 	
-	sql.query(
-		"INSERT INTO openv.profiles SET ? " +
-		"ON DUPLICATE KEY UPDATE Challenge=0,Likeus=Likeus+1,QoS=least(Likeus+1,5)", { 
-		LikeUs:0, 
-		QoS:0,
-		Banned:"",
-		Joined: new Date(),
-		Updated: new Date(),
-		Challenge:1,
-		Client:req.client 
-	})
-	.on("error", function (err) {
-		Trace(err);
-	});
+	if (req.profile.QoS >= 0) {
+		sql.query(
+			"UPDATE openv.profiles SET Challenge=0,Likeus=Likeus+1,QoS=greatest(QoS-1000,0) WHERE ?",
+			{Client:req.client}
+		);
 
-	res( `Thanks ${req.client} for liking ${FLEX.site.nick} !  Check out your new ` +
-		"QoS profile".tag("a",{href:'/profile.jade'}) + " !" );
-
+		req.profile.QoS = Math.max(req.profile.QoS-1000,0);
+		var qos = user[Math.floor(req.profile.QoS/1000)] || user.default;
+		res( `Thanks ${req.client} for liking ${FLEX.site.nick} !  As a ${qos} user your ` 
+			+ "QoS profile".tag("a",{href:'/profile.view'})
+			+ " may have improved !" )	
+	}
+	
+	else
+		res( `Thanks ${req.client} for liking ${FLEX.site.nick} but ` +
+			user.expired.tag("a",{href:'/fundme.view'}) + " !" );
+		
 }
 
 FLEX.select.tips = function Select(req, res) {
@@ -1152,7 +1162,7 @@ FLEX.select.tips = function Select(req, res) {
 		+ "concat('/tips/',chips.ID,'.jpg') AS tip, "
 		+ "concat("
 		+ 		"linkquery('O', 'https://ldomar.ilabs.ic.gov/omar/mapView/index',concat('layers=',collects.layer)), "
-		+ 		"linkquery('S', '/minielt.jade',concat('src=/chips/',chips.name))"
+		+ 		"linkquery('S', '/minielt.view',concat('src=/chips/',chips.name))"
 		+ ") AS links, "
 		+ "datediff(now(),collected) AS age "
 		+ "FROM detects "
@@ -1375,7 +1385,7 @@ FLEX.select.AlgorithmService = function Select(req, res) {
 				client: req.client,
 				class: "detect",
 				name: det.Name,
-				link: det.Name.tag("a",{href:"/swag.jade?goto=Detectors"}),
+				link: det.Name.tag("a",{href:"/swag.view?goto=Detectors"}),
 				qos: req.profile.QoS,
 				priority: 1
 			}
@@ -1429,7 +1439,7 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 									rtns.push({
 										Name	: 
 											file.tag("a", {
-												href:"/files.jade?goto=ELT&options="+`${area}.${file}`
+												href:"/files.view?goto=ELT&options="+`${area}.${file}`
 											}) 	+ 
 												"".tag("img",{src:link, width: 32, height: 32}),
 										File	: file,
@@ -1917,14 +1927,14 @@ FLEX.execute.news = function Execute(req, res) {
 
 		sql.query(
 			  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
-			+ "link('dashboard',concat('/',lower(intake.Name),'.jade')) AS Dashboard, "
+			+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
 			+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
 			//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
-			+ "link(states.Name,'/parms.jade') AS State "
+			+ "link(states.Name,'/parms.view') AS State "
 			+ "FROM intake "
 			+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
 			+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
-			+ "WHERE intake.?", ["/intake.jade?name=","/queue.jade?name=",client,{ Name:name }] ) 
+			+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
 		.on("error", function (err) {
 			Trace(err);
 		})
@@ -2002,7 +2012,7 @@ console.log(req.profile);
 				client: req.client,
 				class: "detect",
 				name: test.detName,
-				link: test.detName.tag("a",{href:"/swag.jade?goto=Detectors"}),
+				link: test.detName.tag("a",{href:"/swag.view?goto=Detectors"}),
 				qos: req.profile.QoS,
 				priority: 1
 			}
@@ -3105,7 +3115,7 @@ FLEX.execute.detectors = function Execute(req, res) {
 					det.posLimit = Math.round(det.posCount * 0.9); 	// adjust counts so haar trainer does not exhaust supply
 					det.negLimit = Math.round(det.negCount * 1.0);
 					
-					det.link = det.Name.tag("a",{href:"/swag.jade?goto=Detectors"}) + " " + det.posLimit + " pos " + det.negLimit + " neg";
+					det.link = det.Name.tag("a",{href:"/swag.view?goto=Detectors"}) + " " + det.posLimit + " pos " + det.negLimit + " neg";
 					det.name = det.Name;
 					det.client = log.client;
 					det.work = det.posCount + det.negCount;
@@ -3226,7 +3236,7 @@ FLEX.execute.detectors = function Execute(req, res) {
 									client: req.client,
 									class: "detect",
 									name: det.Name,
-									link: det.Name.tag("a",{href:"/swag.jade?goto=Detectors"}),
+									link: det.Name.tag("a",{href:"/swag.view?goto=Detectors"}),
 									qos: req.profile.QoS,
 									priority: 1
 								}									
@@ -3348,7 +3358,7 @@ function feedNews(sql, engine) {
 	.on("result", function (feature) {
 		NEWSFEED.addItem({
 			title:          feature.feature,
-			link:           `${FLEX.paths.HOST}/feed.jade`,
+			link:           `${FLEX.paths.HOST}/feed.view`,
 			description:    JSON.stringify(feature),
 			author: [{
 				name:   FLEX.site.title,
@@ -3709,122 +3719,140 @@ function insertJob(job, cb) {
 		return avgUtil / cpus.length;
 	}
 	
-	function regulate(job,cb) {		// regulate job and spawn if job.cmd provided
+	function regulate(job,cb) {		// regulate job (spawn if job.cmd provided)
 			
 		var queue = FLEX.queues[job.qos];	// get job's qos queue
 		
-		if (!queue)
+		if (!queue)  // prime the queue if it does not yet exist
 			Trace("MAKE QUEUE", queue = FLEX.queues[job.qos] = {
 				timer: 0,
 				batch: {},
 				rate: job.qos
 			} );
 			
-		if (queue.rate) { 				// regulated job
-			var batch = queue.batch[job.priority]; 		// get job's priority batch
-			if (!batch) 
-				Trace("MAKE BATCH", batch = queue.batch[job.priority] = [] );
-			
-			batch.push( Copy(job, {cb:cb}) );
-			
-			if (!queue.timer) 		// restart idle queue
-				queue.timer = setInterval(function (queue) {
-					
-					var job = null;
-					for (var priority in queue.batch) {  // index thru all priority batches
-						var batch = queue.batch[priority];
-						
-						job = batch.pop(); 			// last-in first-out
-						
-						if (job) {
+		var batch = queue.batch[job.priority]; 		// get job's priority batch
+		if (!batch) 
+			Trace("MAKE BATCH", batch = queue.batch[job.priority] = [] );
+
+		batch.push( Copy(job, {cb:cb}) );
+
+		if (!queue.timer) 		// restart idle queue
+			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
+
+				var job = null;
+				for (var priority in queue.batch) {  // index thru all priority batches
+					var batch = queue.batch[priority];
+
+					job = batch.pop(); 			// last-in first-out
+
+					if (job) {
 //console.log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-							if (job.cmd)	// spawn job and return its pid
-								job.pid = CP.exec(
-										job.cmd, 
-										  {cwd: "./public/dets", env:process.env}, 
-										  function (err,stdout,stderr) {
+						if (job.cmd)	// spawn job and return its pid
+							job.pid = CP.exec(
+									job.cmd, 
+									  {cwd: "./public/dets", env:process.env}, 
+									  function (err,stdout,stderr) {
 
-							job.err = err || stderr || stdout;
+								job.err = err || stderr || stdout;
 
-							if (job.cb)
-								FLEX.thread( function (sql) {
-									job.cb( sql, job );
-								});
-						});
-							
-							else  			// execute job cb on a new sql thread
-							if (job.cb) 
-								FLEX.thread( function (sql) {
-									job.cb(sql, job);
-								});
-						
-							break;
-						}
+								if (job.cb)
+									FLEX.thread( function (sql) {
+										job.cb( sql, job );
+									});
+							});
+
+						else  			// execute job callback
+						if (job.cb) 
+							job.cb(sql, job);
+
+						break;
 					}
-						
-					if (!job) { 	// empty queue goes idle
-						clearInterval(queue.timer);
-						queue.timer = null;
-					}
+				}
 
-				}, queue.rate, queue);
-				
-			return true;
-		}
-		
-		else 						// unregulated job
-			return false;
+				if (!job) { 	// an empty queue goes idle
+					clearInterval(queue.timer);
+					queue.timer = null;
+				}
+
+			}, queue.rate, queue);
 	}
 
-	var sql = this,
+	var sql = this;
+	/*
 		jobID = {Name:job.name, Client:job.client, Class:job.class};
 	
 	var
-		regulated = regulate(job, function (sql,job) {
+		regulated = regulate(job, function (sql,job) { // callback for departing job
 				
 			cb(sql,job);
 			
-			sql.query(
+			sql.query( // reduce work backlog
 				"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Done=Done+1,State=Done/Work*100 WHERE least(?)", [
 				{Util: util()}, 
 				jobID 
 			]);
 			
-			sql.query(
-				"UPDATE app1.queues SET Departed=now(), Age=(now(),Arrived)*1e-3,Notes='finished' WHERE least(?,Done=Work)", 
+			sql.query(  // mark departed if no work remaining
+				"UPDATE app1.queues SET Departed=now(), Notes='finished' WHERE least(?,Done=Work)", 
 				jobID);
 
 		});
+	*/
+	
+	if (job.qos)  // regulated job
+		sql.query(  // insert or update job queue
+			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
+			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100", {
+			Client	: job.client,
+			Class	: job.class,
+			State	: 0,
+			Arrived	: new Date(),
+			Departed: null,
+			Mark	: 0,
+			Name	: job.name,
+			Age	: 0,
+			Classif : "",
+			Util	: util(),
+			Priority: job.priority,
+			Notes	: "running",
+			QoS		: job.qos,
+			Work 	: 1
+		}, function (err,info) {  // increment work backlog for this job
 
-	if (regulated)
-			sql.query("INSERT INTO app1.queues SET ?", {
-				Client	: job.client,
-				Class	: job.class,
-				State	: 0,
-				Arrived	: new Date(),
-				Departed: null,
-				Mark	: 0,
-				Name	: job.name,
-				Age	: 0,
-				Classif : "",
-				Util	: util(),
-				Priority: job.priority,
-				Notes	: "running",
-				QoS		: job.qos,
-				Work 	: 1
-			}, function (err) {
+			/*if (err)
+				sql.query(
+					"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100 WHERE least(?)", [
+						{Util:util()},
+						jobID
+					]);
+			*/
+			if (err) 
+				Trace(err);
+			
+			else {
+				if (info.insertId) job.ID = info.insertId;
 				
-				if (err)
-					sql.query(
-						"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100 WHERE least(?)", [
-							{Util:util()},
-							jobID
-						]);
-					
-			});
+				regulate(job, function (sql,job) { // provide callback when job departs
+					FLEX.thread( function (sql) {  // callback on new sql thread
+						cb(sql,job);
 
-	else
+						sql.query( // reduce work backlog
+							"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Done=Done+1,State=Done/Work*100 WHERE ?", [
+							{Util: util()}, 
+							{ID: job.ID} //jobID 
+						]);
+
+						sql.query(  // mark job departed if no work remains
+							"UPDATE app1.queues SET Departed=now(), Notes='finished' WHERE least(?,Done=Work)", 
+							{ID:job.ID} //jobID
+						);
+					});
+				});
+			}
+		});
+
+	else  // unregualted so callback on existing sql thread
 		cb(sql, job);
 }
 	
@@ -3967,7 +3995,7 @@ function hawkJobs (client, url)  {
 								sendMail({
 									to:  job.Client,
 									subject: FLEX.site.title + " job status notice",
-									html: "Please "+"clear your job flag".tag("a",{href:"/rule.jade"})+" to keep your job running.",
+									html: "Please "+"clear your job flag".tag("a",{href:"/rule.view"})+" to keep your job running.",
 									alternatives: [{
 										contentType: 'text/html; charset="ISO-59-1"',
 										contents: ""
@@ -4472,6 +4500,60 @@ function viaAgent(args, job, req, res) {
 			
 function Trace(msg,arg) {
 	ENUM.trace("F>",msg,arg);
+}
+
+FLEX.select.quizes = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	if (query.lesson)
+		sql.query(  // prime quiz if it does not already exists
+			"INSERT INTO app1.quizes SELECT * FROM app1.quizes WHERE least(?,1)", {
+				Client: "Teacher",
+				Lesson: query.lesson
+			}, function (err) {
+
+				sql.query(  // clear last results
+					"UPDATE app1.quizes SET ? WHERE least(?,1)", [{
+						A: "",
+						C: "",
+					}, {
+						Client: req.client,
+						Lesson: query.lesson
+					}], function (err) {
+
+						sql.query(  // return client's quiz 
+							"SELECT * FROM app1.quizes WHERE least(?,1)", {
+									Client: req.client
+							}, function (err,recs) {
+								res(err || recs);
+							});
+
+					});
+			});
+	
+	else
+		sql.query(
+			"SELECT * FROM app1.quizes WHERE least(?,1)", {
+					Client: req.client
+			}, function (err,recs) {
+				res(err || recs);
+			});
+}
+
+FLEX.execute.quizes = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	if (query.lesson)
+		sql.query(
+			"SELECT * FROM app1.quizes WHERE least(?,1)", {
+				Client: "Teacher",
+				Lesson: query.lesson
+			}, function (err,ans) {
+				res("Refresh to get scores");
+			})
+		
+	else
+		res("Mission lesson");
 }
 
 // UNCLASSIFIED
