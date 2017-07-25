@@ -3552,11 +3552,11 @@ function flattenCatalog(flags, catalog, limits, cb) {
 		};*/
 		
 	flatten( sql, rtns, 0, FLEX.listify(catalog), catalog, limits, {
-			res: cb, 
-		
-			filter: function (search) {
-				return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
-		} });
+		res: cb, 
+
+		filter: function (search) {
+			return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
+	} });
 }
 
 function hawkCatalog(req,res) {
@@ -3570,9 +3570,9 @@ function hawkCatalog(req,res) {
 			client: req.client,
 			qos: req.profile.QoS,
 			priority: 0,
-			key: name,
+			//key: name,
 			req: Copy(req,{}),
-			name: "new "+name
+			name: name
 		}, exe);
 	}
 	
@@ -3707,7 +3707,7 @@ function deleteJob(req, cb) {
  * spawns the job if job.cmd provided.
  */
 function insertJob(job, cb) { 
-	function util() {				// compute cpu utils and return avg util
+	function util() {				// compute average cpu utilization
 		var avgUtil = 0;
 		var cpus = OS.cpus();
 		
@@ -3779,54 +3779,28 @@ function insertJob(job, cb) {
 	}
 
 	var sql = this;
-	/*
-		jobID = {Name:job.name, Client:job.client, Class:job.class};
-	
-	var
-		regulated = regulate(job, function (sql,job) { // callback for departing job
-				
-			cb(sql,job);
-			
-			sql.query( // reduce work backlog
-				"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Done=Done+1,State=Done/Work*100 WHERE least(?)", [
-				{Util: util()}, 
-				jobID 
-			]);
-			
-			sql.query(  // mark departed if no work remaining
-				"UPDATE app1.queues SET Departed=now(), Notes='finished' WHERE least(?,Done=Work)", 
-				jobID);
-
-		});
-	*/
 	
 	if (job.qos)  // regulated job
-		sql.query(  // insert or update job queue
+		sql.query(  // insert job into queue or update job already in queue
 			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100", {
-			Client	: job.client,
-			Class	: job.class,
-			State	: 0,
+			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100,Notes='running'", {
+			Client: job.client || "guest",
+			Class: job.class || "job",
+			State: 0,
 			Arrived	: new Date(),
 			Departed: null,
-			Mark	: 0,
-			Name	: job.name,
-			Age	: 0,
+			Mark: 0,
+			Name: job.name,
+			Age: 0,
 			Classif : "",
-			Util	: util(),
-			Priority: job.priority,
-			Notes	: "running",
-			QoS		: job.qos,
-			Work 	: 1
+			Util: util(),
+			Priority: job.priority || 0,
+			Notes: "primed",
+			QoS: job.qos,
+			Work: 1,
+			Done: 0
 		}, function (err,info) {  // increment work backlog for this job
 
-			/*if (err)
-				sql.query(
-					"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100 WHERE least(?)", [
-						{Util:util()},
-						jobID
-					]);
-			*/
 			if (err) 
 				Trace(err);
 			
@@ -3837,7 +3811,7 @@ function insertJob(job, cb) {
 					FLEX.thread( function (sql) {  // callback on new sql thread
 						cb(sql,job);
 
-						sql.query( // reduce work backlog
+						sql.query( // reduce work backlog and update cpu utilization
 							"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Done=Done+1,State=Done/Work*100 WHERE ?", [
 							{Util: util()}, 
 							{ID: job.ID} //jobID 
