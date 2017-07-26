@@ -1129,7 +1129,7 @@ console.log(FLEX.site);
 		1: "grand",
 		2: "wonderful",
 		3: "better than average",
-		4: "suffering",
+		4: "below average",
 		5: "first class hobo",
 		default: "hobo"
 	}			
@@ -3778,33 +3778,37 @@ function insertJob(job, cb) {
 			}, queue.rate, queue);
 	}
 
-	var sql = this;
+	var 
+		sql = this,
+		note = (job.qos>0) ? "running" : "gofundme".link("/fundme.view");
 	
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
 			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100,Notes='running'", {
-			Client: job.client || "guest",
-			Class: job.class || "job",
-			State: 0,
-			Arrived	: new Date(),
-			Departed: null,
-			Mark: 0,
-			Name: job.name,
-			Age: 0,
-			Classif : "",
-			Util: util(),
-			Priority: job.priority || 0,
-			Notes: "primed",
-			QoS: job.qos,
-			Work: 1,
-			Done: 0
-		}, function (err,info) {  // increment work backlog for this job
+			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100,?", [{
+				Client: job.client || "guest",
+				Class: job.class || "job",
+				State: 0,
+				Arrived	: new Date(),
+				Departed: null,
+				Mark: 0,
+				Name: job.name,
+				Age: 0,
+				Classif : "",
+				Util: util(),
+				Priority: job.priority || 0,
+				Notes: note,
+				QoS: job.qos,
+				Work: 1,
+				Done: 0
+			}, {Notes: note}
+		], function (err,info) {  // increment work backlog for this job
 
 			if (err) 
 				Trace(err);
 			
-			else {
+			else 
+			if (job.qos > 0) {
 				if (info.insertId) job.ID = info.insertId;
 				
 				regulate(job, function (sql,job) { // provide callback when job departs
