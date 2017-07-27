@@ -101,6 +101,9 @@ var
 					
 			return list;
 		},
+
+		billingCycle: 0,  // job billing cycle [ms]
+		diagCycle: 0, // self diagnostic cycle [ms]
 		
 		flatten: { 		// catalog flattening 
 			catalog: {  // default tables to flatten and their fulltext keys
@@ -120,6 +123,15 @@ var
 			}
 		},
 		
+		diag : {  // self diag parms
+			limits: {
+				pigs : 2,
+				jobs : 5
+			},
+			status: "", 
+			counts: {State:""}
+		},
+
 		// CRUDE interface
 		select: {ds: runQuery}, 
 		delete: {ds: runQuery}, 
@@ -177,11 +189,11 @@ var
 					*/
 					hawkCatalog,
 					runQuery, 
-					flattenCatalog,
-					hawkJobs
+					flattenCatalog
+					//hawkJobs
 				]);
 
-				sql.hawkJobs("flex", FLEX.site.masterURL);
+				//sql.hawkJobs("flex", FLEX.site.masterURL);
 
 				READ.config(sql);			
 				
@@ -209,8 +221,8 @@ var
 					}
 				});
 
-				// setup likeus table hawk
-				if (FLEX.likeus.PING)
+				/*
+				if (FLEX.likeus.PING)  // setup likeus table hawk
 					setInterval( function() {
 						
 						FLEX.thread(function (sql) {
@@ -229,38 +241,38 @@ var
 						});
 						
 					}, FLEX.likeus.PING*(3600*24*1000) );
+					*/
+				
+				if (diag = FLEX.diag)
+					if (FLEX.diagCycle)
+						FLEX.diags = setInterval( function() {
 
-				/*
-				if (opts.pulse.PING)
-					setInterval( function() {
-						
-						FLEX.thread(function (sql) {
+							FLEX.thread( function (sql) {
 
-							sql.query("SELECT count(ID) AS Count FROM engines WHERE Enabled")
-							.on("result", function (engs) {
-							sql.query("SELECT count(ID) AS Count FROM queues WHERE Departed IS NULL")
-							.on("result", function (jobs) {
-							sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from queues")
-							.on("result", function (pigs) {
-							sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM dblogs")
-							.on("result", function (isps) {
-								var rtn = FLEX.pulse.COUNTS = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
-								var lims = FLEX.pulse.LIMITS;
-								
-								for (var n in lims) 
-									if ( rtn[n] > 5*lims[n] ) rtn.State = "critical";
-									else
-									if ( rtn[n] > lims[n] ) rtn.State = "warning";
-									
-								console.log("SYSTEM "+rtn.State);
+								sql.query("SELECT count(ID) AS Count FROM app1.engines WHERE Enabled")
+								.on("result", function (engs) {
+								sql.query("SELECT count(ID) AS Count FROM app1.queues WHERE Departed IS NULL")
+								.on("result", function (jobs) {
+								sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app1.queues")
+								.on("result", function (pigs) {
+								sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app1.dblogs")
+								.on("result", function (isps) {
+									var rtn = diag.counts = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
+									var limits = diag.limits;
+
+									for (var n in limits) 
+										if ( rtn[n] > 5*limits[n] ) rtn.State = "critical";
+										else
+										if ( rtn[n] > limits[n] ) rtn.State = "warning";
+
+									Trace("DIAGS ", rtn);
+								});
+								});
+								});
+								});
 							});
-							});
-							});
-							});
-						});
-						
-					}, opts.pulse.PING*(60*1000) );
-				*/
+
+						}, FLEX.diagCycle );
 				
 				if (email) {
 					email.TX = {};
@@ -805,7 +817,7 @@ FLEX.select.THEMES = function (req, res) {
 
 FLEX.select.SUMMARY = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
-	var cnts = FLEX.pulse.COUNTS;
+	var cnts = FLEX.diag.counts;
 	
 	// Could check rtn.serverStatus and warningCount (become defined when a MySQL table corrupted).  
 	// Return selected record info (fieldCount, affectedRows, insertId, serverStatus, warningCount, msg)
@@ -1124,17 +1136,17 @@ console.log(FLEX.site);
 	});
 
 	var user = {
-		expired: "your free subscription has expired",
-		0: "elite first class",
+		expired: "your subscription has expired",
+		0: "elite",
 		1: "grand",
 		2: "wonderful",
 		3: "better than average",
 		4: "below average",
-		5: "first class hobo",
-		default: "hobo"
+		5: "first class",
+		default: "limtied"
 	}			
 	
-	if (req.profile.QoS >= 0) {
+	if ( req.profile.Credit ) {
 		sql.query(
 			"UPDATE openv.profiles SET Challenge=0,Likeus=Likeus+1,QoS=greatest(QoS-1000,0) WHERE ?",
 			{Client:req.client}
@@ -2899,7 +2911,42 @@ FLEX.execute.hawks = function Execute(req, res) {
 	
 	res(SUBMITTED);
 	
-	sql.hawkJobs(req.client,FLEX.site.masterURL);
+	//sql.hawkJobs(req.client,FLEX.site.masterURL);
+	if ( !FLEX.hawks) 
+		sql.query("SELECT * FROM app1.jobrules", function (err, rules) {
+			FLEX.hawks = setInterval( function (rules) {
+
+				FLEX.thread( function (sql) {
+					
+					Trace("SCANNING ",rules);
+					
+					sql.query("SELECT * FROM app1.queues WHERE Finished AND NOT Billed")
+					.on("result", function (job) {
+						Trace("BILLING ",job);
+						sql.query( "UPDATE openv.profiles SET Charge=Charge+? WHERE ?", [ 
+							job.Done, {Client: job.Client} 
+						]);
+						
+						sql.query( "UPDATE app1.queues SET Billed=1 WHERE ?", {ID: job.ID})
+					});
+
+					sql.query("SELECT * FROM app1.queues WHERE NOT Funded AND now()-Arrived>?", 10)
+					.on("result", function (job) {
+						Trace("KILLING ",job);
+						sql.query(
+							//"DELETE FROM app1.queues WHERE ?", {ID:job.ID}
+						);
+					});
+					
+				});
+
+			}, 10000, rules);
+		});
+	
+	else {
+		clearInterval(FLEX.hawks);
+		FLEX.hawks = 0;
+	}
 }
 
 /*
@@ -3724,18 +3771,26 @@ function insertJob(job, cb) {
 		var queue = FLEX.queues[job.qos];	// get job's qos queue
 		
 		if (!queue)  // prime the queue if it does not yet exist
-			Trace("MAKE QUEUE", queue = FLEX.queues[job.qos] = {
+			Trace("MAKE QUEUE", queue = FLEX.queues[job.qos] = new Object({
 				timer: 0,
 				batch: {},
-				rate: job.qos
-			} );
+				rate: job.qos,
+				client: {}
+			}) );
 			
+		var client = queue.client[job.client];  // update client's bill
+		
+		if ( !client) client = queue.client[job.client] = new Object({bill:0});
+		
+		client.bill++;
+
 		var batch = queue.batch[job.priority]; 		// get job's priority batch
+		
 		if (!batch) 
-			Trace("MAKE BATCH", batch = queue.batch[job.priority] = [] );
+			Trace("MAKE BATCH", batch = queue.batch[job.priority] = new Array() );
 
 		batch.push( Copy(job, {cb:cb}) );
-
+		
 		if (!queue.timer) 		// restart idle queue
 			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
 
@@ -3757,20 +3812,18 @@ function insertJob(job, cb) {
 								job.err = err || stderr || stdout;
 
 								if (job.cb)
-									FLEX.thread( function (sql) {
-										job.cb( sql, job );
-									});
+									job.cb( job );
 							});
 
 						else  			// execute job callback
 						if (job.cb) 
-							job.cb(sql, job);
+							job.cb(job);
 
 						break;
 					}
 				}
 
-				if (!job) { 	// an empty queue goes idle
+				if ( !job ) { 	// an empty queue goes idle
 					clearInterval(queue.timer);
 					queue.timer = null;
 				}
@@ -3780,12 +3833,31 @@ function insertJob(job, cb) {
 
 	var 
 		sql = this,
-		note = (job.qos>0) ? "running" : "gofundme".link("/fundme.view");
+		note = job.credit ? "running" : "fundme".link("/fundme.view");
+	
+	if ( !FLEX.biller && FLEX.billingCycle)
+		FLEX.biller = setInterval( function (queues) {
+			
+			FLEX.thread( function (sql) {
+				Each(queues, function (rate, queue) {
+					Each(queue.client, function (client, charge) {
+
+						if ( charge.bill ) {
+							Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
+							sql.query("UPDATE openv.profiles SET Charge=Charge+? WHERE ?" , [charge.bill, {Client:client}]);
+							charge.bill = 0;
+						}
+
+					});
+				});
+			});
+					
+		}, FLEX.billingCycle, FLEX.queues );
 	
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
 			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Age=(now()-Arrived)*1e-3,Work=Work+1,State=Done/Work*100,?", [{
+			"UPDATE Age=now()-Arrived,Work=Work+1,State=Done/Work*100,?", [{
 				Client: job.client || "guest",
 				Class: job.class || "job",
 				State: 0,
@@ -3799,35 +3871,37 @@ function insertJob(job, cb) {
 				Priority: job.priority || 0,
 				Notes: note,
 				QoS: job.qos,
+				Finished: 0,
+				Billed: 0,
+				Funded: job.credit ? 1 : 0,
 				Work: 1,
 				Done: 0
 			}, {Notes: note}
 		], function (err,info) {  // increment work backlog for this job
 
+			job.ID = info.insertId;
+			
 			if (err) 
 				Trace(err);
 			
 			else 
-			if (job.qos > 0) {
-				if (info.insertId) job.ID = info.insertId;
-				
-				regulate(job, function (sql,job) { // provide callback when job departs
+			if (job.credit)				
+				regulate(job, function (job) { // provide callback when job departs
 					FLEX.thread( function (sql) {  // callback on new sql thread
 						cb(sql,job);
 
 						sql.query( // reduce work backlog and update cpu utilization
-							"UPDATE app1.queues SET ?,Age=(now()-Arrived)*1e-3,Done=Done+1,State=Done/Work*100 WHERE ?", [
+							"UPDATE app1.queues SET ?,Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
 							{Util: util()}, 
 							{ID: job.ID} //jobID 
 						]);
 
 						sql.query(  // mark job departed if no work remains
-							"UPDATE app1.queues SET Departed=now(), Notes='finished' WHERE least(?,Done=Work)", 
+							"UPDATE app1.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
 							{ID:job.ID} //jobID
 						);
 					});
 				});
-			}
 		});
 
 	else  // unregualted so callback on existing sql thread
@@ -3911,6 +3985,7 @@ function runQuery(req, res) {
 
 //  job monitors 
 
+/*
 function hawkJobs (client, url)  {
 	var sql = this;
 
@@ -3933,11 +4008,6 @@ function hawkJobs (client, url)  {
 							query: {},
 							body: {},
 							param: function () { return ""; }
-							/*connection: {
-								listeners: function () {return "";},
-								on: function () {return this;},
-								setTimeout: function () {}
-							}*/
 						}, {
 							send: function (rtn) {
 								console.log(rtn);
@@ -4061,6 +4131,9 @@ function hawkJobs (client, url)  {
 		});
 	});
 }
+
+*/
+
 
 FLEX.execute.gaussmix = function (req, res) {
 	
