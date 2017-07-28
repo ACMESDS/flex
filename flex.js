@@ -3836,18 +3836,28 @@ function insertJob(job, cb) {
 		note = job.credit ? "running" : "fundme".link("/fundme.view");
 	
 	if ( !FLEX.biller && FLEX.billingCycle)
-		FLEX.biller = setInterval( function (queues) {
+		FLEX.biller = setInterval( function (queues) { // setup job billing
 			
 			FLEX.thread( function (sql) {
-				Each(queues, function (rate, queue) {
-					Each(queue.client, function (client, charge) {
+				
+				sql.query(  // mark job departed if no work remains
+					"UPDATE app1.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
+					// {ID:job.ID} //jobID
+					function () {
+				
+					Each(queues, function (rate, queue) {  // save collected queuing charges to profiles
+						Each(queue.client, function (client, charge) {
 
-						if ( charge.bill ) {
-							Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
-							sql.query("UPDATE openv.profiles SET Charge=Charge+? WHERE ?" , [charge.bill, {Client:client}]);
-							charge.bill = 0;
-						}
+							if ( charge.bill ) {
+								Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
+								sql.query(
+									"UPDATE openv.profiles SET Charge=Charge+?,Credit=max(0,Credit-?) WHERE ?" , 
+									 [charge.bill, charge.bill, {Client:client}]
+								);
+								charge.bill = 0;
+							}
 
+						});
 					});
 				});
 			});
@@ -3857,7 +3867,7 @@ function insertJob(job, cb) {
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
 			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Age=now()-Arrived,Work=Work+1,State=Done/Work*100,?", [{
+			"UPDATE Arrived=now(),Work=Work+1,State=Done/Work*100,?", [{
 				Client: job.client || "guest",
 				Class: job.class || "job",
 				State: 0,
@@ -3879,33 +3889,37 @@ function insertJob(job, cb) {
 			}, {Notes: note}
 		], function (err,info) {  // increment work backlog for this job
 
-			job.ID = info.insertId;
+			job.ID = info.insertId || 0;
 			
 			if (err) 
 				Trace(err);
 			
 			else 
-			if (job.credit)				
+			if (job.credit)				// client's credit is still good
 				regulate(job, function (job) { // provide callback when job departs
 					FLEX.thread( function (sql) {  // callback on new sql thread
 						cb(sql,job);
 
 						sql.query( // reduce work backlog and update cpu utilization
-							"UPDATE app1.queues SET ?,Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
-							{Util: util()}, 
+							"UPDATE app1.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
+							// {Util: util()}, 
 							{ID: job.ID} //jobID 
 						]);
 
+						/*
 						sql.query(  // mark job departed if no work remains
 							"UPDATE app1.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
 							{ID:job.ID} //jobID
 						);
+						*/
 					});
 				});
 		});
 
-	else  // unregualted so callback on existing sql thread
+	else  { // unregulated so callback on existing sql thread
+		job.ID = 0;
 		cb(sql, job);
+	}
 }
 	
 function executeJob(req, exe) {
