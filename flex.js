@@ -249,13 +249,13 @@ var
 
 							FLEX.thread( function (sql) {
 
-								sql.query("SELECT count(ID) AS Count FROM app1.engines WHERE Enabled")
+								sql.query("SELECT count(ID) AS Count FROM app.engines WHERE Enabled")
 								.on("result", function (engs) {
-								sql.query("SELECT count(ID) AS Count FROM app1.queues WHERE Departed IS NULL")
+								sql.query("SELECT count(ID) AS Count FROM app.queues WHERE Departed IS NULL")
 								.on("result", function (jobs) {
-								sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app1.queues")
+								sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app.queues")
 								.on("result", function (pigs) {
-								sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app1.dblogs")
+								sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app.dblogs")
 								.on("result", function (isps) {
 									var rtn = diag.counts = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
 									var limits = diag.limits;
@@ -423,7 +423,7 @@ FLEX.select.sql = function Select(req, res) {
 	.on("result", function (rec) {
 		sql.query(
 			"SELECT SQL_CALC_FOUND_ROWS * FROM ?? "+(rec.Code||"WHERE least(?,1)").format(query),
-			["app1."+log.Table,query],
+			["app."+log.Table,query],
 			function (err, recs) {
 
 				res(err || recs);
@@ -439,7 +439,7 @@ FLEX.insert.sql = function Insert(req, res) {
 		
 		sql.query(
 				"INSERT INTO ?? "+(rec.Code||"SET ?"),
-				["app1."+rec.Name, req.body],
+				["app."+rec.Name, req.body],
 				function (err, recs) {
 					
 			res(err || recs);
@@ -455,7 +455,7 @@ FLEX.delete.sql = function Delete(req, res) {
 		
 		sql.query(
 				"DELETE FROM ?? "+(rec.Code||"WHERE least(?,1)").format(query),
-				["app1."+log.Table,query],
+				["app."+log.Table,query],
 				function (err, recs) {	
 					
 			res(err || recs);
@@ -471,7 +471,7 @@ FLEX.update.sql = function Update(req, res) {
 		
 		sql.query(
 				"UPDATE ?? "+(rec.Code||"SET ? WHERE least(?,1)").format(query),
-				["app1."+rec.Name, req.body,query],
+				["app."+rec.Name, req.body,query],
 				function (err, recs) {	
 					
 			res(err || recs);
@@ -894,7 +894,7 @@ FLEX.select.TABLES = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
-	sql.indexTables( "app1", function (table) {
+	sql.indexTables( "app", function (table) {
 		rtns.push({
 			Name: table.tag("a",{href:"/"+table+".db"}),
 			ID: ID++
@@ -2524,7 +2524,7 @@ FLEX.execute.parms = function Execute(req, res) {
 	res(SUBMITTED);
 	
 	var allparms = {}, ntables = 0;
-	sql.indexTables("app1", function (tname) {
+	sql.indexTables("app", function (tname) {
 		
 		sql.query("DESCRIBE ??",[tname], function (err, parms) {
 
@@ -2554,7 +2554,7 @@ FLEX.execute.parms = function Execute(req, res) {
 	});
 	
 	/*if (true)
-	sql.query("SHOW TABLES FROM app1 WHERE Tables_in_app1 NOT LIKE '\\_%'", function (err,tables) {	// sync parms table with DB
+	sql.query("SHOW TABLES FROM app WHERE Tables_in_app1 NOT LIKE '\\_%'", function (err,tables) {	// sync parms table with DB
 		var allparms = {}, ntables = 0;
 
 		Trace("DESCRIBING TABLES");
@@ -2913,28 +2913,28 @@ FLEX.execute.hawks = function Execute(req, res) {
 	
 	//sql.hawkJobs(req.client,FLEX.site.masterURL);
 	if ( !FLEX.hawks) 
-		sql.query("SELECT * FROM app1.jobrules", function (err, rules) {
+		sql.query("SELECT * FROM app.jobrules", function (err, rules) {
 			FLEX.hawks = setInterval( function (rules) {
 
 				FLEX.thread( function (sql) {
 					
 					Trace("SCANNING ",rules);
 					
-					sql.query("SELECT * FROM app1.queues WHERE Finished AND NOT Billed")
+					sql.query("SELECT * FROM app.queues WHERE Finished AND NOT Billed")
 					.on("result", function (job) {
 						Trace("BILLING ",job);
 						sql.query( "UPDATE openv.profiles SET Charge=Charge+? WHERE ?", [ 
 							job.Done, {Client: job.Client} 
 						]);
 						
-						sql.query( "UPDATE app1.queues SET Billed=1 WHERE ?", {ID: job.ID})
+						sql.query( "UPDATE app.queues SET Billed=1 WHERE ?", {ID: job.ID})
 					});
 
-					sql.query("SELECT * FROM app1.queues WHERE NOT Funded AND now()-Arrived>?", 10)
+					sql.query("SELECT * FROM app.queues WHERE NOT Funded AND now()-Arrived>?", 10)
 					.on("result", function (job) {
 						Trace("KILLING ",job);
 						sql.query(
-							//"DELETE FROM app1.queues WHERE ?", {ID:job.ID}
+							//"DELETE FROM app.queues WHERE ?", {ID:job.ID}
 						);
 					});
 					
@@ -3841,7 +3841,7 @@ function insertJob(job, cb) {
 			FLEX.thread( function (sql) {
 				
 				sql.query(  // mark job departed if no work remains
-					"UPDATE app1.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
+					"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
 					// {ID:job.ID} //jobID
 					function () {
 				
@@ -3866,7 +3866,7 @@ function insertJob(job, cb) {
 	
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
-			"INSERT INTO app1.queues SET ? ON DUPLICATE KEY " +
+			"INSERT INTO app.queues SET ? ON DUPLICATE KEY " +
 			"UPDATE Arrived=now(),Work=Work+1,State=Done/Work*100,?", [{
 				Client: job.client || "guest",
 				Class: job.class || "job",
@@ -3901,14 +3901,14 @@ function insertJob(job, cb) {
 						cb(sql,job);
 
 						sql.query( // reduce work backlog and update cpu utilization
-							"UPDATE app1.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
+							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
 							// {Util: util()}, 
 							{ID: job.ID} //jobID 
 						]);
 
 						/*
 						sql.query(  // mark job departed if no work remains
-							"UPDATE app1.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
+							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
 							{ID:job.ID} //jobID
 						);
 						*/
@@ -4006,7 +4006,7 @@ function hawkJobs (client, url)  {
 	function hawk(rule) {
 		FLEX.thread(function (sql) {
 
-			sql.query("UPDATE app1.hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
+			sql.query("UPDATE app.hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
 
 			if (rule.Action.charAt(0) == "/" && FLEX.execute)
 				FLEX.fetcher(url + rule.Action, function (ack) {
@@ -4036,7 +4036,7 @@ function hawkJobs (client, url)  {
 					case "kill":
 
 						sql.jobs().delete(rule.Condition, function (job) {
-							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
 						});
 
 						break;
@@ -4073,7 +4073,7 @@ function hawkJobs (client, url)  {
 					case "improve":
 
 						sql.jobs().update(rule.Condition, +1, 0, function (job) {
-							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
 						});
 
 						break;
@@ -4082,7 +4082,7 @@ function hawkJobs (client, url)  {
 					case "reduce":
 
 						sql.jobs().update(rule.Condition, -1, 0, function (job) {
-							sql.query("UPDATE app1.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
+							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
 						});
 
 						break;
@@ -4124,11 +4124,11 @@ function hawkJobs (client, url)  {
 
 	//sql.query("DELETE FROM queues"); 		// flush job queues
 	
-	sql.query("SELECT * FROM app1.config WHERE Hawks")             // get hawk config options
+	sql.query("SELECT * FROM app.config WHERE Hawks")             // get hawk config options
 	.on("result", function (config) {
 
 		sql.query(
-			"SELECT * FROM app1.hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
+			"SELECT * FROM app.hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
 			{Enabled:1, Name:config.SetPoint}, 
 			config.MaxFaults
 		])
@@ -4441,13 +4441,13 @@ console.log(JSON.stringify(gmms));
 	
 	res("submitted");
 	
-	sql.query("SELECT * FROM app1.gaussmix WHERE least(?,1)", req.query)
+	sql.query("SELECT * FROM app.gaussmix WHERE least(?,1)", req.query)
 	.on("result", function (mix) {
 		
 //console.log(mix);
 		viaAgent(mix, gaussmix, req, function (rtn, sql) {
 			
-			sql.query("UPDATE app1.gaussmix SET ? WHERE ?", [{
+			sql.query("UPDATE app.gaussmix SET ? WHERE ?", [{
 				Result: JSON.stringify(rtn)}, {
 				Name: mixreq.Name
 			}], function (err) {
@@ -4572,13 +4572,13 @@ FLEX.select.quizes = function (req, res) {
 	
 	if (query.lesson)
 		sql.query(  // prime quiz if it does not already exists
-			"INSERT INTO app1.quizes SELECT * FROM app1.quizes WHERE least(?,1)", {
+			"INSERT INTO app.quizes SELECT * FROM app.quizes WHERE least(?,1)", {
 				Client: "Teacher",
 				Lesson: query.lesson
 			}, function (err) {
 
 				sql.query(  // clear last results
-					"UPDATE app1.quizes SET ? WHERE least(?,1)", [{
+					"UPDATE app.quizes SET ? WHERE least(?,1)", [{
 						A: "",
 						C: "",
 					}, {
@@ -4587,7 +4587,7 @@ FLEX.select.quizes = function (req, res) {
 					}], function (err) {
 
 						sql.query(  // return client's quiz 
-							"SELECT * FROM app1.quizes WHERE least(?,1)", {
+							"SELECT * FROM app.quizes WHERE least(?,1)", {
 									Client: req.client
 							}, function (err,recs) {
 								res(err || recs);
@@ -4598,7 +4598,7 @@ FLEX.select.quizes = function (req, res) {
 	
 	else
 		sql.query(
-			"SELECT * FROM app1.quizes WHERE least(?,1)", {
+			"SELECT * FROM app.quizes WHERE least(?,1)", {
 					Client: req.client
 			}, function (err,recs) {
 				res(err || recs);
@@ -4610,7 +4610,7 @@ FLEX.execute.quizes = function (req, res) {
 	
 	if (query.lesson)
 		sql.query(
-			"SELECT * FROM app1.quizes WHERE least(?,1)", {
+			"SELECT * FROM app.quizes WHERE least(?,1)", {
 				Client: "Teacher",
 				Lesson: query.lesson
 			}, function (err,ans) {
