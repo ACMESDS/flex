@@ -159,6 +159,414 @@ var
 			f: "varchar(255)"
 		},
 		
+						
+		runPlugin: function FlexPlugin(req,res) {  //< method to run a plugin
+			var 
+				sql = req.sql, 
+				plugin = req.table,
+				query = req.query,
+				testID = query.ID;
+
+			sql.query("SELECT *,count(ID) AS Found FROM app.?? WHERE ID=? LIMIT 0,1", [plugin,testID])
+			.on("result", function (test) {	
+				if (test.Found) 
+
+					if ( viaAgent = FLEX.viaAgent )  // use agents if installed
+						viaAgent(test, plugins[plugin], req, function (rtn, sql) {  // possibly outsource the plugin to an agent
+
+							//console.log({ save: rtn });
+							
+							sql.query(   // save results
+								"UPDATE app.?? SET ? WHERE ?", [ 
+								plugin,   
+								{ Result: JSON.stringify(rtn) }, 
+								{ ID: testID }
+							], function (err) {
+								Trace(err);
+							});
+
+						});
+
+					else  // do it yourself
+						plugins[plugin](test, res);
+
+				else
+					res( new Error("test not found") );
+			})
+			.on("error", function (err) {
+				res( err );
+			});
+		},
+		
+		plugins: { // default plugin testers
+			randpr: function randpr(req,res) {
+				/*
+				String.prototype.push = function(x) {
+					if (x.Location) {
+						var u = x.Location[0], v = x.Location[1];
+						delete x.Location;
+						sql.query(this, [u,v,x]);
+					}
+					else
+						sql.query(this,x);
+				}
+				*/
+
+				function randint(a) {
+					return floor((rand() - 0.5)*2*a);
+				}
+
+				function addvec(x,y) {
+					var z = new Array(x.length);
+					for (var n=0; n<mixdim; n++) z[n] = x[n] + y[n];
+					return z;
+				}
+
+				var 
+					exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
+
+				try {
+					var 
+						Mix = JSON.parse(req.Mix),  // gauss mixing parameters
+						JumpRates = JSON.parse(req.JumpRates || "[]"),
+						Symbols = JSON.parse(req.Symbols || "null");
+				}
+				
+				catch (err) {
+					Trace(err);
+					cb( null );
+				}
+
+				var mixcell = 1000; 
+				
+				if (Mix)  // generate gauss mixes
+					if (Mix.constructor == Object) {  // generate random gauss mixes
+						var K = Mix.K, Mix = [];
+						var xx = 0.9, yy = 0.7, xy = yx = 0.4, a = mixcell;
+
+						for (var k=0; k<K; k++) 
+							Mix.push({
+								mu: [randint(a), randint(a), randint(a)],
+								sigma: [[xx*a/2,xy*a/2,0],[yx*a/2,yy*a/2,0],[0,0,1]]
+							});
+
+						console.log(Mix);
+					}
+
+				var
+					run = {}, // returned results
+					mvd = [], 	// multivariate distribution parms
+					ooW = [], // wiener/oo process look ahead
+					mixes = Mix ? Mix.length : 0,	// number of mixes
+					mixing = mixes > 0, // we are mixing
+					mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
+					mixoffs = [], // mixing offsets
+					mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
+					mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
+					mu = mix0.mu,	// mean 
+					sigma = mix0.sigma,  // covariance
+					theta = mix0.theta,  	// oo time lag
+					x0 = mix0.x0, 		// oo initial pos
+					a = {  // process fixed parms
+						wi: 0,
+						gm: 0,
+						br: sigma*sigma / 2,
+						oo: sigma / sqrt(2*theta)
+					},  		// sampler constants
+					samplers = {  // sampling methods for specified mix index
+						na: function (u) {  // ignore
+						},
+
+						wi: function (u) {  // wiener (need to vectorize)
+							var 
+								t = RAN.s, 
+								Wt = RAN.W[0];
+							
+							return mu + sigma * Wt;
+						},
+
+						oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
+							var 
+								t = RAN.s, 
+								Et = exp(-theta*t),
+								Et2 = exp(2*theta*t),
+								Wt = ooW[floor(Et2 - 1)] || 0;
+
+							ooW.push( WQ[0] );
+
+							return x0 
+									? x0 * Et + mu*(1-Et) + a.oo * Et * Wt 
+									: mu + a.oo * Et * Wt;
+						},
+
+						br: function (u) { // geometric brownian (need to vectorize)
+							var 
+								t = RAN.s, 
+								Wt = RAN.WQ[0];
+							
+							return exp( (mu-a.br)*t + sigma*Wt );
+						},
+
+						gm: function (u) {  // mixed gaussian (vectorized)
+							return mvd[u].sample();
+						}
+					},  // samplers
+					labels = ["x","y","z"], // vector sample labels
+					sampler = samplers[mode]; // sampler
+
+				RAN.config({ // configure the random process generator
+					N: req.Ensemble,  // ensemble size
+					wiener: req.Wiener,  // wiener process switch
+					A: JumpRates,  // jump rates 
+					/*  enable for a realtime process
+					A: {
+						dt: 1,
+						agent: "/someagent.domain",
+						n: 400,
+						fetch: TOTEM.fetch.http
+					},
+					*/
+					sym: Symbols,  // state symbols
+					nyquist: req.Nyquist, // sampling rate
+					store: {  // stores for ...
+						jump: null,  // state-jump observations
+						step: []  // time-step observations
+					},  // event stores
+					bins: 50,  // bins to create stats
+					on: {
+						jump: function (x) {},
+							
+						step: function (y) { // callback to monitor process after being forward stepped
+							RAN.U.each( function (id, state) {
+								var 
+									mix = floor(rand() * mixes),  // mixinf index
+									us = addvec( sampler(mix), mixoffs[state] ),
+									ys = {
+										t: RAN.t, // time sampled
+										u: state,   // state occupied
+										m: mix, // gauss mix dran from
+										f: mode, // process family
+										c: RAN.corr(), // ensemble correlation
+										s: RAN.t / RAN.Tc, // coherence intervals
+										n: RAN.steps, // step counter
+										p: RAN.NU[state] / RAN.N // pr ensemble in this state
+									};
+
+								for (var n=0, N=us.length; n<N; n++) ys[labels[n]] = us[n];
+								y.push( new Object(ys) );
+							});
+						}
+					}  // on-event callbacks
+				});
+
+				var
+					intervals = req.Intervals,
+					steps = intervals * RAN.Tc/RAN.dt,
+					states = RAN.K,
+					info = {
+						states: states,
+						ensemble_size: RAN.N,
+						process_steps: steps,
+						coherence_interval: intervals, 
+						coherence_time: RAN.Tc,
+						nyquist_step_time: RAN.dt,
+						coherence_time: RAN.Tc,
+						initial_activity: RAN.p,
+						wiener_walks: RAN.wiener ? "yes" : "no",
+						sample_time: RAN.dt,
+						avg_rate: RAN.lambda
+						//initial_pr: RAN.pi,
+						//cumTxPr: RAN.P,
+						//state_symbols: RAN.sym,
+						//jump_rates: RAN.A,
+						//state_times: RAN.T,
+						//hold_times: RAN.R,
+						//time_in_state: RAN.ZU
+					};
+
+				if (mode == "gm")  { // config MVNs and mixing offsets for gauss mixes, if needed
+					for (var k=0; k<mixes; k++)  
+						mvd.push( RAN.MVN( Mix[k].mu, Mix[k].sigma ) );
+									
+					var off = new Array(mixdim); 
+					for (n=0; n<mixdim; n++) off[n]=0;
+					for (var k=0; k<states; k++) {
+						off[0] = k*mixcell;
+						mixoffs.push( off );  
+					}
+				}
+							
+				console.log({gaussmix: Mix});
+				console.log(info);
+
+				RAN.start( Math.min(1000, steps), function (x,y,stats) {
+
+					function dist(a,b) { 
+						var d = [ a[0]-b[0], a[1]-b[1] ];
+						return sqrt( d[0]*d[0] + d[1]*d[1] );
+					}
+
+					console.log("running gmm stats");
+					
+					Array.prototype.nearestOf = function (metric) {
+						var imin = 0, emin = 1e99;
+
+						this.each( function (i,req) {
+							var e = metric( req );
+							if (  e < emin) { imin = i; emin = e; }
+						});
+						return {idx: imin, err: emin};
+					}
+
+					Copy({
+						processSteps: RAN.steps,
+						processSamples: RAN.jumps,
+						processStats: JSON.stringify({
+							jumpRates: RAN.A,
+							cumTxPr: RAN.P,
+							jumpCounts: RAN.T,
+							holdTimes: RAN.R,
+							symbols: RAN.sym,
+							initPr: RAN.pi						
+						})
+					}, info);
+
+					if (x) {  // if requesting gauss mle for this process, then add these mles to the reply
+						var 
+							gmms = RAN.MLE(x, mixes);
+
+						gmms.each( function (k,gmm) {
+							gmm.find = Mix.nearestOf(function (req) {
+								return dist( req.mu, gmm.mu );
+							});
+						});
+
+						gmms.sort( function (a,b) {
+							return a.find.idx < b.find.idx ? 1 : -1;
+						});
+
+						gmms.each(function (n,gmm) {
+							Copy({
+								cellIndex: gmm.find.idx,
+								cellType: "mle",
+								cellError: gmm.find.err * 100,
+								cellParms: JSON.stringify({
+									mu: gmm.mu,
+									sigma: gmm.sigma
+								})
+							}, info);
+
+							sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
+								console.log(err || "cell saved");
+							});
+						});
+
+						Mix.each(function (n,Mix) {					
+							Copy({
+								cellIndex: n,
+								cellType: "true",
+								cellError: 0,
+								cellParms: JSON.stringify({
+									mu: Mix.mu,
+									sigma: Mix.sigma
+								})
+							}, info);
+
+							sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
+								console.log(err || "cell saved");
+							});
+						});
+
+						res( Copy({
+							steps: y,
+							stats: stats,
+							info: info
+						}, run) );
+
+						console.log(JSON.stringify(gmms)); 
+					}
+
+					else  // reply with the random events
+						res( Copy({
+							jumps: x,
+							steps: y,
+							stats: stats,
+							info: info
+						}, run) );
+				});
+			},
+			
+			res1: function res1pr(req,res) {
+			},
+			
+			res2: function res2pr(req,res) {
+			}
+		},
+		
+		viaAgent: function(args, job, req, res) {
+			var
+				fetch = FLEX.fetcher,
+				sql = req.sql,
+				query = req.query,
+				jobname = "totem."+ req.client + "." + job.name + "." + query.ID;
+
+			if (agent = query.agent) 
+				fetch(agent+"&push="+jobname+"&args="+JSON.stringify(args), function (jobid) {
+
+					if (jobid)
+						if (jobid.constructor == Error)
+							Trace(jobid);
+
+						else {
+							Trace("AGENT FORKED "+jobname);
+
+							sql.query("INSERT INTO queues SET ?", {
+								class: agent,
+								client: req.client,
+								qos: 0,
+								priority: 0,
+								name: job.name
+							});
+
+							if ( poll = parseInt(query.poll) )
+								var timer = setInterval(function (req) {
+
+									Trace("AGENT POLLING "+jobid);
+
+									fetch(req.agent+"?pull="+jobid, function (rtn) {
+
+										if (rtn) 
+											if (rtn.constructor == Error) {
+												Trace("AGENT FAILED");
+												clearInterval(timer);
+												req.cb( rtn, sql );
+											}
+
+											else
+												FLEX.thread( function (sql) {
+													Trace("AGENT RETURNED "+jobid);
+													sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
+													req.cb( rtn, sql );
+												});
+
+									});
+
+								}, poll*1000, Copy({
+										job: job,
+										cb: res}, req));
+						}
+
+					else
+						Trace("AGENT REJECTED "+jobname);
+
+				});
+
+			else 
+				job(args, function (rtn) {
+					res(rtn,sql);
+				});
+		},
+		
 		/**
 		 * @method config
 		 * 
@@ -196,6 +604,12 @@ var
 				//sql.hawkJobs("flex", FLEX.site.masterURL);
 
 				READ.config(sql);			
+				
+				if (plugins = FLEX.plugins)
+					for (var plugin in plugins) {
+						Trace("PLUGIN "+plugin);
+						FLEX.execute[plugin] = FLEX.runPlugin;
+					}
 				
 				sql.release();
 			});
@@ -1829,9 +2243,9 @@ FLEX.execute.engines = function Execute(req, res) {
 
 					default:  // prime from flex or from engine db
 					
-						if ( builtin = FLEX.execute[Name] ) 
+						if ( plugin = FLEX.execute[Name] ) 
 							sql.query("INSERT into engines SET ?", {
-								Code: builtin+"",
+								Code: plugin+"",
 								Enabled: 0,
 								Name: Name,
 								Engine: "js"
@@ -4148,7 +4562,7 @@ function hawkJobs (client, url)  {
 
 */
 
-
+/*
 FLEX.execute.gaussmix = function (req, res) {
 	
 	var 
@@ -4178,29 +4592,29 @@ FLEX.execute.gaussmix = function (req, res) {
 
 		try {
 			var 
-				mix = JSON.parse(req.Mix) || [];  // gauss mixing parameters
+				Mix = JSON.parse(req.Mix) || [];  // gauss mixing parameters
 			
-			if (mix.constructor == Object) {
-				var K = mix.K, mix = [];
+			if (Mix.constructor == Object) {
+				var K = Mix.K, Mix = [];
 				
 				for (var k=0; k<K; k++) {
 					var xx = 0.9, yy = 0.7, xy = yx = 0.4;
-					mix.push({
+					Mix.push({
 						mu: [randint(a), randint(a), randint(a)],
-						sigma: [[xx*a/2,xy*a/2,0],[yx*/2,yy*a/2,0],[0,0,1]]
+						sigma: [[xx*a/2,xy*a/2,0],[yx*a/2,yy*a/2,0],[0,0,1]]
 					});
 				}
-				console.log(mix);
+				console.log(Mix);
 			}
 			
 			var
 				voxel = [], // voxel centroids
 				mvd = [], 	// multivariate distribution parms
 				ooW = [], // wiener/oo process look ahead
-				mixes = mix.length,	// number of mixes
-				mode = mixes ? parseFloat(mix[0].theta) ? "oo" : mix[0].theta || "gm" : "na",  // mix mode
+				mixes = Mix.length,	// number of mixes
+				mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Mix mode
 				
-				mix0 = mix[0] || {},  // wiener/oo parms (using mix[0] now)
+				mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
 				mu = mix0.mu,	// mean 
 				sigma = mix0.sigma,  // covariance
 				theta = mix0.theta,  	// oo time lag
@@ -4280,21 +4694,21 @@ FLEX.execute.gaussmix = function (req, res) {
 				for (var k=0; k<mixes; k++) {
 					voxel.push( x = new Array(3) );
 					
-					mvd.push( RAN.MVN( mix[k].mu, mix[k].sigma ) );
+					mvd.push( RAN.MVN( Mix[k].mu, Mix[k].sigma ) );
 				}
 
 			RAN.config({ // configure the random process generator
 				N: req.Ensemble,  // ensemble size
 				wiener: req.Wiener,  // wiener process switch
 				A: JSON.parse(req.JumpRates || "[]"),
-				/*
+				/ *
 				A: {
 					dt: 1,
 					agent: "/someagent.domain",
 					n: 400,
 					fetch: TOTEM.fetch.http
 				},
-				*/
+				* /
 				sym: JSON.parse(req.Symbols || "null"),
 				nyquist: req.Nyquist, // sampling rate
 				store: {  // stores for ...
@@ -4379,7 +4793,7 @@ FLEX.execute.gaussmix = function (req, res) {
 					gmms = RAN.MLE(x, mixes);
 
 				gmms.each( function (k,gmm) {
-					gmm.find = mix.nearestOf(function (req) {
+					gmm.find = Mix.nearestOf(function (req) {
 						return dist( req.mu, gmm.mu );
 					});
 				});
@@ -4404,14 +4818,14 @@ FLEX.execute.gaussmix = function (req, res) {
 					});
 				});
 
-				mix.each(function (n,mix) {					
+				Mix.each(function (n,Mix) {					
 					Copy({
 						cellIndex: n,
 						cellType: "true",
 						cellError: 0,
 						cellParms: JSON.stringify({
-							mu: mix.mu,
-							sigma: mix.sigma
+							mu: Mix.mu,
+							sigma: Mix.sigma
 						})
 					}, info);
 						
@@ -4442,10 +4856,10 @@ console.log(JSON.stringify(gmms));
 	res("submitted");
 	
 	sql.query("SELECT * FROM app.gaussmix WHERE least(?,1)", req.query)
-	.on("result", function (mix) {
+	.on("result", function (Mix) {
 		
-//console.log(mix);
-		viaAgent(mix, gaussmix, req, function (rtn, sql) {
+//console.log(Mix);
+		FLEX.viaAgent(Mix, gaussmix, req, function (rtn, sql) {
 			
 			sql.query("UPDATE app.gaussmix SET ? WHERE ?", [{
 				Result: JSON.stringify(rtn)}, {
@@ -4458,6 +4872,7 @@ console.log(JSON.stringify(gmms));
 
 	});
 }
+*/
 
 FLEX.select.agent = function (req,res) {
 	var
@@ -4499,70 +4914,6 @@ FLEX.select.agent = function (req,res) {
 	
 }
 
-function viaAgent(args, job, req, res) {
-	var
-		fetch = FLEX.fetcher,
-		sql = req.sql,
-		query = req.query,
-		jobname = "totem."+ req.client + "." + job.name + "." + query.ID;
-	
-	if (agent = query.agent) 
-		fetch(agent+"&push="+jobname+"&args="+JSON.stringify(args), function (jobid) {
-			
-			if (jobid)
-				if (jobid.constructor == Error)
-					Trace(jobid);
-
-				else {
-					Trace("AGENT FORKED "+jobname);
-		
-					sql.query("INSERT INTO queues SET ?", {
-						class: agent,
-						client: req.client,
-						qos: 0,
-						priority: 0,
-						name: job.name
-					});
-
-					if ( poll = parseInt(query.poll) )
-						var timer = setInterval(function (req) {
-
-							Trace("AGENT POLLING "+jobid);
-
-							fetch(req.agent+"?pull="+jobid, function (rtn) {
-
-								if (rtn) 
-									if (rtn.constructor == Error) {
-										Trace("AGENT FAILED");
-										clearInterval(timer);
-										req.cb( rtn, sql );
-									}
-
-									else
-										FLEX.thread( function (sql) {
-											Trace("AGENT RETURNED "+jobid);
-											sql.query("DELETE FROM queues WHERE ?", {Name: req.job.name});								
-											req.cb( rtn, sql );
-										});
-
-							});
-
-						}, poll*1000, Copy({
-								job: job,
-								cb: res}, req));
-				}
-			
-			else
-				Trace("AGENT REJECTED "+jobname);
-	
-		});
-
-	else 
-		job(args, function (rtn) {
-			res(rtn,sql);
-		});
-}
-			
 function Trace(msg,arg) {
 	ENUM.trace("F>",msg,arg);
 }
@@ -4621,76 +4972,66 @@ FLEX.execute.quizes = function (req, res) {
 		res("Mission lesson");
 }
 
-FLEX.select.sss = function (req,res) {
-	var sql = req.sql, query = req.query;
-	
+FLEX.select.spoof = function (req,res) {
 	var 
-		mvp = {mu: [1,2], sigma: [[.9,.6],[.6,.7]]},
-		mvd = RAN.MVN(mvp.mu, mvp.sigma);
+		sql = req.sql, 
+		query = req.query,
+		spoofer = "",
+		plugins = {
+			sss: FLEX.plugins.randpr
+		},
+		spoofs = {
+			sss: function (rtn, cb) {
+				cb( rtn.steps );
+			},
+			wfs: function (test, cb) {
+				return {};
+			},
+			wms: function (test, cb) {
+				return null;
+			}
+		};
 
-	sql.query("SELECT *,count(ID) as Found FROM app.tests WHERE least(?,1) LIMIT 0,1",query)
-	.on("result", function (test) {
-		if (test.Found) {
-			RAN.config({
-				N: 100,
-				wiener: 0,
-				bins: 50,
-				//A: [[0,1,2],[3,0,4],[5,6,0]],
-				//sym: [-1,0,1],
+		for (var n in query) { spoofer = n; break; }
 
-				A: [[0,1], [4,0]], 
-				sym: [-1,1],
-
-				nyquist: 10,
-				store: {
-					jump: [],
-					step: []
-				},
-				cb: {
-					jump: function (n,fr,to,h,x) {
-						x.push( mvd.sample() );
-					}
-				}
-			});
-
-			console.log({
-				jumpRates: RAN.A,
-				cumTxPr: RAN.P,
-				stateTimes: RAN.T,
-				holdTimes: RAN.R,
-				initialPr: RAN.pi,
-				coherenceTime: RAN.Tc,
-				initialActivity: RAN.p,
-				wienerWalks: RAN.wiener,
-				sampleTime: RAN.dt,
-				timeInState: RAN.ZU,
-				avgRate: RAN.lambda
-			});
-
-			var steps = 400 * RAN.Tc/RAN.dt;
-			console.log([steps,RAN.Tc,RAN.dt]);
-
-			RAN.start(steps, function (y) {
-				var  t = RAN.t, n = t / RAN.Tc, N = RAN.N;
-
-				console.log( [RAN.steps, RAN.jumps, n, RAN.corr(), Math.exp(-n) ] );
-				if (0)
-				console.log({
-					T: RAN.T,
-					mle: RAN.Amle
-				});
-			});
-			
-			res( RAN.store.step );			
-		}
-		
-		else 
+		if ( spoofer )
+			if ( name = query[spoofer] )
+				if ( spoof = spoofs[spoofer] )
+					if ( plugin = plugins[spoofer] )
+						sql.query( "SELECT *,count(ID) AS Found FROM app.?? WHERE Name=? LIMIT 0,1", [plugin.name,name] )
+						.on("result", function (test) {
+							if (test.Found)
+								plugin( test, function (rtn) {
+									spoof( rtn, res );
+								});
+							else
+								res( [] );
+						})
+						.on("err", function (err) {
+							Trace(err);
+							res( [] );
+						});
+	
+					else
+						sql.query( "SELECT *,count(ID) AS Found FROM app.?? WHERE Name=? LIMIT 0,1", [spoofer,name] )
+						.on("result", function (test) {
+							if (test.Found)
+								spoof( test, res );
+							else
+								res( [] );
+						})
+						.on("err", function (err) {
+							Trace(err);
+							res( [] );
+						});
+						
+				else
+					res( [] );
+			else
+				res( [] );
+		else
 			res( [] );
-	})
-	.on("error", function (err) {
-		res( [] );
-	});
 	
 }
-			
+
 // UNCLASSIFIED
