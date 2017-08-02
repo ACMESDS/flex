@@ -4621,4 +4621,76 @@ FLEX.execute.quizes = function (req, res) {
 		res("Mission lesson");
 }
 
+FLEX.select.sss = function (req,res) {
+	var sql = req.sql, query = req.query;
+	
+	var 
+		mvp = {mu: [1,2], sigma: [[.9,.6],[.6,.7]]},
+		mvd = RAN.MVN(mvp.mu, mvp.sigma);
+
+	sql.query("SELECT *,count(ID) as Found FROM app.tests WHERE least(?,1) LIMIT 0,1",query)
+	.on("result", function (test) {
+		if (test.Found) {
+			RAN.config({
+				N: 100,
+				wiener: 0,
+				bins: 50,
+				//A: [[0,1,2],[3,0,4],[5,6,0]],
+				//sym: [-1,0,1],
+
+				A: [[0,1], [4,0]], 
+				sym: [-1,1],
+
+				nyquist: 10,
+				store: {
+					jump: [],
+					step: []
+				},
+				cb: {
+					jump: function (n,fr,to,h,x) {
+						x.push( mvd.sample() );
+					}
+				}
+			});
+
+			console.log({
+				jumpRates: RAN.A,
+				cumTxPr: RAN.P,
+				stateTimes: RAN.T,
+				holdTimes: RAN.R,
+				initialPr: RAN.pi,
+				coherenceTime: RAN.Tc,
+				initialActivity: RAN.p,
+				wienerWalks: RAN.wiener,
+				sampleTime: RAN.dt,
+				timeInState: RAN.ZU,
+				avgRate: RAN.lambda
+			});
+
+			var steps = 400 * RAN.Tc/RAN.dt;
+			console.log([steps,RAN.Tc,RAN.dt]);
+
+			RAN.start(steps, function (y) {
+				var  t = RAN.t, n = t / RAN.Tc, N = RAN.N;
+
+				console.log( [RAN.steps, RAN.jumps, n, RAN.corr(), Math.exp(-n) ] );
+				if (0)
+				console.log({
+					T: RAN.T,
+					mle: RAN.Amle
+				});
+			});
+			
+			res( RAN.store.step );			
+		}
+		
+		else 
+			res( [] );
+	})
+	.on("error", function (err) {
+		res( [] );
+	});
+	
+}
+			
 // UNCLASSIFIED
