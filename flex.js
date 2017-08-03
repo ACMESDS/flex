@@ -198,19 +198,85 @@ var
 			});
 		},
 		
-		plugins: { // default plugin testers
-			randpr: function randpr(req,res) {
-				/*
-				String.prototype.push = function(x) {
-					if (x.Location) {
-						var u = x.Location[0], v = x.Location[1];
-						delete x.Location;
-						sql.query(this, [u,v,x]);
-					}
-					else
-						sql.query(this,x);
+		plugins: { // FLEX.execute plugins cb(req,res)
+			news: function news(req, res) {  
+				var 
+					parts = req.Message.split("@"),
+					subj = parts[0],
+					rhs = parts[1] || "",
+					to = rhs.substr(0,rhs.indexOf(" ")),
+					body = rhs.substr(to.length);
+
+				Trace(`NEWS ${to}`);
+
+				switch (to) {
+					case "conseq":
+
+					case "wicwar":
+
+					case "jira":
+						break;
+
+					case "":
+						break;
+
+					default:
+						sendMail({
+							to:  to,
+							subject: subj,
+							html: body.format( {
+								today: new Date(),
+								me: req.client
+							}),
+							alternatives: [{
+								contentType: 'text/html; charset="ISO-8859-1"',
+								contents: ""
+							}]
+						});
 				}
-				*/
+
+				FLEX.thread( function (sql) {  // updates and imports
+					sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
+					.on("result", function (news) {
+						sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
+					});
+
+					sql.query("UPDATE news SET age=datediff(now(),Starts)");
+
+					sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
+
+					sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
+					.on("result", function (news) {  
+						var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
+
+						sql.query(
+							  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
+							+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
+							+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
+							//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
+							+ "link(states.Name,'/parms.view') AS State "
+							+ "FROM intake "
+							+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
+							+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
+							+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
+						.on("error", function (err) {
+							Trace(err);
+						})
+						.on("result", function (sys) {
+							var msg = sys.Link+" "+make.format(sys);
+
+							sql.query("UPDATE news SET ? WHERE ?", [
+								{	Message: msg,
+									New: msg != news.Message ? -1 : 0
+								}, 
+								{ID:news.ID}
+							]);
+						});
+					});
+				});
+			},
+			
+			randpr: function randpr(req,res) {
 
 				function randint(a) {
 					return floor((rand() - 0.5)*2*a);
@@ -2277,106 +2343,6 @@ FLEX.execute.engines = function Execute(req, res) {
 		res( FLEX.errors.missingEngine );
 }
 
-FLEX.execute.news = function Execute(req, res) {  
-	
-	function fixnews(req, res) {
-		req.Message.split("\n").each( function (n,line) {
-			res(line);
-		});
-	}
-	
-	var sql = req.sql, log = req.log, query = req.query;
-	var mask = {
-		today: new Date(),
-		me: req.client
-	};
-
-	// export - email/socket those on to list anything marked new
-
-	res(SUBMITTED);
-	
-	sql.query("SELECT * FROM news ", query)
-	.on("result", function (news) {
-		//sql.query("UPDATE news SET ? WHERE ?",[{New:false},{ID:news.ID}]);
-
-		viaAgent(news, fixnews, req, function (msg, sql) {
-			var 
-				parts = msg.split("@"),
-				subj = parts[0],
-				rhs = parts[1] || "",
-				to = rhs.substr(0,rhs.indexOf(" ")),
-				body = rhs.substr(to.length);
-
-			Trace(`NEWS ${to}`);
-
-			switch (to) {
-				case "conseq":
-
-				case "wicwar":
-
-				case "jira":
-					break;
-
-				case "":
-					break;
-					
-				default:
-
-					sendMail({
-						to:  to,
-						subject: subj,
-						html: body.format(mask),
-						alternatives: [{
-							contentType: 'text/html; charset="ISO-8859-1"',
-							contents: ""
-						}]
-					});
-			}
-			
-		});
-	});
-		
-	// import
-	
-	sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
-	.on("result", function (news) {
-		sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
-	});
-	
-	sql.query("UPDATE news SET age=datediff(now(),Starts)");
-	
-	sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
-	
-	sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
-	.on("result", function (news) {  
-		var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
-
-		sql.query(
-			  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
-			+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
-			+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
-			//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
-			+ "link(states.Name,'/parms.view') AS State "
-			+ "FROM intake "
-			+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
-			+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
-			+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
-		.on("error", function (err) {
-			Trace(err);
-		})
-		.on("result", function (sys) {
-			var msg = sys.Link+" "+make.format(sys);
-			
-			sql.query("UPDATE news SET ? WHERE ?", [
-				{	Message: msg,
-					New: msg != news.Message ? -1 : 0
-				}, 
-				{ID:news.ID}
-			]);
-		});
-	});
-}
-
 FLEX.execute.milestones = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var map = {SeqNum:1,Num:1,Hours:1,Complete:1,Task:1};
@@ -4411,469 +4377,6 @@ function runQuery(req, res) {
 	});
 }
 
-//  job monitors 
-
-/*
-function hawkJobs (client, url)  {
-	var sql = this;
-
-	function hawk(rule) {
-		FLEX.thread(function (sql) {
-
-			sql.query("UPDATE app.hawks SET Pulse=Pulse+1 WHERE ?", {ID:rule.ID});
-
-			if (rule.Action.charAt(0) == "/" && FLEX.execute)
-				FLEX.fetcher(url + rule.Action, function (ack) {
-					console.log(ack);
-				});
-			
-			else
-				switch (rule.Action.toLowerCase()) {
-					case "scrape":
-					case "execute":
-
-						FLEX.CRUDE({
-							query: {},
-							body: {},
-							param: function () { return ""; }
-						}, {
-							send: function (rtn) {
-								console.log(rtn);
-							} 
-						}, rule.Table, "execute");
-
-						break;
-
-					case "stop":
-					case "halt":
-					case "delete":
-					case "kill":
-
-						sql.jobs().delete(rule.Condition, function (job) {
-							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-
-						break;
-
-					case "log":
-					case "notify":
-					case "tip":
-					case "warn":
-					case "flag":
-
-						sql.jobs().select(rule.Condition, function (job) { 
-
-							sql.jobs().update({ID:job.ID}, { 	// reflect history
-								Flagged: 1,
-								Notes: "Clear your Flagged jobs to prevent these jobs from being purged"
-							}, function () {
-
-								sendMail({
-									to:  job.Client,
-									subject: FLEX.site.title + " job status notice",
-									html: "Please "+"clear your job flag".tag("a",{href:"/rule.view"})+" to keep your job running.",
-									alternatives: [{
-										contentType: 'text/html; charset="ISO-59-1"',
-										contents: ""
-									}]
-								});
-
-							});
-						});
-
-						break;
-
-					case "promote":
-					case "improve":
-
-						sql.jobs().update(rule.Condition, +1, 0, function (job) {
-							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-
-						break;
-
-					case "demote":
-					case "reduce":
-
-						sql.jobs().update(rule.Condition, -1, 0, function (job) {
-							sql.query("UPDATE app.hawks SET Changed=Changed+1 WHERE ?", {ID:rule.ID});
-						});
-
-						break;
-
-					case "start":
-					case "run":
-
-						sql.query(
-							// "SELECT detectors.* FROM detectors LEFT JOIN queues ON queues.Job = detectors.Name WHERE length(NegCases) AND "+rule.Condition)
-							"SELECT * FROM ?? WHERE "+rule.Condition, 
-							rule.Table
-						).on("result", function (det) {
-							//det.Execute = "resample";
-							//console.log(det);
-							sql.query("UPDATE ?? SET Dirty=0 WHERE ?",[rule.Table,{ID: det.ID}]);
-							sql.jobs().execute(client,det);
-						});
-						break;
-
-					case "":
-					case "skip":
-					case "ignore":
-
-						break;
-
-					default:
-						console.log(rule.Action);
-				}
-
-			sql.release();
-		});
-	}
-
-	FLEX.timers.each( function (n,id) { 	// kill existing hawks
-		clearInterval(id);
-	});
-
-	FLEX.timers = [];
-
-	//sql.query("DELETE FROM queues"); 		// flush job queues
-	
-	sql.query("SELECT * FROM app.config WHERE Hawks")             // get hawk config options
-	.on("result", function (config) {
-
-		sql.query(
-			"SELECT * FROM app.hawks WHERE least(?) AND Faults<?  AND `Condition` IS NOT NULL", [
-			{Enabled:1, Name:config.SetPoint}, 
-			config.MaxFaults
-		])
-		.on("result", function (rule) {         // create a hawk
-			
-			Trace(`HAWKING if[${rule.Condition}]then[${rule.Action}]  EVERY ${rule.Period} mins`);
-
-			if (rule.Period)                     // hawk is periodic
-				FLEX.timers.push(
-					setInterval( hawk, rule.Period*60*1000, rule )
-				);
-			else                                 // one-time hawk
-				hawk(rule);
-		});
-	});
-}
-
-*/
-
-/*
-FLEX.execute.gaussmix = function (req, res) {
-	
-	var 
-		sql = req.sql,
-		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
-
-	String.prototype.push = function(x) {
-		if (x.Location) {
-			var u = x.Location[0], v = x.Location[1];
-			delete x.Location;
-			sql.query(this, [u,v,x]);
-		}
-		else
-			sql.query(this,x);
-	}
-	
-	function randint(a) {
-		return floor((rand() - 0.5)*2*a);
-	}
-	
-	function addvec(x,y) {
-		return [ x[0]+y[0], x[1]+y[1], x[2]+y[2] ];
-	}
-	
-	function gaussmix (req,res) {
-		var run = {};
-
-		try {
-			var 
-				Mix = JSON.parse(req.Mix) || [];  // gauss mixing parameters
-			
-			if (Mix.constructor == Object) {
-				var K = Mix.K, Mix = [];
-				
-				for (var k=0; k<K; k++) {
-					var xx = 0.9, yy = 0.7, xy = yx = 0.4;
-					Mix.push({
-						mu: [randint(a), randint(a), randint(a)],
-						sigma: [[xx*a/2,xy*a/2,0],[yx*a/2,yy*a/2,0],[0,0,1]]
-					});
-				}
-				console.log(Mix);
-			}
-			
-			var
-				voxel = [], // voxel centroids
-				mvd = [], 	// multivariate distribution parms
-				ooW = [], // wiener/oo process look ahead
-				mixes = Mix.length,	// number of mixes
-				mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Mix mode
-				
-				mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
-				mu = mix0.mu,	// mean 
-				sigma = mix0.sigma,  // covariance
-				theta = mix0.theta,  	// oo time lag
-				x0 = mix0.x0, 		// oo initial pos
-				a = {  // process fixed parms
-					wi: 0,
-					gm: 0,
-					br: sigma*sigma / 2,
-					oo: sigma / sqrt(2*theta)
-				},
-
-				sampler = {  // sampling method during state jumps
-					na: function (u) {  // ignore
-					},
-					
-					wi: function (u) {  // wiener
-						var 
-							t = RAN.s, 
-							Wt = RAN.W[0], 
-							xt = mu + sigma * Wt;
-						
-						x.push({
-							Location: [xt[0],xt[1]],
-							Height: xt[2],
-							Name: "synthetic",
-							State: u,
-							t: rand()
-						});
-					},
-					
-					oo: function (u) {  // ornstein-uhlenbeck
-						var 
-							t = RAN.s, 
-							Et = exp(-theta*t),
-							Et2 = exp(2*theta*t),
-							Wt = ooW[floor(Et2 - 1)] || 0,
-							xt = x0 ? x0 * Et + mu*(1-Et) + a.oo * Et * Wt : mu + a.oo * Et * Wt;
-						
-						ooW.push( W[0] );
-						x.push({
-							Location: xt,
-							Height: xt[2],
-							Name: "synthetic",
-							State: u,
-							t: rand()
-						});
-					},
-						
-					br: function (u) { // geometric brownian
-						var 
-							t = RAN.s, 
-							Wt = RAN.W[0],
-							xt = exp( (mu-a.br)*t + sigma*Wt );
-						
-						x.push({
-							Location: xt,
-							Height: xt[2],
-							Name: "synthetic",
-							State: u,
-							t: rand()
-						});
-					},
-						
-					gm: function (u) {  // mixed gaussian
-						var xt = addvec( mvd[u].sample(), voxel[u] );
-						x.push({
-							Location: xt,
-							Height: xt[2],
-							Name: "synthetic",
-							State: u,
-							t: rand()
-						});
-					}
-				};
-
-			if (mode == "gm")
-				for (var k=0; k<mixes; k++) {
-					voxel.push( x = new Array(3) );
-					
-					mvd.push( RAN.MVN( Mix[k].mu, Mix[k].sigma ) );
-				}
-
-			RAN.config({ // configure the random process generator
-				N: req.Ensemble,  // ensemble size
-				wiener: req.Wiener,  // wiener process switch
-				A: JSON.parse(req.JumpRates || "[]"),
-				/ *
-				A: {
-					dt: 1,
-					agent: "/someagent.domain",
-					n: 400,
-					fetch: TOTEM.fetch.http
-				},
-				* /
-				sym: JSON.parse(req.Symbols || "null"),
-				nyquist: req.Nyquist, // sampling rate
-				store: {  // stores for ...
-					jump: null,  // state-jump observations
-					sweep: mixes // ensemble-sweep observations
-						? // []  // array store 
-							"INSERT INTO events SET Location=st_geomfromtext('POINT(? ?)'),?"  // db store 
-						: null,  
-					step: []  // time-step observations
-				},
-				bins: 50,  // bins to create stats
-				
-				// debugging
-				//A: [[0,1],[1,0]], //[[0,1,2],[3,0,4],[5,6,0]],
-				//sym: [-1,1],
-				//nyquist: 10,
-
-				on: {
-					sweep: sampler[mode], // mode-based callback to sample process on ensemble sweep
-					
-					step: function (y) { // callback to monitor process after being forward stepped
-						var  
-							t = RAN.t, n = t / RAN.Tc, N = RAN.N, 
-							cnt = N-RAN.E[0], lambda = RAN.G[0]/t, lambda0 = N/RAN.dt;
-
-						y.push( [ n, RAN.corr(), exp(-n), cnt, lambda / lambda0 ].concat(RAN.W) );
-					}
-				}
-			});
-		}
-		catch (err) {
-			console.log (err);
-		}
-
-		var info = {
-			cellCount: mixes,
-			sampleMode: mode,
-			randomWalks: RAN.wiener,
-			ensembleSize: RAN.N,
-			coherenceTime: RAN.Tc,
-			coherenceIntervals: req.Steps,
-			ensembleActivity: RAN.p,
-			ensembleLoad: RAN.lambda,
-			sampleTime: RAN.dt,
-			reqName: req.Name			
-		};
-		
-		console.log(info);
-
-		RAN.run(req.Steps * RAN.Tc/RAN.dt, function (x,y,stats) {
-
-			function dist(a,b) { 
-				var d = [ a[0]-b[0], a[1]-b[1] ];
-				return sqrt( d[0]*d[0] + d[1]*d[1] );
-			}
-
-			Array.prototype.nearestOf = function (metric) {
-				var imin = 0, emin = 1e99;
-
-				this.each( function (i,req) {
-					var e = metric( req );
-					if (  e < emin) { imin = i; emin = e; }
-				});
-				return {idx: imin, err: emin};
-			}
-
-			Copy({
-				processSteps: RAN.steps,
-				processSamples: RAN.jumps,
-				processStats: JSON.stringify({
-					jumpRates: RAN.A,
-					cumTxPr: RAN.P,
-					jumpCounts: RAN.T,
-					holdTimes: RAN.R,
-					symbols: RAN.sym,
-					initPr: RAN.pi						
-				})
-			}, info);
-
-			if (x) {  // generate, grade, sort and store gauss mixing mle results
-				var 
-					gmms = RAN.MLE(x, mixes);
-
-				gmms.each( function (k,gmm) {
-					gmm.find = Mix.nearestOf(function (req) {
-						return dist( req.mu, gmm.mu );
-					});
-				});
-
-				gmms.sort( function (a,b) {
-					return a.find.idx < b.find.idx ? 1 : -1;
-				});
-
-				gmms.each(function (n,gmm) {
-					Copy({
-						cellIndex: gmm.find.idx,
-						cellType: "mle",
-						cellError: gmm.find.err * 100,
-						cellParms: JSON.stringify({
-							mu: gmm.mu,
-							sigma: gmm.sigma
-						})
-					}, info);
-						
-					sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
-						console.log(err || "cell saved");
-					});
-				});
-
-				Mix.each(function (n,Mix) {					
-					Copy({
-						cellIndex: n,
-						cellType: "true",
-						cellError: 0,
-						cellParms: JSON.stringify({
-							mu: Mix.mu,
-							sigma: Mix.sigma
-						})
-					}, info);
-						
-					sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
-						console.log(err || "cell saved");
-					});
-				});
-
-				res( Copy({
-					steps: y,
-					stats: stats,
-					info: info
-				}, run) );
-				
-console.log(JSON.stringify(gmms)); 
-			}
-			
-			else
-				res( Copy({
-					jumps: x,
-					steps: y,
-					stats: stats,
-					info: info
-				}, run) );
-		});
-	}
-	
-	res("submitted");
-	
-	sql.query("SELECT * FROM app.gaussmix WHERE least(?,1)", req.query)
-	.on("result", function (Mix) {
-		
-//console.log(Mix);
-		FLEX.viaAgent(Mix, gaussmix, req, function (rtn, sql) {
-			
-			sql.query("UPDATE app.gaussmix SET ? WHERE ?", [{
-				Result: JSON.stringify(rtn)}, {
-				Name: mixreq.Name
-			}], function (err) {
-				console.log(err || "GAUSSMIX " + mixreq.Name);
-			});
-			
-		});
-
-	});
-}
-*/
-
 FLEX.select.agent = function (req,res) {
 	var
 		sql = req.sql,
@@ -4912,10 +4415,6 @@ FLEX.select.agent = function (req,res) {
 	else
 		res( "Missing push/pull" );
 	
-}
-
-function Trace(msg,arg) {
-	ENUM.trace("F>",msg,arg);
 }
 
 FLEX.select.quizes = function (req, res) { 
@@ -5032,6 +4531,25 @@ FLEX.select.spoof = function (req,res) {
 		else
 			res( [] );
 	
+}
+
+FLEX.select.follow = function (req,res) {
+	var 
+		sql = req.sql, 
+		query = req.query;
+	
+	res("ok");
+	sql.query("INSERT INTO app.follows SET ?", {
+		Goto: query.goto,
+		Client: query.client,
+		View: query.view,
+		Event: new Date()
+	});
+	
+}
+
+function Trace(msg,arg) {
+	ENUM.trace("F>",msg,arg);
 }
 
 // UNCLASSIFIED
