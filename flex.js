@@ -163,19 +163,19 @@ var
 			var 
 				sql = req.sql, 
 				plugin = req.table,
-				query = req.query,
-				testID = query.ID;
+				query = req.query;
 
 			console.log({runplugin: query});
 			
-			if (testID)
-				sql.query("SELECT *,count(ID) AS Found FROM app.?? WHERE ID=? LIMIT 0,1", [plugin,testID])
+			if (query.ID || query.Name)
+				sql.query("SELECT *,count(ID) AS Found FROM app.?? WHERE least(?,1) LIMIT 0,1", [plugin,query])
 				.on("result", function (test) {	
 					Copy(test,req.query);
 					console.log({plugin:req.query});
 
-					if (test.Found) 
+					if (test.Found) {
 
+						sql.indexFields
 						if ( viaAgent = FLEX.viaAgent )  // use agents if installed
 							viaAgent(req, plugins[plugin], function (rtn, sql) {  // possibly outsource the plugin to an agent
 
@@ -194,7 +194,8 @@ var
 
 						else  // do it yourself
 							plugins[plugin](req, res);
-
+						
+					}
 					else
 						res( new Error("test not found") );
 				})
