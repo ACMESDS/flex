@@ -165,37 +165,42 @@ var
 				plugin = req.table,
 				query = req.query;
 
-			console.log({runplugin: query});
+			//console.log({runplugin: query});
 			
 			if (query.ID || query.Name)
 				sql.query("SELECT *,count(ID) AS Found FROM app.?? WHERE least(?,1) LIMIT 0,1", [plugin,query])
 				.on("result", function (test) {	
-					Copy(test,req.query);
-					console.log({plugin:req.query});
+					Copy(test,query);
+					//console.log({plugin:query});
 
-					if (test.Found) {
+					if (test.Found) 
+						sql.jsonKeys( `app.${plugin}`, function (keys) {
+							keys.each(function (n,key) {
+								try { 
+									query[key] = JSON.parse( query[key] ); 
+								}
+								catch (err) {}
+							});
+							
+							if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
+								viaAgent(req, plugins[plugin], function (rtn, sql) {  // allow plugin out sourcing
 
-						sql.indexFields
-						if ( viaAgent = FLEX.viaAgent )  // use agents if installed
-							viaAgent(req, plugins[plugin], function (rtn, sql) {  // possibly outsource the plugin to an agent
+									res( rtn );
+									
+									if (query.Save)
+										sql.query(   // save results
+											"UPDATE app.?? SET ? WHERE ?", [ 
+											plugin,   
+											{ Result: JSON.stringify(rtn) }, 
+											{ ID: test.ID }
+										]);
 
-								//console.log({ save: rtn });
-
-								sql.query(   // save results
-									"UPDATE app.?? SET ? WHERE ?", [ 
-									plugin,   
-									{ Result: JSON.stringify(rtn) }, 
-									{ ID: testID }
-								], function (err) {
-									Trace(err);
 								});
 
-							});
-
-						else  // do it yourself
-							plugins[plugin](req, res);
-						
-					}
+							else  // do it yourself
+								plugins[plugin](req, res);
+						});
+					
 					else
 						res( new Error("test not found") );
 				})
@@ -388,13 +393,15 @@ var
 			
 			/* 
 			Respond with random [ {x,y,...} process given query:
+				Offsets = [x,y,z] = voxel offsets
+				Deltas = [x,y,z] = voxel dimensions
 				Mix = [ {mu, covar}, .... ] = desired process stats
 				JumpRates = [ [rate, ...], ... ] = (KxK) jump rate process or {K} to generate 
 				Symbols: [sym, ...] = (K) state symboles || null to generate
 				Ensemble = numer in process ensemble
 				Wiener = switch to enable wiener process
 				Nyquest = over sampling factor
-				Intervals = number of coherence intervals to return samples				
+				Intervals = number of coherence Intervals to return samples				
 			*/
 			randpr: function randpr(req,res) {
 
@@ -414,11 +421,18 @@ var
 
 				var 
 					query = req.query,
+					Mix = query.Mix,
+					JumpRates = query.JumpRates,
+					Symbols = query.Symbols,
+					Deltas = query.Deltas,
+					Offsets = query.Offsets,
+					Intervals = query.Intervals,
 					exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 				console.log({randpr:query});
-				// could use tmin,tmax to set t offsets and intervals
+				// could use tmin,tmax to set t offsets and Intervals
 				
+				/*
 				try {
 					var 
 						Mix = JSON.parse(query.Mix),  // gauss mixing parameters
@@ -429,7 +443,7 @@ var
 				catch (err) {
 					Trace(err);
 					res( null );
-				}
+				}*/
 
 				if (Mix.constructor == Object) {  // generate random gauss mixes
 					var 
@@ -540,7 +554,7 @@ var
 										m: mix, // gauss mix dran from
 										f: mode, // process family
 										c: RAN.corr(), // ensemble correlation
-										s: RAN.t / RAN.Tc, // coherence intervals
+										s: RAN.t / RAN.Tc, // coherence Intervals
 										n: RAN.steps, // step counter
 										p: RAN.NU[state] / RAN.N // pr ensemble in this state
 									};
@@ -553,17 +567,16 @@ var
 				});
 
 				var
-					intervals = query.Intervals,
-					steps = intervals * RAN.Tc/RAN.dt,
+					steps = Intervals * RAN.Tc/RAN.dt,
 					states = RAN.K,
 					info = {
-						mixing_offsets: query.offsets,
-						mixings_deltas: query.deltas,
+						mixing_offsets: Offsets,
+						mixings_deltas: Deltas,
 						mixing_dim: mixdim,
 						states: states,
 						ensemble_size: RAN.N,
 						process_steps: steps,
-						coherence_interval: intervals, 
+						coherence_interval: Intervals, 
 						coherence_time: RAN.Tc,
 						nyquist_step_time: RAN.dt,
 						coherence_time: RAN.Tc,
@@ -582,19 +595,19 @@ var
 
 				if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
 					Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
-						console.log([k, floor(k / 20), k % 20]);
+						console.log([k, floor(k / 20), k % 20, mix, Deltas]);
 						
-						offsetvec( scalevec(mix.mu,query.deltas), [
-							floor(k / 20) * query.deltas[0] + query.offsets[0],
-							(k % 20) * query.deltas[1] + query.offsets[1],
-							mix.mu[2] + query.offsets[2]
+						offsetvec( scalevec(mix.mu,Deltas), [
+							floor(k / 20) * Deltas[0] + Offsets[0],
+							(k % 20) * Deltas[1] + Offsets[1],
+							mix.mu[2] + Offsets[2]
 						]);  
-						for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], query.deltas );
+						for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
 						
 						mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
 					});
 							
-				console.log({mix: JSON.stringify(Mix)});
+				//console.log({mix: JSON.stringify(Mix)});
 				console.log(info);
 
 				RAN.start( Math.min(1000, steps), function (x,y,stats) {
@@ -634,7 +647,7 @@ var
 				query = req.query,
 				jobname = "totem."+ req.client + "." + plugin.name + "." + query.ID;
 
-			console.log({viaagent: query});
+			//console.log({viaagent: query});
 			
 			if (agent = query.agent) 
 				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
@@ -4529,7 +4542,7 @@ FLEX.execute.quizes = function (req, res) {
 		res("Mission lesson");
 }
 
-FLEX.execute.spoof = function (req,res) {
+FLEX.select.spoof = function (req,res) {
 	var 
 		sql = req.sql, 
 		query = req.query,
@@ -4554,7 +4567,17 @@ FLEX.execute.spoof = function (req,res) {
 		if ( spoofer )
 			if ( name = query[spoofer] )
 				if ( spoof = spoofs[spoofer] )
-					if ( plugin = plugins[spoofer] )
+					if ( plugin = plugins[spoofer] ) {
+						query.Name = name;
+						req.table = plugin.name;
+						delete query[spoofer];
+						FLEX.runPlugin(req, function (rtn) {
+							res(rtn.steps);
+						});
+					}
+					else 
+						spoof(query,res);
+						/*
 						sql.query( "SELECT *,count(ID) AS Found FROM app.?? WHERE Name=? LIMIT 0,1", [plugin.name,name] )
 						.on("result", function (test) {
 							
@@ -4586,6 +4609,7 @@ FLEX.execute.spoof = function (req,res) {
 							Trace(err);
 							res( [] );
 						});
+						*/
 						
 				else
 					res( [] );
