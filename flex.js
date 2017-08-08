@@ -159,60 +159,103 @@ var
 			f: "varchar(255)"
 		},
 			
-		runPlugin: function FlexPlugin(req,res) {  //< method to run a plugin
+		/* 
+		Run plugin req.table = X the specified Q = req.query parameters, then respond on res(results).  If Q.ID or Q.Name is specified, 
+		then the Q parameters are derived from the matched X dataset (json fields automatically parsed), and the results are optionally 
+		(if Q.Save present) written to the matched X dataset.
+		*/
+		runPlugin: function FlexPlugin(req,res) {  
 			var 
 				sql = req.sql, 
-				plugin = req.table,
+				dsname = "app." + req.table,
+				plugin = FLEX.plugins[req.table],
 				query = req.query;
 
 			//console.log({runplugin: query});
 			
-			if (query.ID || query.Name)
-				sql.query("SELECT *,count(ID) AS Found FROM app.?? WHERE least(?,1) LIMIT 0,1", [plugin,query])
-				.on("result", function (test) {	
-					Copy(test,query);
-					//console.log({plugin:query});
+			if (query.ID) var dsquery = {ID: query.ID};
+			else
+			if (query.Name) var dsquery = {Name: query.Name};
+			else
+				var dsquery = null;
+			
+			//console.log({dsq: dsquery});
+			
+			if (plugin)
+				if (dsquery) 
+					sql.query(	"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", [dsname, dsquery])
+					.on("result", function (test) {	
+						Copy(test,query);
+						//console.log({plugin:query});
+						//console.log(test);
 
-					if (test.Found) 
-						sql.jsonKeys( `app.${plugin}`, function (keys) {
-							keys.each(function (n,key) {
-								try { 
-									query[key] = JSON.parse( query[key] ); 
-								}
-								catch (err) {}
-							});
-							
-							if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
-								viaAgent(req, plugins[plugin], function (rtn, sql) {  // allow plugin out sourcing
-
-									res( rtn );
-									
-									if (query.Save)
-										sql.query(   // save results
-											"UPDATE app.?? SET ? WHERE ?", [ 
-											plugin,   
-											{ Result: JSON.stringify(rtn) }, 
-											{ ID: test.ID }
-										]);
-
+						if (test.Found) 
+							sql.jsonKeys( dsname, function (keys) {
+								keys.each(function (n,key) {
+									try { 
+										query[key] = JSON.parse( query[key] ); 
+									}
+									catch (err) {}
 								});
 
-							else  // do it yourself
-								plugins[plugin](req, res);
+								if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
+									viaAgent(req, plugin, function (rtn, sql) {  // allow plugin out sourcing
+
+										//console.log(["agent returns", err]);
+										
+										if (rtn)
+											if ("Save" in query) {
+												try {
+													sql.query(   // save results
+														"UPDATE ?? SET Save=? WHERE ?", [ 
+														dsname,  JSON.stringify(rtn), { ID: test.ID }
+													]);
+													res( "saved" );
+												}
+												catch (err) {
+													res( err );
+												}
+											}
+											
+											else
+												res( rtn );
+										
+										else
+											res( new Error("agent failed") );
+
+									});
+
+								else  // do it yourself
+									try {
+										plugin(req, res);
+									}
+									catch (err) {
+										res( err );
+									}
+							});
+
+						else 
+							res( new Error("plugin case not found") );
+					})
+					.on("error", function (err) {
+						res( err );
+					});
+
+				else
+					try {
+						plugin(req, function (rtn) {
+							res(null, rtn);
 						});
-					
-					else
-						res( new Error("test not found") );
-				})
-				.on("error", function (err) {
-					res( err );
-				});
+					}
+					catch (err) {
+						res(err);
+					}
 			
 			else
-				plugins[plugin](req, res);
+				res( new Error("plugin does not exist") );
 		},
 		
-		plugins: { // FLEX.execute plugins cb(req,res)
+		plugins: { // plugins added to FLEX.execute will respond with res(rtn) to given request query req.query
 			news: function news(req, res) {  
 				var 
 					parts = req.Message.split("@"),
@@ -290,19 +333,70 @@ var
 				});
 			},
 			
+			xss: function xss(req,res) {
+				res([
+					{lat:33.902,lon:70.09,alt:22,t:10},
+					{lat:33.902,lon:70.09,alt:12,t:20}
+				]);
+			},			
+			
+			sss: function sss(req,res) {
+				FLEX.plugins.randpr( req, function (rtn) {
+					res( rtn.steps ? rtn.steps : rtn );
+				});
+			},
+			
+			wms: function wms(req,res) {
+				res( new Error("wms spoof unsporrted") );
+			},
+			
+			wfs: function wfs(req,res) {
+				res({
+					GetRecordsResponse: {
+						SearchResults: {
+							DatasetSummary: [{
+								"Image-Product": {
+									Image: {
+										ImageId: "spoof",
+										"Image-Sun-Characteristic": {
+											SunElevationDim: "0", 
+											SunAzimuth: "0"
+										},
+										"Image-Raster-Object-Representation": [],
+										"Image-Atmospheric-Characteristic": []
+									},
+									"Image-Restriction": {
+										Classification: "?", 
+										ClassificationSystemId: "?", 
+										LimitedDistributionCode: ["?"]
+									},
+									"Image-Country-Coverage": {
+										CountryCode: ["??"]
+									}
+								},
+								WMSUrl: "https://localhost:8080/shares/spoof.jpg?",
+								WMTSUrl: "",
+								JPIPUrl: ""
+							}]
+						}
+					}
+				});
+			},
+			
 			/*
 			Respond with mu,sigma estimates to the [x,y,...] events in gaussevs given query:
-				mixes = number of mixed to attempt to find
-				refmu = [mu, mu, ...] optional reference means to check estimates
+				Mixes = number of mixed to attempt to find
+				Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
+				VoxelID = number id of voxel
 			*/
 			gaussmix: function gaussmix(req,res) {
 				
 				var 
 					sql = req.sql,
 					query = req.query,
-					voxel = query.voxel,
-					mixes = query.mixes || 1,
-					refmu = query.mu,
+					VoxelID = query.VoxelID,
+					Mixes = query.Mixes,
+					Refs = query.Refs,
 					stats = {},
 					evlist = [];
 				
@@ -323,24 +417,24 @@ var
 
 				console.log({guassmix:query});
 				sql.query(   // get all events falling in this voxel
-					"SELECT * FROM app.gaussmix WHERE ?",
-					{voxelID: voxel}, 
+					"SELECT x,y,z FROM app.gaussevs WHERE ?",
+					{voxelID: VoxelID}, 
 					function (err,evs) {
 
-						console.log({evs:evs,err:err});
-						if (evs && evs.length) {
+						//console.log({evs:evs,err:err});
+						if (evs && Mixes) {
 								evs.each( function (n,ev) {
 									evlist.push( [ev.x,ev.y,ev.z] );
 								});
 
 							var 
-								gmms = stats.gmms = RAN.MLE(evlist, mixes),
+								gmms = stats.gmms = RAN.MLE(evlist, Mixes),
 								refs = stats.refs = {};
 
-							if (false && refmu)  {  // requesting a ref check
+							if (false && Refs)  {  // requesting a ref check
 								gmms.each( function (k,gmm) {  // find nearest ref event
-									gmm.find = Mix.nearestOf( function (query) {
-										return dist( refmu, gmm.mu );
+									gmm.find = Refs.nearestOf( function (query) {
+										return dist( Refs, gmm.mu );
 									});
 								});
 
@@ -385,7 +479,7 @@ var
 							}
 						
 						}
-						console.log({shipstats:stats});
+						console.log({shipstats:JSON.stringify(stats)});
 						res(stats);  //ship it
 				});
 				
@@ -445,6 +539,8 @@ var
 					res( null );
 				}*/
 
+				if (!Mix) Mix = [];
+				else
 				if (Mix.constructor == Object) {  // generate random gauss mixes
 					var 
 						K = Mix.K, 
@@ -465,7 +561,7 @@ var
 				var
 					mvd = [], 	// multivariate distribution parms
 					ooW = [], // wiener/oo process look ahead
-					mixes = Mix ? Mix.length : 0,	// number of mixes
+					mixes = Mix.length,	// number of mixes
 					mixing = mixes > 0, // we are mixing
 					mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
 					mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
@@ -652,56 +748,53 @@ var
 			if (agent = query.agent) 
 				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
 
-					if (jobid)
-						if (jobid.constructor == Error)
-							Trace(jobid);
+					if (jobid) {
+						Trace("AGENT FORKED "+jobname);
 
-						else {
-							Trace("AGENT FORKED "+jobname);
+						sql.query("INSERT INTO queues SET ?", {
+							class: agent,
+							client: req.client,
+							qos: 0,
+							priority: 0,
+							name: job.name
+						});
 
-							sql.query("INSERT INTO queues SET ?", {
-								class: agent,
-								client: req.client,
-								qos: 0,
-								priority: 0,
-								name: job.name
-							});
+						if ( poll = parseInt(query.poll) )
+							var timer = setInterval(function (req) {
 
-							if ( poll = parseInt(query.poll) )
-								var timer = setInterval(function (req) {
+								Trace("AGENT POLLING "+jobid);
 
-									Trace("AGENT POLLING "+jobid);
+								fetch(req.agent+"?pull="+jobid, function (rtn) {
 
-									fetch(req.agent+"?pull="+jobid, function (rtn) {
+									if (rtn)
+										FLEX.thread( function (sql) {
+											Trace("AGENT RETURNED "+jobid);
+											sql.query("DELETE FROM queues WHERE ?", {Name: plugin.name});								
+											req.cb( rtn, sql );
+										});
+									
+									else {
+										Trace("AGENT FAILED");
+										clearInterval(timer);
+										req.cb( rtn, sql );
+									}
 
-										if (rtn) 
-											if (rtn.constructor == Error) {
-												Trace("AGENT FAILED");
-												clearInterval(timer);
-												req.cb( rtn, sql );
-											}
+								});
 
-											else
-												FLEX.thread( function (sql) {
-													Trace("AGENT RETURNED "+jobid);
-													sql.query("DELETE FROM queues WHERE ?", {Name: plugin.name});								
-													req.cb( rtn, sql );
-												});
-
-									});
-
-								}, poll*1000, Copy({cb: res}, req));
-						}
-
-					else
-						Trace("AGENT REJECTED "+jobname);
+							}, poll*1000, Copy({cb: res}, req));
+					}
 
 				});
 
 			else 
-				plugin(req, function (rtn) {
-					res(rtn,sql);
-				});
+				try {
+					plugin(req, function (rtn) {
+						res(rtn,sql);
+					});
+				}
+				catch (err) {
+					res( null );
+				}
 		},
 		
 		/**
@@ -714,6 +807,12 @@ var
 			
 			if (opts) Copy(opts,FLEX);
 			
+			if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
+				for (var plugin in FLEX.plugins) {
+					Trace("PLUGIN "+plugin);
+					FLEX.execute[plugin] = runPlugin;
+				}
+		
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
@@ -742,11 +841,13 @@ var
 
 				READ.config(sql);			
 				
-				if (plugins = FLEX.plugins)
-					for (var plugin in plugins) {
-						Trace("PLUGIN "+plugin);
-						FLEX.execute[plugin] = FLEX.runPlugin;
-					}
+				if (RunEngine = FLEX.runEngine)
+					sql.query("SELECT Name FROM app.engines")
+					.on("result", function (eng) {
+						sql.query("CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",eng.Name);
+						Trace("CREATE PLUGIN "+eng.Name);
+						FLEX.execute[eng.Name] = runEngine;
+					});
 				
 				sql.release();
 			});
@@ -4540,84 +4641,6 @@ FLEX.execute.quizes = function (req, res) {
 		
 	else
 		res("Mission lesson");
-}
-
-FLEX.select.spoof = function (req,res) {
-	var 
-		sql = req.sql, 
-		query = req.query,
-		spoofer = "",
-		plugins = {
-			sss: FLEX.plugins.randpr
-		},
-		spoofs = {
-			sss: function (rtn, cb) {
-				cb( rtn ? rtn.steps : null );
-			},
-			wfs: function (test, cb) {
-				return {};
-			},
-			wms: function (test, cb) {
-				return null;
-			}
-		};
-
-		for (var n in query) { spoofer = n; break; }
-
-		if ( spoofer )
-			if ( name = query[spoofer] )
-				if ( spoof = spoofs[spoofer] )
-					if ( plugin = plugins[spoofer] ) {
-						query.Name = name;
-						req.table = plugin.name;
-						delete query[spoofer];
-						FLEX.runPlugin(req, function (rtn) {
-							res(rtn.steps);
-						});
-					}
-					else 
-						spoof(query,res);
-						/*
-						sql.query( "SELECT *,count(ID) AS Found FROM app.?? WHERE Name=? LIMIT 0,1", [plugin.name,name] )
-						.on("result", function (test) {
-							
-							Copy(test,query);
-							
-							if (test.Found)
-								plugin( req, function (rtn) {
-									spoof( rtn, res );
-								});
-							else
-								res( [] );
-						})
-						.on("err", function (err) {
-							Trace(err);
-							res( [] );
-						});
-	
-					else
-						sql.query( 
-							"SELECT *,count(ID) AS Found FROM app.?? WHERE Name=? LIMIT 0,1", 
-							[spoofer,name] )
-						.on("result", function (test) {
-							if (test.Found)
-								spoof( test, res );
-							else
-								res( [] );
-						})
-						.on("err", function (err) {
-							Trace(err);
-							res( [] );
-						});
-						*/
-						
-				else
-					res( [] );
-			else
-				res( [] );
-		else
-			res( [] );
-	
 }
 
 FLEX.select.follow = function (req,res) {
