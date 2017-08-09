@@ -133,11 +133,11 @@ var
 		},
 
 		// CRUDE interface
-		select: {ds: runQuery}, 
-		delete: {ds: runQuery}, 
-		update: {ds: runQuery}, 
-		insert: {ds: runQuery}, 
-		execute: {ds: runQuery}, 
+		select: {ds: queryDS}, 
+		delete: {ds: queryDS}, 
+		update: {ds: queryDS}, 
+		insert: {ds: queryDS}, 
+		execute: {ds: queryDS}, 
 	
 		fetcher: null, 					// http data fetcher
 		uploader: null,		 			// file uploader
@@ -164,11 +164,11 @@ var
 		then the Q parameters are derived from the matched X dataset (json fields automatically parsed), and the results are optionally 
 		(if Q.Save present) written to the matched X dataset.
 		*/
-		runPlugin: function FlexPlugin(req,res) {  
+		runPlugin: function runPlugin(req,res) {  
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
-				plugin = FLEX.plugins[req.table],
+				//plugin = FLEX.runEngine, //FLEX.plugins[req.table],
 				query = req.query;
 
 			//console.log({runplugin: query});
@@ -181,84 +181,83 @@ var
 			
 			//console.log({dsq: dsquery});
 			
-			if (plugin)
-				if (dsquery) 
-					sql.query(	"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", [dsname, dsquery])
-					.on("result", function (test) {	
-						Copy(test,query);
-						//console.log({plugin:query});
-						//console.log(test);
+			if (dsquery) 
+				sql.query(	"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", [dsname, dsquery])
+				.on("result", function (test) {	
+					Copy(test,query);
+					//console.log({plugin:query});
+					//console.log(test);
 
-						if (test.Found) 
-							sql.jsonKeys( dsname, function (keys) {
-								keys.each(function (n,key) {
-									try { 
-										query[key] = JSON.parse( query[key] ); 
-									}
-									catch (err) {}
-								});
-
-								if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
-									viaAgent(req, plugin, function (rtn, sql) {  // allow plugin out sourcing
-
-										//console.log(["agent returns", err]);
-										
-										if (rtn)
-											if ("Save" in query) {
-												try {
-													sql.query(   // save results
-														"UPDATE ?? SET Save=? WHERE ?", [ 
-														dsname,  JSON.stringify(rtn), { ID: test.ID }
-													]);
-													res( "saved" );
-												}
-												catch (err) {
-													res( err );
-												}
-											}
-											
-											else
-												res( rtn );
-										
-										else
-											res( new Error("agent failed") );
-
-									});
-
-								else  // do it yourself
-									try {
-										plugin(req, res);
-									}
-									catch (err) {
-										res( err );
-									}
+					if (test.Found) 
+						sql.jsonKeys( dsname, function (keys) {
+							keys.each(function (n,key) {
+								try { 
+									query[key] = JSON.parse( query[key] ); 
+								}
+								catch (err) {}
 							});
 
-						else 
-							res( new Error("plugin case not found") );
-					})
-					.on("error", function (err) {
-						res( err );
-					});
+							if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
+								viaAgent(req, function (rtn, sql) {  // allow plugin out sourcing
 
-				else
-					try {
-						plugin(req, function (rtn) {
-							res(null, rtn);
+									//console.log(["agent returns", err]);
+
+									if (rtn)
+										if ("Save" in query) {
+											try {
+												sql.query(   // save results
+													"UPDATE ?? SET Save=? WHERE ?", [ 
+													dsname,  JSON.stringify(rtn), { ID: test.ID }
+												]);
+												res( "saved" );
+											}
+											catch (err) {
+												res( err );
+											}
+										}
+
+										else
+											res( rtn );
+
+									else
+										res( new Error("agent failed") );
+
+								});
+
+							else  // do it yourself
+								ENGINE.select(req,res);
+								/*try {
+									plugin(req, res);
+								}
+								catch (err) {
+									res( err );
+								}*/
 						});
-					}
-					catch (err) {
-						res(err);
-					}
-			
+
+					else 
+						res( new Error("plugin case not found") );
+				})
+				.on("error", function (err) {
+					res( err );
+				});
+
 			else
-				res( new Error("plugin does not exist") );
+				ENGINE.select(req, res);
+				/*try {
+					plugin(req, function (rtn) {
+						res(null, rtn);
+					});
+				}
+				catch (err) {
+					res(err);
+				}*/
 		},
 		
 		plugins: { // plugins added to FLEX.execute will respond with res(rtn) to given request query req.query
-			news: function news(req, res) {  
+			news: function news(ctx, res) {  
 				var 
-					parts = req.Message.split("@"),
+					sql = ctx.sql,
+					parts = ctx.Message.split("@"),
 					subj = parts[0],
 					rhs = parts[1] || "",
 					to = rhs.substr(0,rhs.indexOf(" ")),
@@ -292,65 +291,64 @@ var
 						});
 				}
 
-				FLEX.thread( function (sql) {  // updates and imports
-					sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
-					.on("result", function (news) {
-						sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
-					});
+				sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
+				.on("result", function (news) {
+					sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
+				});
 
-					sql.query("UPDATE news SET age=datediff(now(),Starts)");
+				sql.query("UPDATE news SET age=datediff(now(),Starts)");
 
-					sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
+				sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
 
-					sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
-					.on("result", function (news) {  
-						var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
+				sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
+				.on("result", function (news) {  
+					var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
 
-						sql.query(
-							  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
-							+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
-							+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
-							//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
-							+ "link(states.Name,'/parms.view') AS State "
-							+ "FROM intake "
-							+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
-							+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
-							+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
-						.on("error", function (err) {
-							Trace(err);
-						})
-						.on("result", function (sys) {
-							var msg = sys.Link+" "+make.format(sys);
+					sql.query(
+						  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
+						+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
+						+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
+						//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
+						+ "link(states.Name,'/parms.view') AS State "
+						+ "FROM intake "
+						+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
+						+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
+						+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
+					.on("error", function (err) {
+						Trace(err);
+					})
+					.on("result", function (sys) {
+						var msg = sys.Link+" "+make.format(sys);
 
-							sql.query("UPDATE news SET ? WHERE ?", [
-								{	Message: msg,
-									New: msg != news.Message ? -1 : 0
-								}, 
-								{ID:news.ID}
-							]);
-						});
+						sql.query("UPDATE news SET ? WHERE ?", [
+							{	Message: msg,
+								New: msg != news.Message ? -1 : 0
+							}, 
+							{ID:news.ID}
+						]);
 					});
 				});
 			},
 			
-			xss: function xss(req,res) {
+			xss: function xss(ctx,res) {
 				res([
 					{lat:33.902,lon:70.09,alt:22,t:10},
 					{lat:33.902,lon:70.09,alt:12,t:20}
 				]);
 			},			
 			
-			sss: function sss(req,res) {
-				FLEX.plugins.randpr( req, function (rtn) {
+			sss: function sss(ctx,res) {
+				FLEX.plugins.randpr( ctx, function (rtn) {
+					//console.log({sssrtn:rtn});
 					res( rtn.steps ? rtn.steps : rtn );
 				});
 			},
 			
-			wms: function wms(req,res) {
+			wms: function wms(ctx,res) {
 				res( new Error("wms spoof unsporrted") );
 			},
 			
-			wfs: function wfs(req,res) {
+			wfs: function wfs(ctx,res) {
 				res({
 					GetRecordsResponse: {
 						SearchResults: {
@@ -384,19 +382,18 @@ var
 			},
 			
 			/*
-			Respond with mu,sigma estimates to the [x,y,...] events in gaussevs given query:
+			Respond with mu,sigma estimates to the [x,y,...] events in gaussevs given ctx:
 				Mixes = number of mixed to attempt to find
 				Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
 				VoxelID = number id of voxel
 			*/
-			gaussmix: function gaussmix(req,res) {
+			gaussmix: function gaussmix(ctx,res) {
 				
 				var 
-					sql = req.sql,
-					query = req.query,
-					VoxelID = query.VoxelID,
-					Mixes = query.Mixes,
-					Refs = query.Refs,
+					sql = ctx.sql,
+					VoxelID = ctx.VoxelID,
+					Mixes = ctx.Mixes,
+					Refs = ctx.Refs,
 					stats = {},
 					evlist = [];
 				
@@ -408,15 +405,15 @@ var
 				Array.prototype.nearestOf = function (metric) {
 					var imin = 0, emin = 1e99;
 
-					this.each( function (i,query) {
-						var e = metric( query );
+					this.each( function (i,ctx) {
+						var e = metric( ctx );
 						if (  e < emin) { imin = i; emin = e; }
 					});
 					return {idx: imin, err: emin};
 				}
 
-				console.log({guassmix:query});
-				sql.query(   // get all events falling in this voxel
+				console.log({guassmix:ctx});
+				sql.ctx(   // get all events falling in this voxel
 					"SELECT x,y,z FROM app.gaussevs WHERE ?",
 					{voxelID: VoxelID}, 
 					function (err,evs) {
@@ -433,7 +430,7 @@ var
 
 							if (false && Refs)  {  // requesting a ref check
 								gmms.each( function (k,gmm) {  // find nearest ref event
-									gmm.find = Refs.nearestOf( function (query) {
+									gmm.find = Refs.nearestOf( function (ctx) {
 										return dist( Refs, gmm.mu );
 									});
 								});
@@ -454,7 +451,7 @@ var
 									});
 
 									/*
-									sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
+									sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
 										console.log(err || "cell saved");
 									});*/
 								});
@@ -471,7 +468,7 @@ var
 										})
 									}, info);
 
-									sql.query("REPLACE INTO gaussruns SET ?", info, function (err) {
+									sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
 										console.log(err || "cell saved");
 									});
 								});
@@ -486,7 +483,7 @@ var
 			},
 			
 			/* 
-			Respond with random [ {x,y,...} process given query:
+			Respond with random [ {x,y,...} process given ctx:
 				Offsets = [x,y,z] = voxel offsets
 				Deltas = [x,y,z] = voxel dimensions
 				Mix = [ {mu, covar}, .... ] = desired process stats
@@ -497,7 +494,7 @@ var
 				Nyquest = over sampling factor
 				Intervals = number of coherence Intervals to return samples				
 			*/
-			randpr: function randpr(req,res) {
+			randpr: function randpr(ctx,res) {
 
 				function randint(a) {
 					return floor((rand() - 0.5)*2*a);
@@ -514,31 +511,17 @@ var
 				}
 
 				var 
-					query = req.query,
-					Mix = query.Mix,
-					JumpRates = query.JumpRates,
-					Symbols = query.Symbols,
-					Deltas = query.Deltas,
-					Offsets = query.Offsets,
-					Intervals = query.Intervals,
+					Mix = ctx.Mix,
+					JumpRates = ctx.JumpRates,
+					Symbols = ctx.Symbols,
+					Deltas = ctx.Deltas,
+					Offsets = ctx.Offsets,
+					Intervals = ctx.Intervals,
 					exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
-				console.log({randpr:query});
+				//console.log({randpr:ctx});
 				// could use tmin,tmax to set t offsets and Intervals
 				
-				/*
-				try {
-					var 
-						Mix = JSON.parse(query.Mix),  // gauss mixing parameters
-						JumpRates = JSON.parse(query.JumpRates || "[]"),
-						Symbols = JSON.parse(query.Symbols || "null");
-				}
-				
-				catch (err) {
-					Trace(err);
-					res( null );
-				}*/
-
 				if (!Mix) Mix = [];
 				else
 				if (Mix.constructor == Object) {  // generate random gauss mixes
@@ -558,6 +541,8 @@ var
 					console.log(Mix);
 				}
 
+				//console.log({randprmix:Mix});
+				
 				var
 					mvd = [], 	// multivariate distribution parms
 					ooW = [], // wiener/oo process look ahead
@@ -618,8 +603,8 @@ var
 					sampler = samplers[mode]; // sampler
 
 				RAN.config({ // configure the random process generator
-					N: query.Ensemble,  // ensemble size
-					wiener: query.Wiener,  // wiener process switch
+					N: ctx.Ensemble,  // ensemble size
+					wiener: ctx.Wiener,  // wiener process switch
 					A: JumpRates,  // jump rates 
 					/*  enable for a realtime process
 					A: {
@@ -630,7 +615,7 @@ var
 					},
 					*/
 					sym: Symbols,  // state symbols
-					nyquist: query.Nyquist, // sampling rate
+					nyquist: ctx.Nyquist, // sampling rate
 					store: {  // stores for ...
 						jump: null,  // state-jump observations
 						step: []  // time-step observations
@@ -729,26 +714,26 @@ var
 				});
 			},
 			
-			res1: function res1pr(req,res) {
+			res1: function res1pr(ctx,res) {
 			},
 			
-			res2: function res2pr(req,res) {
+			res2: function res2pr(ctx,res) {
 			}
 		},
 		
-		viaAgent: function( req, plugin, res ) {
+		viaAgent: function( req, res ) {
 			var
 				fetch = FLEX.fetcher,
 				sql = req.sql,
 				query = req.query,
-				jobname = "totem."+ req.client + "." + plugin.name + "." + query.ID;
+				jobname = "totem."+ req.client + "." + req.table + "." + query.ID;
 
 			//console.log({viaagent: query});
 			
 			if (agent = query.agent) 
 				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
 
-					if (jobid) {
+					if ( jobid ) {
 						Trace("AGENT FORKED "+jobname);
 
 						sql.query("INSERT INTO queues SET ?", {
@@ -787,14 +772,17 @@ var
 				});
 
 			else 
-				try {
+				ENGINE.select(req, function (rtn) {
+					res(rtn,sql);
+				});
+				/*try {
 					plugin(req, function (rtn) {
 						res(rtn,sql);
 					});
 				}
 				catch (err) {
 					res( null );
-				}
+				}*/
 		},
 		
 		/**
@@ -807,12 +795,6 @@ var
 			
 			if (opts) Copy(opts,FLEX);
 			
-			if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
-				for (var plugin in FLEX.plugins) {
-					Trace("PLUGIN "+plugin);
-					FLEX.execute[plugin] = runPlugin;
-				}
-		
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
@@ -832,7 +814,7 @@ var
 					executeData,
 					*/
 					hawkCatalog,
-					runQuery, 
+					queryDS, 
 					flattenCatalog
 					//hawkJobs
 				]);
@@ -841,12 +823,28 @@ var
 
 				READ.config(sql);			
 				
-				if (RunEngine = FLEX.runEngine)
+				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
+					for (var name in FLEX.plugins) {
+						Trace("PLUGIN "+name);
+						FLEX.execute[name] = runPlugin;
+						sql.query( 
+							"REPLACE INTO app.engines SET ?", {
+								Name: name,
+								Code: FLEX.plugins[name] + "",
+								Vars: JSON.stringify({port:name}),
+								Engine: "js",
+								Enabled: 1
+							});
+					}
+
+				if (runEngine = FLEX.runEngine)
 					sql.query("SELECT Name FROM app.engines")
 					.on("result", function (eng) {
-						sql.query("CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",eng.Name);
-						Trace("CREATE PLUGIN "+eng.Name);
 						FLEX.execute[eng.Name] = runEngine;
+						sql.query(
+							"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",
+							eng.Name);
+						Trace("PRIME "+eng.Name);
 					});
 				
 				sql.release();
@@ -4512,7 +4510,7 @@ function executeData(req, cb) {
 
 // Database CRUDE interface
 
-function runQuery(req, res) {
+function queryDS(req, res) {
 		
 	var 
 		sql = req.sql,							// sql connection
