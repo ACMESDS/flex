@@ -160,9 +160,12 @@ var
 		},
 			
 		/* 
-		Run plugin req.table = X the specified Q = req.query parameters, then respond on res(results).  If Q.ID or Q.Name is specified, 
-		then the Q parameters are derived from the matched X dataset (json fields automatically parsed), and the results are optionally 
-		(if Q.Save present) written to the matched X dataset.
+		Run engine plugin X = req.table using parameters Q = req.query, then respond on res(results).  If Q.ID or Q.Name is 
+		specified, then the parameters are derived from the matched X dataset (json fields automatically parsed), and the 
+		results are  (if Q.Save present) written to the matched X dataset.  If Q.Job is present, then response is res(Q.Job), thus
+		allowing the caller to place the request in its job queues.  If a Q.agent is present, then the plugin is out-sourced to the 
+		requested agent by placing this request into the global job queue: when completed, the results are retrained / returned 
+		on the same thread.
 		*/
 		runPlugin: function runPlugin(req,res) {  
 			var 
@@ -189,21 +192,26 @@ var
 					//console.log(test);
 
 					if (test.Found) 
-						sql.jsonKeys( dsname, function (keys) {
+						sql.jsonKeys( dsname, function (keys) {  // parse json keys
 							keys.each(function (n,key) {
 								try { 
 									query[key] = JSON.parse( query[key] ); 
 								}
+								
 								catch (err) {}
 							});
 
+							if ( test.Job )
+								res( test );
+							
+							else
 							if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
-								viaAgent(req, function (rtn, sql) {  // allow plugin out sourcing
+								viaAgent(req, function (rtn, sql) {  // allow out-sourcing of plugin
 
-									//console.log(["agent returns", err]);
+									//console.log(["agent returns", rtn]);
 
 									if (rtn)
-										if ("Save" in query) {
+										if ("Save" in test) {
 											try {
 												sql.query(   // save results
 													"UPDATE ?? SET Save=? WHERE ?", [ 
@@ -224,14 +232,8 @@ var
 
 								});
 
-							else  // do it yourself
+							else  // in-source the plugin
 								ENGINE.select(req,res);
-								/*try {
-									plugin(req, res);
-								}
-								catch (err) {
-									res( err );
-								}*/
 						});
 
 					else 
@@ -339,7 +341,6 @@ var
 			
 			sss: function sss(ctx,res) {
 				FLEX.plugins.randpr( ctx, function (rtn) {
-					//console.log({sssrtn:rtn});
 					res( rtn.steps ? rtn.steps : rtn );
 				});
 			},
@@ -382,10 +383,10 @@ var
 			},
 			
 			/*
-			Respond with mu,sigma estimates to the [x,y,...] events in gaussevs given ctx:
+			Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
 				Mixes = number of mixed to attempt to find
 				Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
-				VoxelID = number id of voxel
+				VoxelID = voxel id in app.events
 			*/
 			gaussmix: function gaussmix(ctx,res) {
 				
@@ -414,7 +415,7 @@ var
 
 				console.log({guassmix:ctx});
 				sql.ctx(   // get all events falling in this voxel
-					"SELECT x,y,z FROM app.gaussevs WHERE ?",
+					"SELECT x,y,z FROM app.events WHERE ?",
 					{voxelID: VoxelID}, 
 					function (err,evs) {
 
@@ -483,7 +484,7 @@ var
 			},
 			
 			/* 
-			Respond with random [ {x,y,...} process given ctx:
+			Respond with random [ {x,y,...}, ...] process given ctx parameters:
 				Offsets = [x,y,z] = voxel offsets
 				Deltas = [x,y,z] = voxel dimensions
 				Mix = [ {mu, covar}, .... ] = desired process stats
@@ -541,7 +542,7 @@ var
 					console.log(Mix);
 				}
 
-				//console.log({randprmix:Mix});
+				console.log({randprmix:Mix});
 				
 				var
 					mvd = [], 	// multivariate distribution parms
@@ -665,13 +666,15 @@ var
 						wiener_walks: RAN.wiener ? "yes" : "no",
 						sample_time: RAN.dt,
 						avg_rate: RAN.lambda
-						//initial_pr: RAN.pi,
-						//cumTxPr: RAN.P,
-						//state_symbols: RAN.sym,
-						//jump_rates: RAN.A,
-						//state_times: RAN.T,
-						//hold_times: RAN.R,
-						//time_in_state: RAN.ZU
+						/*
+						initial_pr: RAN.pi,
+						cumTxPr: RAN.P,
+						state_symbols: RAN.sym,
+						jump_rates: RAN.A,
+						state_times: RAN.T,
+						hold_times: RAN.R,
+						time_in_state: RAN.ZU
+						*/
 					};
 
 				if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
@@ -692,7 +695,7 @@ var
 				console.log(info);
 
 				RAN.start( Math.min(1000, steps), function (x,y,stats) {
-					console.log({randprs:y.length});
+					//console.log({randprs:y.length});
 					
 					res({  // ship it
 						jumps: x,
@@ -837,15 +840,14 @@ var
 							});
 					}
 
-				if (runEngine = FLEX.runEngine)
-					sql.query("SELECT Name FROM app.engines")
-					.on("result", function (eng) {
-						FLEX.execute[eng.Name] = runEngine;
-						sql.query(
-							"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",
-							eng.Name);
-						Trace("PRIME "+eng.Name);
-					});
+				sql.query("SELECT Name FROM app.engines")
+				.on("result", function (eng) {
+					Trace("PRIME "+eng.Name);
+
+					sql.query(
+						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",
+						eng.Name);
+				});
 				
 				sql.release();
 			});
