@@ -79,7 +79,8 @@ var
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
 			missingEngine: new Error("missing engine query"),
-			protectedQueue: new Error("action not allowed on this job queues")
+			protectedQueue: new Error("action not allowed on this job queues"),
+			noCase: new Error("plugin case not found")
 		},
 		
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
@@ -145,6 +146,7 @@ var
 		thread: null, 					// FLEX connection threader
 		skinner : null, 				// Jade renderer
 		
+		/*
 		DEFTYPES : {
 			"#": "varchar(32)",
 			"_": "varchar(1)",
@@ -157,21 +159,24 @@ var
 			c: "int(11)",
 			d: "date",
 			f: "varchar(255)"
-		},
+		},*/
 			
-		/* 
-		Run engine plugin X = req.table using parameters Q = req.query, then respond on res(results).  If Q.ID or Q.Name is 
-		specified, then the parameters are derived from the matched X dataset (json fields automatically parsed), and the 
-		results are  (if Q.Save present) written to the matched X dataset.  If Q.Job is present, then response is res(Q.Job), thus
-		allowing the caller to place the request in its job queues.  If a Q.agent is present, then the plugin is out-sourced to the 
-		requested agent by placing this request into the global job queue: when completed, the results are retrained / returned 
-		on the same thread.
+		/**
+		@method runPlugin
+		Method to run a dataset-engine plugin X = req.table using parameters Q = req.query
+		or (if Q.ID or Q.Name specified) dataset X parameters derived from the matched  
+		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
+		method then responds on res(results).   If Q.Save is present, the engine's results are
+		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
+		thus allowing the caller to place the request in its job queues.  If a Q.agent is present, 
+		then the plugin is out-sourced to the requested agent, this agent is then polled for its
+		results which are returned / retained on the same thread.  See FLEX.config comments
+		as well.
 		*/
-		runPlugin: function runPlugin(req,res) {  
+		runPlugin: function runPlugin(req,res) {  //< method to execute a plugin
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
-				//plugin = FLEX.runEngine, //FLEX.plugins[req.table],
 				query = req.query;
 
 			//console.log({runplugin: query});
@@ -182,23 +187,24 @@ var
 			else
 				var dsquery = null;
 			
-			//console.log({dsq: dsquery});
-			
 			if (dsquery) 
-				sql.query(	"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", [dsname, dsquery])
+				sql.query(	
+					"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", 
+					  [dsname, dsquery])
 				.on("result", function (test) {	
 					Copy(test,query);
 					//console.log({plugin:query});
-					//console.log(test);
 
 					if (test.Found) 
 						sql.jsonKeys( dsname, function (keys) {  // parse json keys
 							keys.each(function (n,key) {
-								try { 
-									query[key] = JSON.parse( query[key] ); 
-								}
+								if (key != "Save")
+									try { 
+										query[key] = JSON.parse( query[key] ); 
+									}
+
+									catch (err) {}
 								
-								catch (err) {}
 							});
 
 							if ( test.Job )
@@ -237,494 +243,43 @@ var
 						});
 
 					else 
-						res( new Error("plugin case not found") );
+						res( FLEX.errors.noCase );
 				})
 				.on("error", function (err) {
 					res( err );
 				});
 
 			else
-				ENGINE.select(req, res);
-				/*try {
+			if ( plugin = FLEX.staticPlugins[req.table] )  // bypass app.engines
+				try {
 					plugin(req, function (rtn) {
 						res(null, rtn);
 					});
 				}
 				catch (err) {
 					res(err);
-				}*/
+				}
+			
+			else	// run using app.engines
+				ENGINE.select(req, res);
 		},
 		
-		plugins: { // plugins added to FLEX.execute will respond with res(rtn) to given request query req.query
-			news: function news(ctx, res) {  
-				var 
-					sql = ctx.sql,
-					parts = ctx.Message.split("@"),
-					subj = parts[0],
-					rhs = parts[1] || "",
-					to = rhs.substr(0,rhs.indexOf(" ")),
-					body = rhs.substr(to.length);
+		staticPlugins: {  //<Static plugins bypass app.engines.
+		},
 
-				Trace(`NEWS ${to}`);
-
-				switch (to) {
-					case "conseq":
-
-					case "wicwar":
-
-					case "jira":
-						break;
-
-					case "":
-						break;
-
-					default:
-						sendMail({
-							to:  to,
-							subject: subj,
-							html: body.format( {
-								today: new Date(),
-								me: req.client
-							}),
-							alternatives: [{
-								contentType: 'text/html; charset="ISO-8859-1"',
-								contents: ""
-							}]
-						});
-				}
-
-				sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
-				.on("result", function (news) {
-					sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
-				});
-
-				sql.query("UPDATE news SET age=datediff(now(),Starts)");
-
-				sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
-
-				sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
-				.on("result", function (news) {  
-					var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
-
-					sql.query(
-						  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
-						+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
-						+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
-						//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
-						+ "link(states.Name,'/parms.view') AS State "
-						+ "FROM intake "
-						+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
-						+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
-						+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
-					.on("error", function (err) {
-						Trace(err);
-					})
-					.on("result", function (sys) {
-						var msg = sys.Link+" "+make.format(sys);
-
-						sql.query("UPDATE news SET ? WHERE ?", [
-							{	Message: msg,
-								New: msg != news.Message ? -1 : 0
-							}, 
-							{ID:news.ID}
-						]);
-					});
-				});
-			},
-			
-			xss: function xss(ctx,res) {
-				res([
-					{lat:33.902,lon:70.09,alt:22,t:10},
-					{lat:33.902,lon:70.09,alt:12,t:20}
-				]);
-			},			
-			
-			sss: function sss(ctx,res) {
-				FLEX.plugins.randpr( ctx, function (rtn) {
-					res( rtn.steps ? rtn.steps : rtn );
-				});
-			},
-			
-			wms: function wms(ctx,res) {
-				res( new Error("wms spoof unsporrted") );
-			},
-			
-			wfs: function wfs(ctx,res) {
-				res({
-					GetRecordsResponse: {
-						SearchResults: {
-							DatasetSummary: [{
-								"Image-Product": {
-									Image: {
-										ImageId: "spoof",
-										"Image-Sun-Characteristic": {
-											SunElevationDim: "0", 
-											SunAzimuth: "0"
-										},
-										"Image-Raster-Object-Representation": [],
-										"Image-Atmospheric-Characteristic": []
-									},
-									"Image-Restriction": {
-										Classification: "?", 
-										ClassificationSystemId: "?", 
-										LimitedDistributionCode: ["?"]
-									},
-									"Image-Country-Coverage": {
-										CountryCode: ["??"]
-									}
-								},
-								WMSUrl: "https://localhost:8080/shares/spoof.jpg?",
-								WMTSUrl: "",
-								JPIPUrl: ""
-							}]
-						}
-					}
-				});
-			},
-			
-			/*
-			Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
-				Mixes = number of mixed to attempt to find
-				Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
-				VoxelID = voxel id in app.events
-			*/
-			gaussmix: function gaussmix(ctx,res) {
-				
-				var 
-					sql = ctx.sql,
-					VoxelID = ctx.VoxelID,
-					Mixes = ctx.Mixes,
-					Refs = ctx.Refs,
-					stats = {},
-					evlist = [];
-				
-				function dist(a,b) { 
-					var d = [ a[0]-b[0], a[1]-b[1] ];
-					return sqrt( d[0]*d[0] + d[1]*d[1] );
-				}
-
-				Array.prototype.nearestOf = function (metric) {
-					var imin = 0, emin = 1e99;
-
-					this.each( function (i,ctx) {
-						var e = metric( ctx );
-						if (  e < emin) { imin = i; emin = e; }
-					});
-					return {idx: imin, err: emin};
-				}
-
-				console.log({guassmix:ctx});
-				sql.ctx(   // get all events falling in this voxel
-					"SELECT x,y,z FROM app.events WHERE ?",
-					{voxelID: VoxelID}, 
-					function (err,evs) {
-
-						//console.log({evs:evs,err:err});
-						if (evs && Mixes) {
-								evs.each( function (n,ev) {
-									evlist.push( [ev.x,ev.y,ev.z] );
-								});
-
-							var 
-								gmms = stats.gmms = RAN.MLE(evlist, Mixes),
-								refs = stats.refs = {};
-
-							if (false && Refs)  {  // requesting a ref check
-								gmms.each( function (k,gmm) {  // find nearest ref event
-									gmm.find = Refs.nearestOf( function (ctx) {
-										return dist( Refs, gmm.mu );
-									});
-								});
-
-								gmms.sort( function (a,b) {  // sort em by indexes
-									return a.find.idx < b.find.idx ? 1 : -1;
-								});
-
-								gmms.each(function (n,gmm) {    // save ref checks
-									refs.push({
-										cellIndex: gmm.find.idx,
-										cellType: "mle",
-										cellError: gmm.find.err * 100
-										/*cellParms: JSON.stringify({
-											mu: gmm.mu,
-											sigma: gmm.sigma
-										})*/
-									});
-
-									/*
-									sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
-										console.log(err || "cell saved");
-									});*/
-								});
-
-								/*
-								Mix.each(function (n,Mix) {					
-									Copy({
-										cellIndex: n,
-										cellType: "true",
-										cellError: 0,
-										cellParms: JSON.stringify({
-											mu: Mix.mu,
-											sigma: Mix.sigma
-										})
-									}, info);
-
-									sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
-										console.log(err || "cell saved");
-									});
-								});
-								*/
-							}
-						
-						}
-						console.log({shipstats:JSON.stringify(stats)});
-						res(stats);  //ship it
-				});
-				
-			},
-			
-			/* 
-			Respond with random [ {x,y,...}, ...] process given ctx parameters:
-				Offsets = [x,y,z] = voxel offsets
-				Deltas = [x,y,z] = voxel dimensions
-				Mix = [ {mu, covar}, .... ] = desired process stats
-				JumpRates = [ [rate, ...], ... ] = (KxK) jump rate process or {K} to generate 
-				Symbols: [sym, ...] = (K) state symboles || null to generate
-				Ensemble = numer in process ensemble
-				Wiener = switch to enable wiener process
-				Nyquest = over sampling factor
-				Intervals = number of coherence Intervals to return samples				
-			*/
-			randpr: function randpr(ctx,res) {
-
-				function randint(a) {
-					return floor((rand() - 0.5)*2*a);
-				}
-
-				function scalevec(x,a) {
-					for (var n=0;n<mixdim; n++) x[n] *= a[n];
-					return x;
-				}
-				
-				function offsetvec(x,y) {
-					for (var n=0; n<mixdim; n++) x[n] += y[n];
-					return x;
-				}
-
-				var 
-					Mix = ctx.Mix,
-					JumpRates = ctx.JumpRates,
-					Symbols = ctx.Symbols,
-					Deltas = ctx.Deltas,
-					Offsets = ctx.Offsets,
-					Intervals = ctx.Intervals,
-					exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
-
-				//console.log({randpr:ctx});
-				// could use tmin,tmax to set t offsets and Intervals
-				
-				if (!Mix) Mix = [];
-				else
-				if (Mix.constructor == Object) {  // generate random gauss mixes
-					var 
-						K = Mix.K, 
-						Mix = [],
-						a = 0, 
-						b = 0, 
-						xx = 0.9, yy = 0.7, xy = yx = 0.4, zz = 0.1;
-
-					for (var k=0; k<K; k++) 
-						Mix.push({
-							mu: [randint(a), randint(a), randint(a)],
-							sigma: [[xx,xy,0],[yx,yy,0],[0,0,zz]]
-						});
-
-					console.log(Mix);
-				}
-
-				console.log({randprmix:Mix});
-				
-				var
-					mvd = [], 	// multivariate distribution parms
-					ooW = [], // wiener/oo process look ahead
-					mixes = Mix.length,	// number of mixes
-					mixing = mixes > 0, // we are mixing
-					mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
-					mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
-					mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
-					mu = mix0.mu,	// mean 
-					sigma = mix0.sigma,  // covariance
-					theta = mix0.theta,  	// oo time lag
-					x0 = mix0.x0, 		// oo initial pos
-					a = {  // process fixed parms
-						wi: 0,
-						gm: 0,
-						br: sigma*sigma / 2,
-						oo: sigma / sqrt(2*theta)
-					},  		// sampler constants
-					samplers = {  // sampling methods for specified mix index
-						na: function (u) {  // ignore
-						},
-
-						wi: function (u) {  // wiener (need to vectorize)
-							var 
-								t = RAN.s, 
-								Wt = RAN.W[0];
-							
-							return mu + sigma * Wt;
-						},
-
-						oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
-							var 
-								t = RAN.s, 
-								Et = exp(-theta*t),
-								Et2 = exp(2*theta*t),
-								Wt = ooW[floor(Et2 - 1)] || 0;
-
-							ooW.push( WQ[0] );
-
-							return x0 
-									? x0 * Et + mu*(1-Et) + a.oo * Et * Wt 
-									: mu + a.oo * Et * Wt;
-						},
-
-						br: function (u) { // geometric brownian (need to vectorize)
-							var 
-								t = RAN.s, 
-								Wt = RAN.WQ[0];
-							
-							return exp( (mu-a.br)*t + sigma*Wt );
-						},
-
-						gm: function (u) {  // mixed gaussian (vectorized)
-							return mvd[u].sample();
-						}
-					},  // samplers
-					labels = ["x","y","z"], // vector sample labels
-					sampler = samplers[mode]; // sampler
-
-				RAN.config({ // configure the random process generator
-					N: ctx.Ensemble,  // ensemble size
-					wiener: ctx.Wiener,  // wiener process switch
-					A: JumpRates,  // jump rates 
-					/*  enable for a realtime process
-					A: {
-						dt: 1,
-						agent: "/someagent.domain",
-						n: 400,
-						fetch: TOTEM.fetch.http
-					},
-					*/
-					sym: Symbols,  // state symbols
-					nyquist: ctx.Nyquist, // sampling rate
-					store: {  // stores for ...
-						jump: null,  // state-jump observations
-						step: []  // time-step observations
-					},  // event stores
-					bins: 50,  // bins to create stats
-					on: {
-						jump: function (x) {},
-							
-						step: function (y) { // callback to monitor process after being forward stepped
-							RAN.U.each( function (id, state) {
-								var 
-									mix = floor(rand() * mixes),  // mixing index
-									us = sampler(mix),  // mixing sample
-									ys = {
-										t: RAN.t, // time sampled
-										u: state,   // state occupied
-										m: mix, // gauss mix dran from
-										f: mode, // process family
-										c: RAN.corr(), // ensemble correlation
-										s: RAN.t / RAN.Tc, // coherence Intervals
-										n: RAN.steps, // step counter
-										p: RAN.NU[state] / RAN.N // pr ensemble in this state
-									};
-
-								for (var n=0, N=us.length; n<N; n++) ys[labels[n]] = us[n];
-								y.push( new Object(ys) );
-							});
-						}
-					}  // on-event callbacks
-				});
-
-				var
-					steps = Intervals * RAN.Tc/RAN.dt,
-					states = RAN.K,
-					info = {
-						mixing_offsets: Offsets,
-						mixings_deltas: Deltas,
-						mixing_dim: mixdim,
-						states: states,
-						ensemble_size: RAN.N,
-						process_steps: steps,
-						coherence_interval: Intervals, 
-						coherence_time: RAN.Tc,
-						nyquist_step_time: RAN.dt,
-						coherence_time: RAN.Tc,
-						initial_activity: RAN.p,
-						wiener_walks: RAN.wiener ? "yes" : "no",
-						sample_time: RAN.dt,
-						avg_rate: RAN.lambda
-						/*
-						initial_pr: RAN.pi,
-						cumTxPr: RAN.P,
-						state_symbols: RAN.sym,
-						jump_rates: RAN.A,
-						state_times: RAN.T,
-						hold_times: RAN.R,
-						time_in_state: RAN.ZU
-						*/
-					};
-
-				if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
-					Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
-						console.log([k, floor(k / 20), k % 20, mix, Deltas]);
-						
-						offsetvec( scalevec(mix.mu,Deltas), [
-							floor(k / 20) * Deltas[0] + Offsets[0],
-							(k % 20) * Deltas[1] + Offsets[1],
-							mix.mu[2] + Offsets[2]
-						]);  
-						for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
-						
-						mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
-					});
-							
-				//console.log({mix: JSON.stringify(Mix)});
-				console.log(info);
-
-				RAN.start( Math.min(1000, steps), function (x,y,stats) {
-					//console.log({randprs:y.length});
-					
-					res({  // ship it
-						jumps: x,
-						steps: y,
-						stats: stats,
-						info: Copy({
-							processSteps: RAN.steps,
-							processSamples: RAN.jumps,
-							processStats: JSON.stringify({
-								jumpRates: RAN.A,
-								cumTxPr: RAN.P,
-								jumpCounts: RAN.T,
-								holdTimes: RAN.R,
-								symbols: RAN.sym,
-								initPr: RAN.pi						
-							})
-						}, info)
-					});
-				});
-			},
-			
-			res1: function res1pr(ctx,res) {
-			},
-			
-			res2: function res2pr(ctx,res) {
-			}
+		plugins: { //< Plugins defined on config()
+			news: news,
+			xss: xss,		
+			sss: sss,
+			wms: wms,
+			wfs: wfs,
+			gaussmix: gaussmix,
+			randpr: randpr,
+			res1: res1pr,
+			res2: res2pr
 		},
 		
-		viaAgent: function( req, res ) {
+		viaAgent: function( req, res ) {  //< method to out-source a plugin
 			var
 				fetch = FLEX.fetcher,
 				sql = req.sql,
@@ -776,6 +331,7 @@ var
 
 			else 
 				ENGINE.select(req, function (rtn) {
+					//console.log({agentrtns:rtn});
 					res(rtn,sql);
 				});
 				/*try {
@@ -789,11 +345,12 @@ var
 		},
 		
 		/**
-		 * @method config
-		 * 
-		 * Configure module with spcified options, then callback the
-		 * initializer.  
-		 * */
+		@method config
+		Configure module with spcified options.   Add the FLEX.runPlugin method to the
+		FLEX.execute interface for every plugin in the FLEX.plugins.  These plugins are
+		also published to app.engines.  Engines are scanned to prime their corresponding 
+		dataset. 		 
+		*/
 		config: function (opts) {
 			
 			if (opts) Copy(opts,FLEX);
@@ -1546,7 +1103,7 @@ FLEX.select.TABLES = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
-	sql.indexTables( "app", function (table) {
+	sql.eachTable( "app", function (table) {
 		rtns.push({
 			Name: table.tag("a",{href:"/"+table+".db"}),
 			ID: ID++
@@ -3076,7 +2633,7 @@ FLEX.execute.parms = function Execute(req, res) {
 	res(SUBMITTED);
 	
 	var allparms = {}, ntables = 0;
-	sql.indexTables("app", function (tname) {
+	sql.eachTable("app", function (tname) {
 		
 		sql.query("DESCRIBE ??",[tname], function (err, parms) {
 
@@ -4659,6 +4216,478 @@ FLEX.select.follow = function (req,res) {
 	});
 	
 }
+
+//=========== Plugins
+
+function news(ctx, res) {  
+	var 
+		sql = ctx.sql,
+		parts = ctx.Message.split("@"),
+		subj = parts[0],
+		rhs = parts[1] || "",
+		to = rhs.substr(0,rhs.indexOf(" ")),
+		body = rhs.substr(to.length);
+
+	Trace(`NEWS ${to}`);
+
+	switch (to) {
+		case "conseq":
+
+		case "wicwar":
+
+		case "jira":
+			break;
+
+		case "":
+			break;
+
+		default:
+			sendMail({
+				to:  to,
+				subject: subj,
+				html: body.format( {
+					today: new Date(),
+					me: req.client
+				}),
+				alternatives: [{
+					contentType: 'text/html; charset="ISO-8859-1"',
+					contents: ""
+				}]
+			});
+	}
+
+	sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
+	.on("result", function (news) {
+		sql.query("DELETE FROM news WHERE ?",{ID:news.ID});
+	});
+
+	sql.query("UPDATE news SET age=datediff(now(),Starts)");
+
+	sql.query("UPDATE news SET fuse=Stay-datediff(now(),Starts)");
+
+	sql.query("SELECT * FROM news WHERE Category LIKE '%/%'")
+	.on("result", function (news) {  
+		var parts = news.Category.split("/"), name = parts[0], make = parts[1], client = "system";
+
+		sql.query(
+			  "SELECT intake.*, link(intake.Name,concat(?,intake.Name)) AS Link, "
+			+ "link('dashboard',concat('/',lower(intake.Name),'.view')) AS Dashboard, "
+			+ "sum(datediff(now(),queues.Arrived)) AS Age, min(queues.Arrived) AS Arrived, "
+			//+ "link(concat(queues.sign0,queues.sign1,queues.sign2,queues.sign3,queues.sign4,queues.sign5,queues.sign6,queues.sign7),concat(?,intake.Name)) AS Waiting, "
+			+ "link(states.Name,'/parms.view') AS State "
+			+ "FROM intake "
+			+ "LEFT JOIN queues ON (queues.Client=? and queues.State=intake.TRL and queues.Class='TRL' and queues.Job=intake.Name) "
+			+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
+			+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
+		.on("error", function (err) {
+			Trace(err);
+		})
+		.on("result", function (sys) {
+			var msg = sys.Link+" "+make.format(sys);
+
+			sql.query("UPDATE news SET ? WHERE ?", [
+				{	Message: msg,
+					New: msg != news.Message ? -1 : 0
+				}, 
+				{ID:news.ID}
+			]);
+		});
+	});
+}
+
+function xss(ctx,res) {
+	res([
+		{lat:33.902,lon:70.09,alt:22,t:10},
+		{lat:33.902,lon:70.09,alt:12,t:20}
+	]);
+}	
+
+function sss(ctx,res) {
+	FLEX.plugins.randpr( ctx, function (rtn) {
+		res( rtn.steps ? rtn.steps : rtn );
+	});
+}
+
+function wms(ctx,res) {
+	res(  {spoof:1} );
+}
+
+function wfs(ctx,res) {
+	res({
+		GetRecordsResponse: {
+			SearchResults: {
+				DatasetSummary: [{
+					"Image-Product": {
+						Image: {
+							ImageId: "spoof",
+							"Image-Sun-Characteristic": {
+								SunElevationDim: "0", 
+								SunAzimuth: "0"
+							},
+							"Image-Raster-Object-Representation": [],
+							"Image-Atmospheric-Characteristic": []
+						},
+						"Image-Restriction": {
+							Classification: "?", 
+							ClassificationSystemId: "?", 
+							LimitedDistributionCode: ["?"]
+						},
+						"Image-Country-Coverage": {
+							CountryCode: ["??"]
+						}
+					},
+					WMSUrl: "https://localhost:8080/shares/spoof.jpg?",
+					WMTSUrl: "",
+					JPIPUrl: ""
+				}]
+			}
+		}
+	});
+}
+
+/*
+Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
+	Mixes = number of mixed to attempt to find
+	Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
+	VoxelID = voxel id in app.events
+*/
+function gaussmix(ctx,res) {
+
+	var 
+		sql = ctx.sql,
+		VoxelID = ctx.VoxelID,
+		Mixes = ctx.Mixes,
+		Refs = ctx.Refs,
+		stats = {},
+		evlist = [];
+
+	function dist(a,b) { 
+		var d = [ a[0]-b[0], a[1]-b[1] ];
+		return sqrt( d[0]*d[0] + d[1]*d[1] );
+	}
+
+	Array.prototype.nearestOf = function (metric) {
+		var imin = 0, emin = 1e99;
+
+		this.each( function (i,ctx) {
+			var e = metric( ctx );
+			if (  e < emin) { imin = i; emin = e; }
+		});
+		return {idx: imin, err: emin};
+	}
+
+	console.log({guassmix:ctx});
+	sql.ctx(   // get all events falling in this voxel
+		"SELECT x,y,z FROM app.events WHERE ?",
+		{voxelID: VoxelID}, 
+		function (err,evs) {
+
+			//console.log({evs:evs,err:err});
+			if (evs && Mixes) {
+					evs.each( function (n,ev) {
+						evlist.push( [ev.x,ev.y,ev.z] );
+					});
+
+				var 
+					gmms = stats.gmms = RAN.MLE(evlist, Mixes),
+					refs = stats.refs = {};
+
+				if (false && Refs)  {  // requesting a ref check
+					gmms.each( function (k,gmm) {  // find nearest ref event
+						gmm.find = Refs.nearestOf( function (ctx) {
+							return dist( Refs, gmm.mu );
+						});
+					});
+
+					gmms.sort( function (a,b) {  // sort em by indexes
+						return a.find.idx < b.find.idx ? 1 : -1;
+					});
+
+					gmms.each(function (n,gmm) {    // save ref checks
+						refs.push({
+							cellIndex: gmm.find.idx,
+							cellType: "mle",
+							cellError: gmm.find.err * 100
+							/*cellParms: JSON.stringify({
+								mu: gmm.mu,
+								sigma: gmm.sigma
+							})*/
+						});
+
+						/*
+						sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
+							console.log(err || "cell saved");
+						});*/
+					});
+
+					/*
+					Mix.each(function (n,Mix) {					
+						Copy({
+							cellIndex: n,
+							cellType: "true",
+							cellError: 0,
+							cellParms: JSON.stringify({
+								mu: Mix.mu,
+								sigma: Mix.sigma
+							})
+						}, info);
+
+						sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
+							console.log(err || "cell saved");
+						});
+					});
+					*/
+				}
+
+			}
+			console.log({shipstats:JSON.stringify(stats)});
+			res(stats);  //ship it
+	});
+
+}
+
+/* 
+Respond with random [ {x,y,...}, ...] process given ctx parameters:
+	Offsets = [x,y,z] = voxel offsets
+	Deltas = [x,y,z] = voxel dimensions
+	Mix = [ {mu, covar}, .... ] = desired process stats
+	JumpRates = [ [rate, ...], ... ] = (KxK) jump rate process or {K} to generate 
+	Symbols: [sym, ...] = (K) state symboles || null to generate
+	Ensemble = numer in process ensemble
+	Wiener = switch to enable wiener process
+	Nyquest = over sampling factor
+	Intervals = number of coherence Intervals to return samples				
+*/
+function randpr(ctx,res) {
+
+	function randint(a) {
+		return floor((rand() - 0.5)*2*a);
+	}
+
+	function scalevec(x,a) {
+		for (var n=0;n<mixdim; n++) x[n] *= a[n];
+		return x;
+	}
+
+	function offsetvec(x,y) {
+		for (var n=0; n<mixdim; n++) x[n] += y[n];
+		return x;
+	}
+
+	var 
+		Mix = ctx.Mix,
+		JumpRates = ctx.JumpRates,
+		Symbols = ctx.Symbols,
+		Deltas = ctx.Deltas,
+		Offsets = ctx.Offsets,
+		Intervals = ctx.Intervals,
+		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
+
+	//console.log({randpr:ctx});
+	// could use tmin,tmax to set t offsets and Intervals
+
+	if (!Mix) Mix = [];
+	else
+	if (Mix.constructor == Object) {  // generate random gauss mixes
+		var 
+			K = Mix.K, 
+			Mix = [],
+			a = 0, 
+			b = 0, 
+			xx = 0.9, yy = 0.7, xy = yx = 0.4, zz = 0.1;
+
+		for (var k=0; k<K; k++) 
+			Mix.push({
+				mu: [randint(a), randint(a), randint(a)],
+				sigma: [[xx,xy,0],[yx,yy,0],[0,0,zz]]
+			});
+
+		console.log(Mix);
+	}
+
+	console.log({randprmix:Mix});
+
+	var
+		mvd = [], 	// multivariate distribution parms
+		ooW = [], // wiener/oo process look ahead
+		mixes = Mix.length,	// number of mixes
+		mixing = mixes > 0, // we are mixing
+		mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
+		mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
+		mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
+		mu = mix0.mu,	// mean 
+		sigma = mix0.sigma,  // covariance
+		theta = mix0.theta,  	// oo time lag
+		x0 = mix0.x0, 		// oo initial pos
+		a = {  // process fixed parms
+			wi: 0,
+			gm: 0,
+			br: sigma*sigma / 2,
+			oo: sigma / sqrt(2*theta)
+		},  		// sampler constants
+		samplers = {  // sampling methods for specified mix index
+			na: function (u) {  // ignore
+			},
+
+			wi: function (u) {  // wiener (need to vectorize)
+				var 
+					t = RAN.s, 
+					Wt = RAN.W[0];
+
+				return mu + sigma * Wt;
+			},
+
+			oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
+				var 
+					t = RAN.s, 
+					Et = exp(-theta*t),
+					Et2 = exp(2*theta*t),
+					Wt = ooW[floor(Et2 - 1)] || 0;
+
+				ooW.push( WQ[0] );
+
+				return x0 
+						? x0 * Et + mu*(1-Et) + a.oo * Et * Wt 
+						: mu + a.oo * Et * Wt;
+			},
+
+			br: function (u) { // geometric brownian (need to vectorize)
+				var 
+					t = RAN.s, 
+					Wt = RAN.WQ[0];
+
+				return exp( (mu-a.br)*t + sigma*Wt );
+			},
+
+			gm: function (u) {  // mixed gaussian (vectorized)
+				return mvd[u].sample();
+			}
+		},  // samplers
+		labels = ["x","y","z"], // vector sample labels
+		sampler = samplers[mode]; // sampler
+
+	RAN.config({ // configure the random process generator
+		N: ctx.Ensemble,  // ensemble size
+		wiener: ctx.Wiener,  // wiener process switch
+		A: JumpRates,  // jump rates 
+		/*  enable for a realtime process
+		A: {
+			dt: 1,
+			agent: "/someagent.domain",
+			n: 400,
+			fetch: TOTEM.fetch.http
+		},
+		*/
+		sym: Symbols,  // state symbols
+		nyquist: ctx.Nyquist, // sampling rate
+		store: {  // stores for ...
+			jump: null,  // state-jump observations
+			step: []  // time-step observations
+		},  // event stores
+		bins: 50,  // bins to create stats
+		on: {
+			jump: function (x) {},
+
+			step: function (y) { // callback to monitor process after being forward stepped
+				RAN.U.each( function (id, state) {
+					var 
+						mix = floor(rand() * mixes),  // mixing index
+						us = sampler(mix),  // mixing sample
+						ys = {
+							t: RAN.t, // time sampled
+							u: state,   // state occupied
+							m: mix, // gauss mix dran from
+							f: mode, // process family
+							c: RAN.corr(), // ensemble correlation
+							s: RAN.t / RAN.Tc, // coherence Intervals
+							n: RAN.steps, // step counter
+							p: RAN.NU[state] / RAN.N // pr ensemble in this state
+						};
+
+					for (var n=0, N=us.length; n<N; n++) ys[labels[n]] = us[n];
+					y.push( new Object(ys) );
+				});
+			}
+		}  // on-event callbacks
+	});
+
+	var
+		steps = Intervals * RAN.Tc/RAN.dt,
+		states = RAN.K,
+		info = {
+			mixing_offsets: Offsets,
+			mixings_deltas: Deltas,
+			mixing_dim: mixdim,
+			states: states,
+			ensemble_size: RAN.N,
+			process_steps: steps,
+			coherence_interval: Intervals, 
+			coherence_time: RAN.Tc,
+			nyquist_step_time: RAN.dt,
+			coherence_time: RAN.Tc,
+			initial_activity: RAN.p,
+			wiener_walks: RAN.wiener ? "yes" : "no",
+			sample_time: RAN.dt,
+			avg_rate: RAN.lambda
+			/*
+			initial_pr: RAN.pi,
+			cumTxPr: RAN.P,
+			state_symbols: RAN.sym,
+			jump_rates: RAN.A,
+			state_times: RAN.T,
+			hold_times: RAN.R,
+			time_in_state: RAN.ZU
+			*/
+		};
+
+	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
+		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
+			console.log([k, floor(k / 20), k % 20, mix, Deltas]);
+
+			offsetvec( scalevec(mix.mu,Deltas), [
+				floor(k / 20) * Deltas[0] + Offsets[0],
+				(k % 20) * Deltas[1] + Offsets[1],
+				mix.mu[2] + Offsets[2]
+			]);  
+			for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
+
+			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
+		});
+
+	//console.log({mix: JSON.stringify(Mix)});
+	console.log(info);
+
+	RAN.start( Math.min(1000, steps), function (x,y,stats) {
+		//console.log({randprs:y.length});
+
+		res({  // ship it
+			jumps: x,
+			steps: y,
+			stats: stats,
+			info: info
+			/*info: Copy(info, {
+				processSteps: RAN.steps,
+				processSamples: RAN.jumps
+				/ *processStats: JSON.stringify({
+					jumpRates: RAN.A,
+					cumTxPr: RAN.P,
+					jumpCounts: RAN.T,
+					holdTimes: RAN.R,
+					symbols: RAN.sym,
+					initPr: RAN.pi						
+				})* /
+			}) */
+		});
+	});
+}
+
+function res1pr(ctx,res) {
+}
+
+function res2pr(ctx,res) {
+}
+
+//=================== Debug
 
 function Trace(msg,arg) {
 	ENUM.trace("F>",msg,arg);
