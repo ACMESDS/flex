@@ -402,7 +402,7 @@ var
 					Trace("PRIME "+eng.Name);
 
 					sql.query(
-						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json)",
+						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json, Project varchar(32), Description mediumtext)",
 						eng.Name);
 				});
 				
@@ -3839,11 +3839,11 @@ function deleteJob(req, cb) {
 	sql.selectJob(req, function (job) {
 		
 		cb(sql,job, function (ack) {
-			sql.query("UPDATE queues SET ?,Age=(now()-Arrived)*1e-3 WHERE ?", [{
-				Departed: new Date(),
-				Util: util(),
-				Notes:"stopped"}, 
-				{Name:job.name,Client:job.client,Class:job.class}]);
+			sql.query("UPDATE queues SET Departed=now(), Age=(now()-Arrived)/3600e3, Notes=concat(Notes,'stopped') WHERE ?", {
+				Name:job.name,
+				Client:job.client,
+				Class:job.class
+			});
 
 			delete FLEX.queues[job.qos].batch[job.priority];
 			
@@ -3912,7 +3912,7 @@ function insertJob(job, cb) {
 					if (job) {
 //console.log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-						if (job.cmd)	// spawn job and return its pid
+						if (job.cmd) {	// spawn job and return its pid
 							job.pid = CP.exec(
 									job.cmd, 
 									  {cwd: "./public/dets", env:process.env}, 
@@ -3923,7 +3923,8 @@ function insertJob(job, cb) {
 								if (job.cb)
 									job.cb( job );
 							});
-
+						}
+					
 						else  			// execute job callback
 						if (job.cb) 
 							job.cb(job);
@@ -3941,8 +3942,7 @@ function insertJob(job, cb) {
 	}
 
 	var 
-		sql = this,
-		note = job.credit ? "running" : "fundme".link("/fundme.view");
+		sql = this;
 	
 	if ( !FLEX.biller && FLEX.billingCycle)
 		FLEX.biller = setInterval( function (queues) { // setup job billing
@@ -3950,24 +3950,30 @@ function insertJob(job, cb) {
 			FLEX.thread( function (sql) {
 				
 				sql.query(  // mark job departed if no work remains
-					"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
+					"UPDATE app.queues SET Departed=now(), Notes=concat(Notes, ' is ', link('billed', '/profile.view')), Age=Age + (now()-Arrived)/3600e3, Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
 					// {ID:job.ID} //jobID
-					function () {
-				
-					Each(queues, function (rate, queue) {  // save collected queuing charges to profiles
-						Each(queue.client, function (client, charge) {
+					function (err) {
+						
+					if (err) 
+						Trace(err);
+						
+					else
+						Each(queues, function (rate, queue) {  // save collected queuing charges to profiles
+							Each(queue.client, function (client, charge) {
 
-							if ( charge.bill ) {
-								Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
-								sql.query(
-									"UPDATE openv.profiles SET Charge=Charge+?,Credit=max(0,Credit-?) WHERE ?" , 
-									 [charge.bill, charge.bill, {Client:client}]
-								);
-								charge.bill = 0;
-							}
+								if ( charge.bill ) {
+									Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
+									sql.query(
+										"UPDATE openv.profiles SET Charge=Charge+?,Credit=greatest(0,Credit-?) WHERE ?" , 
+										 [charge.bill, charge.bill, {Client:client}], 
+										function (err) {
+											console.log({charging:err});
+									});
+									charge.bill = 0;
+								}
 
+							});
 						});
-					});
 				});
 			});
 					
@@ -3976,7 +3982,7 @@ function insertJob(job, cb) {
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
 			"INSERT INTO app.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Arrived=now(),Work=Work+1,State=Done/Work*100,?", [{
+			"UPDATE Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
 				Client: job.client || "guest",
 				Class: job.class || "job",
 				State: 0,
@@ -3988,14 +3994,18 @@ function insertJob(job, cb) {
 				Classif : "",
 				Util: util(),
 				Priority: job.priority || 0,
-				Notes: note,
+				Notes: job.notes,
 				QoS: job.qos,
+				Task: job.task,
 				Finished: 0,
 				Billed: 0,
 				Funded: job.credit ? 1 : 0,
 				Work: 1,
 				Done: 0
-			}, {Notes: note}
+			}, {
+				Notes: job.notes,
+				Task: job.task
+			}
 		], function (err,info) {  // increment work backlog for this job
 
 			job.ID = info.insertId || 0;
@@ -4004,7 +4014,7 @@ function insertJob(job, cb) {
 				Trace(err);
 			
 			else 
-			if (job.credit)				// client's credit is still good
+			if (job.credit)				// client's credit is still good so place it in the regulators
 				regulate(job, function (job) { // provide callback when job departs
 					FLEX.thread( function (sql) {  // callback on new sql thread
 						cb(sql,job);
