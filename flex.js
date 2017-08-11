@@ -4313,7 +4313,10 @@ function xss(ctx,res) {
 }	
 
 function sss(ctx,res) {
-	FLEX.plugins.randpr( ctx, function (rtn) {
+/*
+Use the FLEX randpr plugin to send spoofed streaming data.
+*/
+	FLEX.randpr( ctx, function (rtn) {
 		res( rtn.steps ? rtn.steps : rtn );
 	});
 }
@@ -4323,6 +4326,9 @@ function wms(ctx,res) {
 }
 
 function wfs(ctx,res) {
+/*
+Respond with ess-compatible image catalog to induce image-spoofing in the chipper.
+*/
 	res({
 		GetRecordsResponse: {
 			SearchResults: {
@@ -4355,13 +4361,13 @@ function wfs(ctx,res) {
 	});
 }
 
+function gaussmix(ctx,res) {
 /*
 Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
 	Mixes = number of mixed to attempt to find
 	Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
 	VoxelID = voxel id in app.events
 */
-function gaussmix(ctx,res) {
 
 	var 
 		sql = ctx.sql,
@@ -4456,6 +4462,7 @@ function gaussmix(ctx,res) {
 
 }
 
+function randpr(ctx,res) {
 /* 
 Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Offsets = [x,y,z] = voxel offsets
@@ -4468,7 +4475,6 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Nyquest = over sampling factor
 	Intervals = number of coherence Intervals to return samples				
 */
-function randpr(ctx,res) {
 
 	function randint(a) {
 		return floor((rand() - 0.5)*2*a);
@@ -4493,9 +4499,6 @@ function randpr(ctx,res) {
 		Intervals = ctx.Intervals,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
-	//console.log({randpr:ctx});
-	// could use tmin,tmax to set t offsets and Intervals
-
 	if (!Mix) Mix = [];
 	else
 	if (Mix.constructor == Object) {  // generate random gauss mixes
@@ -4511,11 +4514,9 @@ function randpr(ctx,res) {
 				mu: [randint(a), randint(a), randint(a)],
 				sigma: [[xx,xy,0],[yx,yy,0],[0,0,zz]]
 			});
-
-		console.log(Mix);
 	}
 
-	console.log({randprmix:Mix});
+	console.log({randpr_mix:Mix});
 
 	var
 		mvd = [], 	// multivariate distribution parms
