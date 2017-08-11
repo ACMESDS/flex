@@ -146,21 +146,7 @@ var
 		thread: null, 					// FLEX connection threader
 		skinner : null, 				// Jade renderer
 		
-		/*
-		DEFTYPES : {
-			"#": "varchar(32)",
-			"_": "varchar(1)",
-			a: "float unique auto_increment",
-			t: "varchar(64)",
-			n: "float",
-			x: "mediumtext",
-			h: "mediumtext",
-			i: "int(11)",
-			c: "int(11)",
-			d: "date",
-			f: "varchar(255)"
-		},*/
-			
+		runPlugin: function runPlugin(req,res) {  //< method to execute a plugin
 		/**
 		@method runPlugin
 		Method to run a dataset-engine plugin X = req.table using parameters Q = req.query
@@ -170,10 +156,9 @@ var
 		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
 		thus allowing the caller to place the request in its job queues.  If a Q.agent is present, 
 		then the plugin is out-sourced to the requested agent, this agent is then polled for its
-		results which are returned / retained on the same thread.  See FLEX.config comments
-		as well.
+		results, these results being then returned / retained on the same thread.  See 
+		FLEX.config comments as well.
 		*/
-		runPlugin: function runPlugin(req,res) {  //< method to execute a plugin
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
