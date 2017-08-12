@@ -1,25 +1,25 @@
 ﻿// UNCLASSIFIED
 
 /*
- * @class flex
- * @requires vm
- * @requires http
- * @requires crypto
- * @requires url
- * @requires cluster
- * @requires fs
- * @requires child-process
- * @requires os
+@class flex
+@requires vm
+@requires http
+@requires crypto
+@requires url
+@requires cluster
+@requires fs
+@requires child-process
+@requires os
 
- * @requires enum
- * @requires engine
+@requires enum
+@requires engine
 
- * @requires pdffiller
- * @requires nodemailer
- * @requires imap
- * @requires feed
- * @requires feed-read
- */
+@requires pdffiller
+@requires nodemailer
+@requires imap
+@requires feed
+@requires feed-read
+*/
  
 var 									// nodejs bindings
 	VM = require('vm'), 				// V8 JS compiler
@@ -103,8 +103,9 @@ var
 			return list;
 		},
 
-		billingCycle: 0,  // job billing cycle [ms]
-		diagCycle: 0, // self diagnostic cycle [ms]
+		billingCycle: 0,  // job billing cycle [ms] ( 0 disables)
+		diagCycle: 0, // self diagnostic cycle [ms] (0 disables)
+		hawkingCycle: 0, // job hawking cycle [ms] (0 disables)
 		
 		flatten: { 		// catalog flattening 
 			catalog: {  // default tables to flatten and their fulltext keys
@@ -146,18 +147,48 @@ var
 		thread: null, 					// FLEX connection threader
 		skinner : null, 				// Jade renderer
 		
+		runEngine: function (req,res) {
+		/**
+		@method runEngine 
+		Run the associated engine to the plugin named req.table if it exists and is enabled; otherwise 
+		attempt fallback to the builtin plugin.  Callback res(err,results).
+		**/
+			
+			ENGINE.select(req, function (rtn) {  // compile and step the engine
+				
+				if (rtn.constructor == Error) // if engine not enabled, try builtin
+					if ( plugin = FLEX.plugins[req.table] )  
+						
+						try {
+							plugin(req, function (rtn) {
+								res(null, rtn);
+							});
+						}
+						
+						catch (err) {
+							res(err);
+						}
+
+					else
+						res( FLEX.errors.noEngine);
+
+				else
+					res( rtn );
+			});
+		},
+		
 		runPlugin: function runPlugin(req,res) {  //< method to execute a plugin
 		/**
 		@method runPlugin
-		Method to run a dataset-engine plugin X = req.table using parameters Q = req.query
+		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
 		or (if Q.ID or Q.Name specified) dataset X parameters derived from the matched  
 		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
 		method then responds on res(results).   If Q.Save is present, the engine's results are
 		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
 		thus allowing the caller to place the request in its job queues.  If a Q.agent is present, 
 		then the plugin is out-sourced to the requested agent, this agent is then polled for its
-		results, these results being then returned / retained on the same thread.  See 
-		FLEX.config comments as well.
+		results, these results being then returned / retained on the same thread.  Callsback
+		res(results).  Related comments in FLEX.config.
 		*/
 			var 
 				sql = req.sql, 
@@ -176,6 +207,7 @@ var
 				sql.query(	
 					"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", 
 					  [dsname, dsquery])
+				
 				.on("result", function (test) {	
 					Copy(test,query);
 					//console.log({plugin:query});
@@ -196,7 +228,7 @@ var
 								res( test );
 							
 							else
-							if ( viaAgent = FLEX.viaAgent )  // may use agents if installed
+							if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
 								viaAgent(req, function (rtn, sql) {  // allow out-sourcing of plugin
 
 									//console.log(["agent returns", rtn]);
@@ -220,11 +252,12 @@ var
 
 									else
 										res( new Error("agent failed") );
-
+									
+									sql.release();
 								});
 
 							else  // in-source the plugin
-								ENGINE.select(req,res);
+								FLEX.runEngine(req, res);
 						});
 
 					else 
@@ -234,24 +267,10 @@ var
 					res( err );
 				});
 
-			else
-			if ( plugin = FLEX.staticPlugins[req.table] )  // bypass app.engines
-				try {
-					plugin(req, function (rtn) {
-						res(null, rtn);
-					});
-				}
-				catch (err) {
-					res(err);
-				}
-			
 			else	// run using app.engines
-				ENGINE.select(req, res);
+				FLEX.runEngine(req, res);
 		},
 		
-		staticPlugins: {  //<Static plugins bypass app.engines.
-		},
-
 		plugins: { //< Plugins defined on config()
 			news: news,
 			xss: xss,		
@@ -265,6 +284,12 @@ var
 		},
 		
 		viaAgent: function( req, res ) {  //< method to out-source a plugin
+		/**
+		@method viaAgent
+		Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
+		plugin. Callsback res(results, sql) with a possibly new sql thread.
+		**/
+
 			var
 				fetch = FLEX.fetcher,
 				sql = req.sql,
@@ -288,7 +313,7 @@ var
 						});
 
 						if ( poll = parseInt(query.poll) )
-							var timer = setInterval(function (req) {
+							var timer = setInterval(function (req) { 
 
 								Trace("AGENT POLLING "+jobid);
 
@@ -309,34 +334,25 @@ var
 
 								});
 
-							}, poll*1000, Copy({cb: res}, req));
+							}, poll*1e3, Copy({cb: res}, req));
 					}
 
 				});
 
 			else 
-				ENGINE.select(req, function (rtn) {
-					//console.log({agentrtns:rtn});
+				FLEX.runEngine(req, function (rtn) {
 					res(rtn,sql);
 				});
-				/*try {
-					plugin(req, function (rtn) {
-						res(rtn,sql);
-					});
-				}
-				catch (err) {
-					res( null );
-				}*/
 		},
 		
+		config: function (opts) {
 		/**
 		@method config
 		Configure module with spcified options.   Add the FLEX.runPlugin method to the
 		FLEX.execute interface for every plugin in the FLEX.plugins.  These plugins are
-		also published to app.engines.  Engines are scanned to prime their corresponding 
-		dataset. 		 
+		also published to app.engines (disabled and only if they dont already exist).  Engines 
+		are scanned to prime their corresponding dataset (if they dont already exist).
 		*/
-		config: function (opts) {
 			
 			if (opts) Copy(opts,FLEX);
 			
@@ -370,25 +386,26 @@ var
 				
 				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
 					for (var name in FLEX.plugins) {
-						Trace("PLUGIN "+name);
+						var pname = name;
 						FLEX.execute[name] = runPlugin;
+						//Trace("PUBLISH PLUGIN "+name);
 						sql.query( 
 							"REPLACE INTO app.engines SET ?", {
 								Name: name,
 								Code: FLEX.plugins[name] + "",
 								Vars: JSON.stringify({port:name}),
 								Engine: "js",
-								Enabled: 1
+								Enabled: 0
 							});
 					}
 
 				sql.query("SELECT Name FROM app.engines")
-				.on("result", function (eng) {
-					Trace("PRIME "+eng.Name);
-
+				.on("result", function (eng) { // prime the associated dataset
+					//Trace("PRIME PLUGIN "+eng.Name);
 					sql.query(
-						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), Save json, Project varchar(32), Description mediumtext)",
-						eng.Name);
+						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), "
+						+ "Description mediumtext)",
+						eng.Name );
 				});
 				
 				sql.release();
@@ -437,36 +454,37 @@ var
 					}, FLEX.likeus.PING*(3600*24*1000) );
 					*/
 				
-				if (diag = FLEX.diag)
-					if (FLEX.diagCycle)
-						FLEX.diags = setInterval( function() {
+				if (diag = FLEX.diag) 
+				if (FLEX.diagCycle)
+					FLEX.diags = setInterval( function() {
 
-							FLEX.thread( function (sql) {
+						FLEX.thread( function (sql) {
 
-								sql.query("SELECT count(ID) AS Count FROM app.engines WHERE Enabled")
-								.on("result", function (engs) {
-								sql.query("SELECT count(ID) AS Count FROM app.queues WHERE Departed IS NULL")
-								.on("result", function (jobs) {
-								sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app.queues")
-								.on("result", function (pigs) {
-								sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app.dblogs")
-								.on("result", function (isps) {
-									var rtn = diag.counts = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
-									var limits = diag.limits;
+							sql.query("SELECT count(ID) AS Count FROM app.engines WHERE Enabled")
+							.on("result", function (engs) {
+							sql.query("SELECT count(ID) AS Count FROM app.queues WHERE Departed IS NULL")
+							.on("result", function (jobs) {
+							sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app.queues")
+							.on("result", function (pigs) {
+							sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app.dblogs")
+							.on("result", function (isps) {
+								var rtn = diag.counts = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
+								var limits = diag.limits;
 
-									for (var n in limits) 
-										if ( rtn[n] > 5*limits[n] ) rtn.State = "critical";
-										else
-										if ( rtn[n] > limits[n] ) rtn.State = "warning";
+								for (var n in limits) 
+									if ( rtn[n] > 5*limits[n] ) rtn.State = "critical";
+									else
+									if ( rtn[n] > limits[n] ) rtn.State = "warning";
 
-									Trace("DIAGS ", rtn);
-								});
-								});
-								});
-								});
+								Trace("DIAGS ", rtn);								
+								sql.release();
 							});
+							});
+							});
+							});
+						});
 
-						}, FLEX.diagCycle );
+					}, FLEX.diagCycle*1e3);
 				
 				if (email) {
 					email.TX = {};
@@ -554,8 +572,8 @@ var
 
 };
 
-// Job queue CRUDE interface
 /*
+// Job queue CRUDE interface
 FLEX.select.jobs = function Select(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -608,7 +626,9 @@ FLEX.insert.jobs = function Insert(req, res) {
 }
 */
 
-// SQL engines interface
+/**
+@class SQL engines interface
+*/
 
 FLEX.select.sql = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
@@ -673,7 +693,9 @@ FLEX.update.sql = function Update(req, res) {
 	});
 }
 
-// GIT interface
+/**
+@class GIT interface
+*/
 
 FLEX.execute.git = function Execute(req,res) {  // baseline changes
 
@@ -766,7 +788,9 @@ FLEX.select.git = function Select(req, res) {
 						
 }
 
-// email peer-to-peer exchange interface
+/**
+@class email peer-to-peer exchange interface
+*/
 	
 FLEX.select.email = function Select(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
@@ -3007,6 +3031,7 @@ FLEX.execute.hawks = function Execute(req, res) {
 	
 	//sql.hawkJobs(req.client,FLEX.site.masterURL);
 	if ( !FLEX.hawks) 
+	if (FLEX.hawkingCycle)
 		sql.query("SELECT * FROM app.jobrules", function (err, rules) {
 			FLEX.hawks = setInterval( function (rules) {
 
@@ -3032,9 +3057,10 @@ FLEX.execute.hawks = function Execute(req, res) {
 						);
 					});
 					
+					// let this sql time-out
 				});
 
-			}, 10000, rules);
+			}, FLEX.hawkingCycle*1e3, rules);
 		});
 	
 	else {
@@ -3402,7 +3428,7 @@ FLEX.execute.detectors = function Execute(req, res) {
 }
 
 /**
- * @private
+ @private
  * 
  * Private functions
  * */		
@@ -3540,7 +3566,7 @@ function feedNews(sql, engine) {
 }
 
 /*
- * @method requestService(srv,cb)
+ @method requestService(srv,cb)
  * 
  * Issue http/https request to the desiired service srv (host,port,path) using 
  * the specified srv method. The response is routed to the callback cb.
@@ -3616,7 +3642,7 @@ function sendMail(opts) {
 }
 
 /**
- * @method flattenCatalog
+ @method flattenCatalog
  * 
  * Flatten entire database for searching the catalog
  * */
@@ -3749,9 +3775,9 @@ function hawkCatalog(req,res) {
 FLEX.queues = {};
 	
 /*
-* @method selectJob
-* @param {Object} req job query
-* @param {Function} cb callback(rec) when job departs
+@method selectJob
+@param {Object} req job query
+@param {Function} cb callback(rec) when job departs
 *
 * Callsback cb(rec) for each queuing rec matching the where clause.
 * >>> Not used but needs work 
@@ -3775,9 +3801,9 @@ function selectJob(where, cb) {
 }
 
 /*
-* @method updateJob
-* @param {Object} req job query
-* @param {Function} cb callback(sql,job) when job departs
+@method updateJob
+@param {Object} req job query
+@param {Function} cb callback(sql,job) when job departs
 *
 * Adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
 * >>> Not used but needs work 
@@ -3813,9 +3839,9 @@ function updateJob(req, cb) {
 }
 		
 /*
-* @method deleteJob
-* @param {Object} req job query
-* @param {Function} cb callback(sql,job) when job departs
+@method deleteJob
+@param {Object} req job query
+@param {Function} cb callback(sql,job) when job departs
 * >>> Not used but needs work
 */
 function deleteJob(req, cb) { 
@@ -3837,17 +3863,18 @@ function deleteJob(req, cb) {
 	});
 }
 
+function insertJob(job, cb) { 
 /*
-* @method insertJob
-* @param {Object} job arriving job
-* @param {Function} cb callback(sql,job) when job departs
+@method insertJob
+@param {Object} job arriving job
+@param {Function} cb callback(sql,job) when job departs
 *
  * Adds job to requested job.qos, job.priority queue and updates the
  * queuing log keyed by job (name,client,class).  A departing job 
  * execute the supplied callback cb(sql,job) on a new sql thread, or
- * spawns the job if job.cmd provided.
+ * spawns the job if job.cmd provided. Serve rate is set by job.rate [s]
+ * where 0 disables regulation.
  */
-function insertJob(job, cb) { 
 	function util() {				// compute average cpu utilization
 		var avgUtil = 0;
 		var cpus = OS.cpus();
@@ -3923,7 +3950,7 @@ function insertJob(job, cb) {
 					queue.timer = null;
 				}
 
-			}, queue.rate, queue);
+			}, queue.rate*1e3, queue);
 	}
 
 	var 
@@ -3959,6 +3986,8 @@ function insertJob(job, cb) {
 
 							});
 						});
+						
+					sql.release();
 				});
 			});
 					
@@ -4009,7 +4038,8 @@ function insertJob(job, cb) {
 							// {Util: util()}, 
 							{ID: job.ID} //jobID 
 						]);
-
+	
+						sql.release();
 						/*
 						sql.query(  // mark job departed if no work remains
 							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
