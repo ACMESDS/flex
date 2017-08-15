@@ -399,9 +399,10 @@ var
 							});
 					}
 
-				sql.query("SELECT Name FROM app.engines")
+				sql.query("SELECT Name FROM app.engines WHERE Enabled")
 				.on("result", function (eng) { // prime the associated dataset
 					//Trace("PRIME PLUGIN "+eng.Name);
+					if (false)
 					sql.query(
 						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), "
 						+ "Description mediumtext)",
