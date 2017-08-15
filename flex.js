@@ -160,8 +160,8 @@ var
 					if ( plugin = FLEX.plugins[req.table] )  
 						
 						try {
-							plugin(req, function (rtn) {
-								res(null, rtn);
+							plugin(req.query, function (rtn) {
+								res( rtn );
 							});
 						}
 						
@@ -253,7 +253,7 @@ var
 									else
 										res( new Error("agent failed") );
 									
-									sql.release();
+									//sql.release();
 								});
 
 							else  // in-source the plugin
@@ -324,6 +324,7 @@ var
 											Trace("AGENT RETURNED "+jobid);
 											sql.query("DELETE FROM queues WHERE ?", {Name: plugin.name});								
 											req.cb( rtn, sql );
+											sql.release();
 										});
 									
 									else {
