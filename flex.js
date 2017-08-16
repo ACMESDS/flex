@@ -185,10 +185,10 @@ var
 		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
 		method then responds on res(results).   If Q.Save is present, the engine's results are
 		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
-		thus allowing the caller to place the request in its job queues.  If a Q.agent is present, 
-		then the plugin is out-sourced to the requested agent, this agent is then polled for its
-		results, these results being then returned / retained on the same thread.  Callsback
-		res(results).  Related comments in FLEX.config.
+		thus allowing the caller to place the request in its job queues.  Otherwise, if Q.Job 
+		vacant, then responds with res(results).  If a Q.agent is present, then the plugin is 
+		out-sourced to the requested agent, which is periodically polled for its results, then
+		responds with res(results).  Related comments in FLEX.config.
 		*/
 			var 
 				sql = req.sql, 
@@ -206,7 +206,7 @@ var
 			if (dsquery) 
 				sql.query(	
 					"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", 
-					  [dsname, dsquery])
+					[dsname, dsquery] )
 				
 				.on("result", function (test) {	
 					Copy(test,query);
@@ -220,12 +220,14 @@ var
 										query[key] = JSON.parse( query[key] ); 
 									}
 
-									catch (err) {}
+									catch (err) {
+										query[key] = null;
+									}
 								
 							});
 
-							if ( test.Job )
-								res( test );
+							if ( query.Job )
+								res( query, true );
 							
 							else
 							if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
@@ -272,6 +274,7 @@ var
 		},
 		
 		plugins: { //< Plugins defined on config()
+			get: get,
 			news: news,
 			xss: xss,		
 			sss: sss,
@@ -396,7 +399,7 @@ var
 								Code: FLEX.plugins[name] + "",
 								Vars: JSON.stringify({port:name}),
 								Engine: "js",
-								Enabled: 0
+								Enabled: 1
 							});
 					}
 
@@ -4386,11 +4389,11 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 */
 
 	var 
-		sql = ctx.sql,
-		VoxelID = ctx.VoxelID,
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
 		stats = {},
+		evs = ctx.events,
+		sco = ctx.scenario,	
 		evlist = [];
 
 	function dist(a,b) { 
@@ -4408,73 +4411,42 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		return {idx: imin, err: emin};
 	}
 
-	console.log({guassmix:ctx});
-	sql.ctx(   // get all events falling in this voxel
-		"SELECT x,y,z FROM app.events WHERE ?",
-		{voxelID: VoxelID}, 
-		function (err,evs) {
-
-			//console.log({evs:evs,err:err});
-			if (evs && Mixes) {
-					evs.each( function (n,ev) {
-						evlist.push( [ev.x,ev.y,ev.z] );
-					});
-
-				var 
-					gmms = stats.gmms = RAN.MLE(evlist, Mixes),
-					refs = stats.refs = {};
-
-				if (false && Refs)  {  // requesting a ref check
-					gmms.each( function (k,gmm) {  // find nearest ref event
-						gmm.find = Refs.nearestOf( function (ctx) {
-							return dist( Refs, gmm.mu );
-						});
-					});
-
-					gmms.sort( function (a,b) {  // sort em by indexes
-						return a.find.idx < b.find.idx ? 1 : -1;
-					});
-
-					gmms.each(function (n,gmm) {    // save ref checks
-						refs.push({
-							cellIndex: gmm.find.idx,
-							cellType: "mle",
-							cellError: gmm.find.err * 100
-							/*cellParms: JSON.stringify({
-								mu: gmm.mu,
-								sigma: gmm.sigma
-							})*/
-						});
-
-						/*
-						sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
-							console.log(err || "cell saved");
-						});*/
-					});
-
-					/*
-					Mix.each(function (n,Mix) {					
-						Copy({
-							cellIndex: n,
-							cellType: "true",
-							cellError: 0,
-							cellParms: JSON.stringify({
-								mu: Mix.mu,
-								sigma: Mix.sigma
-							})
-						}, info);
-
-						sql.ctx("REPLACE INTO gaussruns SET ?", info, function (err) {
-							console.log(err || "cell saved");
-						});
-					});
-					*/
-				}
-
-			}
-			console.log({shipstats:JSON.stringify(stats)});
-			res(stats);  //ship it
+	console.log({guassmix:{mixes:Mixes, refs:Refs,evs:evs.length,sco:sco}});
+	
+	evs.each( function (n,ev) {
+		evlist.push( [ev.x,ev.y,ev.z] );
 	});
+
+	var 
+		gmms = stats.gmms = RAN.MLE(evlist, Mixes),
+		refs = stats.refs = {};
+
+	if (false && Refs)  {  // requesting a ref check
+		gmms.each( function (k,gmm) {  // find nearest ref event
+			gmm.find = Refs.nearestOf( function (ctx) {
+				return dist( Refs, gmm.mu );
+			});
+		});
+
+		gmms.sort( function (a,b) {  // sort em by indexes
+			return a.find.idx < b.find.idx ? 1 : -1;
+		});
+
+		gmms.each(function (n,gmm) {    // save ref checks
+			refs.push({
+				cellIndex: gmm.find.idx,
+				cellType: "mle",
+				cellError: gmm.find.err * 100
+				/*cellParms: JSON.stringify({
+					mu: gmm.mu,
+					sigma: gmm.sigma
+				})*/
+			});
+		});
+	}
+
+	console.log({shipstats:JSON.stringify(stats)});
+	res(stats);  //ship it
 
 }
 
@@ -4712,6 +4684,19 @@ function res1pr(ctx,res) {
 }
 
 function res2pr(ctx,res) {
+}
+
+function get(ctx, res) {
+	FLEX.thread( function (sql) {
+		sql.query(ctx.where
+			? "SELECT * FROM ??.?? WHERE least(?,1)"
+			: "SELECT * FROM ??.??"
+				  [ "app", ctx.ds, ctx.where ], 
+				  function (err,recs) {
+			
+					res( err ? [] : recs );
+		});
+	});
 }
 
 //=================== Debug
