@@ -4004,7 +4004,7 @@ function insertJob(job, cb) {
 				State: 0,
 				Arrived	: new Date(),
 				Departed: null,
-				Mark: 0,
+				Marked: 0,
 				Name: job.name,
 				Age: 0,
 				Classif : "",
@@ -4024,12 +4024,11 @@ function insertJob(job, cb) {
 			}
 		], function (err,info) {  // increment work backlog for this job
 
+			if (err) 
+				return Trace(err);
+			
 			job.ID = info.insertId || 0;
 			
-			if (err) 
-				Trace(err);
-			
-			else 
 			if (job.credit)				// client's credit is still good so place it in the regulators
 				regulate(job, function (job) { // provide callback when job departs
 					FLEX.thread( function (sql) {  // callback on new sql thread
