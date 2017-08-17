@@ -390,17 +390,17 @@ var
 				
 				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
 					for (var name in FLEX.plugins) {
-						var pname = name;
 						FLEX.execute[name] = runPlugin;
 						//Trace("PUBLISH PLUGIN "+name);
-						sql.query( 
-							"REPLACE INTO app.engines SET ?", {
-								Name: name,
-								Code: FLEX.plugins[name] + "",
-								Vars: JSON.stringify({port:name}),
-								Engine: "js",
-								Enabled: 1
-							});
+						if ( name != "plugins")
+							sql.query( 
+								"REPLACE INTO app.engines SET ?", {
+									Name: name,
+									Code: FLEX.plugins[name] + "",
+									Vars: JSON.stringify({port:name}),
+									Engine: "js",
+									Enabled: 1
+								});
 					}
 
 				sql.query("SELECT Name FROM app.engines WHERE Enabled")
