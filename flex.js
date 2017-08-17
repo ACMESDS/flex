@@ -1745,27 +1745,30 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 FLEX.update.stores = FLEX.insert.stores =
 FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 	
-	var sql = req.sql, log = req.log, query = req.query, body = req.body;
-	
 	var 
+		sql = req.sql, 
+		query = req.query, 
+		body = req.body,
 		canvas = body.canvas || {objects:[]},
 		attach = [],
 		now = new Date(),
 		image = body.image,
 		area = req.table,
+		geoloc = query.location || "POINT(0 0)",
 		files = image ? [{
 			name: name, // + ( files.length ? "_"+files.length : ""), 
 			size: image.length/8, 
 			image: image
-		}] : req.files || body.files || [];
+		}] : body.files || [];
 
-	if (false)
-		console.log({
+	/*
+	console.log({
 		q: query,
 		b: body,
 		f: files,
-		a: area
-	});
+		a: area,
+		l: geoloc
+	});*/
 					
 	res(SUBMITTED);
 	
@@ -1795,23 +1798,28 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 	if (FLEX.uploader)
 	FLEX.uploader(files, area, function (file) {
 
-		var geoloc = req.location || "POINT(0 0)";
+		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${req.client} AT ${geoloc}`);
 		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
-			   "INSERT INTO files SET ?,address=geomfromtext(?) "
-			+ "ON DUPLICATE KEY UPDATE ?,Revs=Revs+1,address=geomfromtext(?)", [{
-				Client: req.client,
-				Name: file.filename,
-				Area: area,
-				Added: new Date(),
-				Classif: file.classif || "",
-				Revs: 1,
-				Tag: file.Tag || ""
-			}, geoloc, { Client: req.client, Added:new Date() }, geoloc], function (err) {
+			   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
+			+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ req.group, {
+						Client: req.client,
+						Name: file.filename,
+						Area: area,
+						Added: new Date(),
+						Classif: query.classif || "",
+						Revs: 1,
+						Tag: query.tag || ""
+					}, geoloc, req.client, geoloc
+				], function (err) {
+				
 				if (err)
 					console.log(err);
 			});
 
+		sql.query( // credit the client
+			"UPDATE openv.profiles SET Credit=Credit+? WHERE ?", [ 1000, {Client: req.client} ]);
+		
 		if (file.image)
 			switch (area) {
 				case "proofs": 
@@ -3979,7 +3987,7 @@ function insertJob(job, cb) {
 							Each(queue.client, function (client, charge) {
 
 								if ( charge.bill ) {
-									Trace(`CHARGING ${client} ${charge.bill} SHECKLES`);
+									Trace(`BILL ${client} ${charge.bill} CREDITS`);
 									sql.query(
 										"UPDATE openv.profiles SET Charge=Charge+?,Credit=greatest(0,Credit-?) WHERE ?" , 
 										 [charge.bill, charge.bill, {Client:client}], 
@@ -4335,6 +4343,8 @@ function sss(ctx,res) {
 /*
 Use the FLEX randpr plugin to send spoofed streaming data.
 */
+	//console.log(ctx);
+	
 	FLEX.randpr( ctx, function (rtn) {
 		res( rtn.steps ? rtn.steps : rtn );
 	});
@@ -4385,13 +4395,15 @@ function gaussmix(ctx,res) {
 Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
 	Mixes = number of mixed to attempt to find
 	Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
-	VoxelID = voxel id in app.events
+	events = [ {x, y, z, t, n, ...}, ... ] events within current voxel
+	scenario = { ID, atmpres, ... } voxel attributes
+	obs = { ... } return voxel stats/observations
 */
 
 	var 
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
-		stats = {},
+		obs = {},
 		evs = ctx.events,
 		sco = ctx.scenario,	
 		evlist = [];
@@ -4418,8 +4430,8 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 	});
 
 	var 
-		gmms = stats.gmms = RAN.MLE(evlist, Mixes),
-		refs = stats.refs = {};
+		gmms = obs.gmms = RAN.MLE(evlist, Mixes),
+		refs = obs.refs = {};
 
 	if (false && Refs)  {  // requesting a ref check
 		gmms.each( function (k,gmm) {  // find nearest ref event
@@ -4445,8 +4457,8 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		});
 	}
 
-	console.log({shipstats:JSON.stringify(stats)});
-	res(stats);  //ship it
+	console.log({shipstats:JSON.stringify(obs)});
+	res(obs);  //ship it
 
 }
 
