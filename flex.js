@@ -1346,17 +1346,18 @@ FLEX.select.HEALTH = function Select(req, res) {
 FLEX.select.likeus = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
-console.log(FLEX.site);
+console.log(FLEX.site.pocs);
 	
-	sendMail({
-		to:  FLEX.site.pocs.admin,
-		subject: req.client + " likes " + FLEX.site.title + " !!",
-		html: "Just FYI",
-		alternatives: [{
-			contentType: 'text/html; charset="ISO-59-1"',
-			contents: ""
-		}]
-	});
+	if ( FLEX.site.pocs.admin )
+		sendMail({
+			to:  FLEX.site.pocs.admin,
+			subject: req.client + " likes " + FLEX.site.title + " !!",
+			html: "Just saying",
+			alternatives: [{
+				contentType: 'text/html; charset="ISO-59-1"',
+				contents: ""
+			}]
+		});
 
 	var user = {
 		expired: "your subscription has expired",
