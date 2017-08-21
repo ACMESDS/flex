@@ -125,6 +125,9 @@ var
 			}
 		},
 		
+		txGroup: {  //< default table -> db.table translators
+		},
+		
 		diag : {  // self diag parms
 			limits: {
 				pigs : 2,
@@ -635,6 +638,7 @@ FLEX.insert.jobs = function Insert(req, res) {
 @class SQL engines interface
 */
 
+/*
 FLEX.select.sql = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -697,6 +701,7 @@ FLEX.update.sql = function Update(req, res) {
 		});
 	});
 }
+*/
 
 /**
 @class GIT interface
@@ -794,7 +799,7 @@ FLEX.select.git = function Select(req, res) {
 }
 
 /**
-@class email peer-to-peer exchange interface
+@class EMAIL peer-to-peer email exchange interface
 */
 	
 FLEX.select.email = function Select(req,res) {
@@ -883,6 +888,80 @@ FLEX.execute.catalog = function Execute(req, res) {
 			sql.query("INSERT INTO catalog SET ?",rec);
 		});
 
+	});
+	
+}
+
+FLEX.select.plugins = function (req,res) {
+	var sql = req.sql, query = req.query;
+	var plugins = [];
+	
+	sql.query("SELECT Name FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
+		
+		if ( err )
+			res( plugins );
+		
+		else
+			engs.each(function (n,eng) {
+
+				sql.query("SHOW TABLES FROM ?? WHERE ?", [
+					req.group, {tables_in_app: eng.Name}
+				], function (err,recs) {
+
+					if ( !err && recs.length) 
+						plugins.push( {
+							ID: plugins.length,
+							Name: eng.Name.tag("a",{href:"/"+eng.Name+".run"}) 
+						});
+
+					if (n == engs.length-1) res( plugins );
+				});
+			});
+	});
+	
+}
+
+FLEX.select.tasks = function (req,res) {
+	var sql = req.sql, query = req.query;
+	var tasks = [];
+	
+	sql.query("SELECT Task FROM openv.milestones GROUP BY Task", function (err,miles) {
+		
+		if ( !err )
+			miles.each(function (n,mile) {
+				tasks.push({
+					ID: tasks.length,
+					Name: mile.Task.tag("a",{href: "/task.view?options="+mile.Task})
+				});
+			});
+		
+		res( tasks );		
+		
+	});
+}
+
+FLEX.delete.files = function (req,res) {
+	var sql = req.sql, query = req.query;
+
+	res( SUBMITTED );
+	
+	sql.query("SELECT *, count(ID) AS Count FROM app.files WHERE least(?,1)", {
+		ID:query.ID,
+		Client: req.client
+	})
+	.on("result", function (file) {
+	
+		//console.log(file);
+		
+		if (file.Count) 
+			CP.exec(`rm ./public/${file.Area}/${file.Name}`, function (err) {
+				sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
+
+				sql.query( // credit the client
+					"UPDATE openv.profiles SET useDisk=useDisk-? WHERE ?", [ 
+						file.Size, {Client: req.client} 
+				]);
+			});
 	});
 	
 }
@@ -1028,9 +1107,9 @@ FLEX.select.THEMES = function (req, res) {
 
 	FLEX.indexer( path , function (files) {
 		files.each( function (n,file) {
-			var stats = FS.statSync(path + "/"+file);
+			//var stats = FS.statSync(path + "/"+file);
 
-			if (!stats.isDirectory())
+			if ( file.charAt(file.length-1) != "/" ) //(!stats.isDirectory())
 				themes.push( {ID: n, Name: file, Path: file} );
 		});
 	});
@@ -1589,7 +1668,7 @@ FLEX.select.DigitalGlobe = function Select(req, res) {
 FLEX.select.AlgorithmService = function Select(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	var args = {		// Hydra parameters
+	var args =  {		// Hydra parameters
 		size: parseFloat(query.SIZE),
 		pixels: parseInt(query.PIXELS),
 		scale: parseFloat(query.SCALE),
@@ -1799,27 +1878,29 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 	if (FLEX.uploader)
 	FLEX.uploader(files, area, function (file) {
 
-		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${req.client} AT ${geoloc}`);
+		//console.log(file);
+		
+		Trace(`UPLOAD ${area}/${file.filename} FOR ${req.group}.${req.client}`);
 		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
 			   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
-			+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ req.group, {
+			+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
+				req.group, {
 						Client: req.client,
 						Name: file.filename,
 						Area: area,
 						Added: new Date(),
 						Classif: query.classif || "",
 						Revs: 1,
+						Size: file.size,
 						Tag: query.tag || ""
 					}, geoloc, req.client, geoloc
-				], function (err) {
-				
-				if (err)
-					console.log(err);
-			});
+				]);
 
 		sql.query( // credit the client
-			"UPDATE openv.profiles SET Credit=Credit+? WHERE ?", [ 1000, {Client: req.client} ]);
+			"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
+				1000, file.size, {Client: req.client} 
+			]);
 		
 		if (file.image)
 			switch (area) {
@@ -1892,6 +1973,7 @@ FLEX.execute.uploads = function Execute(req, res) {
 
 // Execute interfaces
 
+/*
 FLEX.execute.intake = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
@@ -1946,6 +2028,7 @@ FLEX.execute.intake = function Execute(req, res) {
 	
 	res(SUBMITTED);
 }					
+*/
 
 /*
 FLEX.update.engines = function Update(req, res) {
@@ -1957,6 +2040,7 @@ FLEX.update.engines = function Update(req, res) {
 	});
 }*/
 
+/*
 FLEX.execute.engines = function Execute(req, res) {
 	var sql = req.sql, query = req.query, body = req.body;
 	var 
@@ -2094,6 +2178,7 @@ FLEX.execute.engines = function Execute(req, res) {
 	else
 		res( FLEX.errors.missingEngine );
 }
+*/
 
 FLEX.execute.milestones = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
@@ -2126,6 +2211,7 @@ FLEX.execute.sockets = function Execute(req, res) {
 	res(SUBMITTED);
 }
 
+/*
 FLEX.execute.tests = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
@@ -2164,11 +2250,13 @@ console.log(req.profile);
 	});
 
 }
+*/
 
+/*
 FLEX.execute.collects = function Execute(req, res) {
 	var req = req, sql = req.sql, log = req.log, query = req.query;
 	
-	/*
+	/ *
 	 * sql each collects w missing collect info {
 	 * 		attempt read of file id {
 	 * 			error: 
@@ -2190,7 +2278,7 @@ FLEX.execute.collects = function Execute(req, res) {
 	 * hydra-like route for NCL alert
 	 * 
 	 * 	run execeute.collects with this alert
-	/*
+	
 	sql.each("SELECT * FROM tests", [], function (test) {
 		if (test.PollURI)
 			requestService({ 		// poll standing order
@@ -2258,9 +2346,10 @@ FLEX.execute.collects = function Execute(req, res) {
 	
 	sql.each("SELECT * FROM collects WHERE not BVI", [], function (collect) {
 	});
-	* */
 }
+*/
 
+/*
 FLEX.execute.detectors = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
@@ -2328,14 +2417,14 @@ FLEX.execute.detectors = function Execute(req, res) {
 		});
 	else {	// rescore detectors
 		
-		/*
+		/ *
 		sql.query("SELECT * FROM detectors WHERE Dirty")
 		.on("result", function (det) {
 			sql.jobs().execute(req.client, det);
 			
 			sql.query("UPDATE detectors SET Dirty=0 WHERE ?",{ID: det.ID});
 		});
-		* */
+		* /
 
 		var 
 			pivots = ["detector","channel","model"].concat(flags.pivot || []),
@@ -2365,7 +2454,7 @@ FLEX.execute.detectors = function Execute(req, res) {
 		});
 	}
 	
-	/*
+	/ *
 		sql.query("SELECT * FROM detectors WHERE ?", {Name:"default"})
 		.on("result", function (defdet) {
 			
@@ -2404,9 +2493,10 @@ FLEX.execute.detectors = function Execute(req, res) {
 			});
 
 		});
-	*/
+	* /
 	
 }
+*/
 
 FLEX.execute.events = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
@@ -2898,6 +2988,7 @@ FLEX.execute.searches = function Execute(req, res) {
 	});
 }
 					
+/*
 FLEX.execute.chips = function Execute(req, res) {   
 	// flush old/bad chips. prime chip address
 	var sql = req.sql, log = req.log, query = req.query;
@@ -2925,6 +3016,7 @@ FLEX.execute.chips = function Execute(req, res) {
 	}
 				
 }
+*/
 
 FLEX.execute.swaps = function Execute(req, res) {   
 	var sql = req.sql, log = req.log, query = req.query;
@@ -3212,8 +3304,6 @@ console.log({
 }
 */
 
-// Detectors 
-
 FLEX.execute.detectors = function Execute(req, res) { 
 // execute(client,job,res): create detector-trainging job for client with callback to res(job) when completed.
 
@@ -3443,8 +3533,6 @@ FLEX.execute.detectors = function Execute(req, res) {
 
 /**
  @private
- * 
- * Private functions
  * */		
 
 function guardQuery(query, def) {
@@ -3586,6 +3674,7 @@ function feedNews(sql, engine) {
  * the specified srv method. The response is routed to the callback cb.
  * Known nodejs bug prevents connections to host = "localhost".
  * */
+/*
 function requestService(srv, cb) {
 
 	var req = HTTP.request(srv, function(cb) {
@@ -3617,6 +3706,7 @@ function requestService(srv, cb) {
 	//req.write('data\n');	// write data to request body
 	req.end();				// end request
 }
+*/
 
 // Email support methods
 
@@ -3657,8 +3747,7 @@ function sendMail(opts) {
 
 /**
  @method flattenCatalog
- * 
- * Flatten entire database for searching the catalog
+ Flatten entire database for searching the catalog
  * */
 function flattenCatalog(flags, catalog, limits, cb) {
 	
@@ -3776,7 +3865,7 @@ function hawkCatalog(req,res) {
 		});*/
 }
 
-/**
+/*
  * Job queue interface
  * 
  * select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
@@ -3784,7 +3873,7 @@ function hawkCatalog(req,res) {
  * update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
  * delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
  * insert(job,cb): add job and route to callback cb(job) when executed.
- * */
+ */
 
 FLEX.queues = {};
 	
@@ -3889,7 +3978,7 @@ function insertJob(job, cb) {
  * spawns the job if job.cmd provided. Serve rate is set by job.rate [s]
  * where 0 disables regulation.
  */
-	function util() {				// compute average cpu utilization
+	function cpuavgutil() {				// compute average cpu utilization
 		var avgUtil = 0;
 		var cpus = OS.cpus();
 		
@@ -4020,7 +4109,7 @@ function insertJob(job, cb) {
 				Name: job.name,
 				Age: 0,
 				Classif : "",
-				Util: util(),
+				//Util: cpuavgutil(),
 				Priority: job.priority || 0,
 				Notes: job.notes,
 				QoS: job.qos,
@@ -4048,7 +4137,7 @@ function insertJob(job, cb) {
 
 						sql.query( // reduce work backlog and update cpu utilization
 							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
-							// {Util: util()}, 
+							// {Util: cpuavgutil()}, 
 							{ID: job.ID} //jobID 
 						]);
 	
@@ -4118,7 +4207,7 @@ function queryDS(req, res) {
 	delete body.ID;
 
 	sql.context({ds: {
-			table:	req.table,
+			table:	(FLEX.txGroup[req.table] || req.group)+"."+req.table,
 			where:	flags.where || query,
 			res:	res,
 			order:	flags.sort,
