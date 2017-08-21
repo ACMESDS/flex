@@ -328,7 +328,7 @@ var
 									if (rtn)
 										FLEX.thread( function (sql) {
 											Trace("AGENT RETURNED "+jobid);
-											sql.query("DELETE FROM queues WHERE ?", {Name: plugin.name});								
+											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
 											req.cb( rtn, sql );
 											sql.release();
 										});
@@ -707,7 +707,7 @@ FLEX.update.sql = function Update(req, res) {
 @class GIT interface
 */
 
-FLEX.execute.git = function Execute(req,res) {  // baseline changes
+FLEX.execute.baseline = function Execute(req,res) {  // baseline changes
 
 	var	sql = req.sql, 
 		query = req.query,
@@ -724,6 +724,7 @@ FLEX.execute.git = function Execute(req,res) {  // baseline changes
 	sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
 		if (err)
 			res( FLEX.errors.badbaseline );
+		
 		else
 			res( 
 				(query.noarchive ? "Bypass database commit" : "Database commited. ") +
@@ -805,7 +806,7 @@ FLEX.select.git = function Select(req, res) {
 FLEX.select.email = function Select(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
-	sql.query("SELECT * FROM emails WHERE Pending", function (err,recs) {
+	sql.query("SELECT * FROM app.emails WHERE Pending", function (err,recs) {
 		res(err || recs);
 
 		sql.query("UPDATE emails SET Pending=0 WHERE Pending");
@@ -1240,7 +1241,7 @@ FLEX.select.ADMIN = function Select(req, res) {
 FLEX.select.QUEUES = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,queueinfo(Job,min(Arrived),timediff(now(),min(Arrived))/3600,Client,Class,max(State)) AS Name FROM queues GROUP BY Client,Class", 
+	sql.query("SELECT ID,queueinfo(Job,min(Arrived),timediff(now(),min(Arrived))/3600,Client,Class,max(State)) AS Name FROM app.queues GROUP BY Client,Class", 
 		[],
 		function (err, recs) {
 			res(err || recs);
@@ -1288,7 +1289,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 		+ "sum(Fault !='') AS faults, "
 		+ "round(sum(Transfer)*1e-9,2) AS tot_GB, "
 		+ "count(ID) AS logs "
-		+ "FROM dblogs")
+		+ "FROM app.dblogs")
 	.on("error", function (err) {
 		Trace(err);
 	})
@@ -1301,7 +1302,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 		+ "sum(departed IS null) AS backlog, "
 		+ "avg(datediff(ifnull(departed,now()),arrived)) AS avg_wait_DAYS, "
 		+ "sum(Age)*? AS cost_$ "
-		+ "FROM queues",[4700])
+		+ "FROM app.queues",[4700])
 	.on("error", function (err) {
 		Trace(err);
 	})
@@ -1480,7 +1481,7 @@ FLEX.select.tips = function Select(req, res) {
 		+ 		"linkquery('S', '/minielt.view',concat('src=/chips/',chips.name))"
 		+ ") AS links, "
 		+ "datediff(now(),collected) AS age "
-		+ "FROM detects "
+		+ "FROM app.detects "
 		+ "LEFT JOIN chips ON MBRcontains(chips.address,detects.address) "
 		+ "LEFT JOIN collects ON collects.ID = chips.collectID "
 		+ "LEFT JOIN detectors ON detectors.name = detects.label "
@@ -1536,7 +1537,7 @@ FLEX.select.history = function (req,res) {
 					+ "group_concat(distinct journal.field) AS Fields,"
 					+ "linkrole(hawk,max(updates),max(power)) AS Moderator,"
 					+ "false as Approved "
-					+ "FROM journal "
+					+ "FROM openv.journal "
 					+ "LEFT JOIN viewers ON journal.Dataset=viewers.Dataset "
 					+ "WHERE Updates "
 					+ `GROUP BY hawk,${pivot}`,
@@ -1552,7 +1553,7 @@ FLEX.select.history = function (req,res) {
 				"SELECT "
 				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Datasets,"
 				+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
-				+ "FROM journal "
+				+ "FROM openv.journal "
 				+ "WHERE Updates "
 				+ `GROUP BY ${pivot}`, 
 					function (err, recs) {
@@ -1565,7 +1566,7 @@ FLEX.select.history = function (req,res) {
 				Trace(sql.query(
 					"SELECT Client, group_concat(distinct year(Reviewed),'/',month(Reviewed), ' ', Comment) AS Comments, "
 					+ "group_concat( distinct linkrole(roles.Hawk,roles.Earnings,roles.Strength)) AS Earnings "
-					+ "FROM roles "
+					+ "FROM openv.roles "
 					+ "LEFT JOIN journal ON roles.Hawk=journal.Hawk "
 					+ "WHERE Updates "
 					+ "GROUP BY Client, roles.Hawk", 
@@ -1581,7 +1582,7 @@ FLEX.select.history = function (req,res) {
 						+ " as needed" );
 		
 				sql.query(
-					"SELECT sum(Updates)*? AS Earnings FROM journal WHERE ?", [
+					"SELECT sum(Updates)*? AS Earnings FROM openv.journal WHERE ?", [
 					query.Power, {Hawk:query.Hawk}], function (err,earns) {
 						var 
 							earn = earns[0] || {Earnings: 0},
@@ -1611,8 +1612,8 @@ FLEX.select.history = function (req,res) {
 						});
 
 						if (query.Power) // notify greater and lesser hawks of approval
-						sql.query("SELECT Client FROM roles WHERE Power>=?", query.Power, function (err,ghawk) { // greater hawks
-						sql.query("SELECT Client FROM roles WHERE Power<?", query.Power, function (err,lhawk) { // lesser hawks
+						sql.query("SELECT Client FROM openv.roles WHERE Power>=?", query.Power, function (err,ghawk) { // greater hawks
+						sql.query("SELECT Client FROM openv.roles WHERE Power<?", query.Power, function (err,lhawk) { // lesser hawks
 
 							var to=[], cc=[];
 
@@ -1644,7 +1645,7 @@ FLEX.select.history = function (req,res) {
 				Trace(sql.query(
 					"SELECT concat(Dataset,'.',Field) AS Idx, "
 					+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
-					+ "FROM journal "
+					+ "FROM openv.journal "
 					+ "WHERE Updates "
 					+ `GROUP BY ${pivot}`, 
 					function (err,recs) {
@@ -1681,7 +1682,7 @@ FLEX.select.AlgorithmService = function Select(req, res) {
 	};
 	
 	// Hydra args dropped in favor of detector parms attached to requested channel
-	sql.query("SELECT * FROM detectors WHERE ?", {Channel:query.CHANNEL})
+	sql.query("SELECT * FROM app.detectors WHERE ?", {Channel:query.CHANNEL})
 	.on("result", function (det) {
 		
 		if (FLEX.CHIP)
@@ -1815,7 +1816,7 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 		default: 
 		
 			sql.query(
-				"SELECT Area,Name,concat(Area,'.',Name) AS Ref, link(Name,concat('/',Area,'.',Name)) AS Link, astext(address) AS Address FROM files HAVING ?", 
+				"SELECT Area,Name,concat(Area,'.',Name) AS Ref, link(Name,concat('/',Area,'.',Name)) AS Link, astext(address) AS Address FROM app.files HAVING ?", 
 				guardQuery(query,true), function (err,rtns) {
 					res(err || rtns);
 			});
@@ -1917,7 +1918,7 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 					});
 
 					sql.query(
-						"SELECT detectors.ID, count(ID) AS counts FROM detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
+						"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
 						[area+"."+name]
 					)
 					.on("result", function (det) {
@@ -1936,7 +1937,7 @@ FLEX.execute.uploads = function Execute(req, res) {
 	
 	res(SUBMITTED);
 	
-	sql.query("DELETE FROM files WHERE Area LIKE 'geoNode.%'");
+	sql.query("DELETE FROM app.files WHERE Area LIKE 'geoNode.%'");
 	
 	CP.exec('git ls-tree -r master --name-only > gitlog', function (err,log) {
 			
@@ -2198,14 +2199,14 @@ FLEX.execute.milestones = function Execute(req, res) {
 	res(SUBMITTED);
 }
 
-FLEX.execute.sockets = function Execute(req, res) {
+FLEX.execute.sessions = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	if (FLEX.emitter)
-		sql.query("SELECT * FROM sockets WHERE length(Message)")
+		sql.query("SELECT * FROM openv.sessions WHERE length(Message)")
 		.on("result", function (sock) {
 			FLEX.emitter("alert", {msg: sock.Message, to: sock.Client, from: req.client});
-			sql.query("UPDATE sockets SET ? WHERE ?",[{Message:""},{ID:sock.ID}]);
+			sql.query("UPDATE openv.sessions SET ? WHERE ?",[{Message:""},{ID:sock.ID}]);
 		});
 		
 	res(SUBMITTED);
@@ -2542,7 +2543,7 @@ FLEX.execute.events = function Execute(req, res) {
 					
 				else {						// no more arrivals (there will be straggeling departures)
 						if (summary)
-						sql.query("select avg(tDelay) as avgDelay, avg(depth) as avgDepth, avg(tStep) as avgStep, avg(tService) as avgService FROM jobs")
+						sql.query("select avg(tDelay) as avgDelay, avg(depth) as avgDepth, avg(tStep) as avgStep, avg(tService) as avgService FROM app.jobs")
 						.on("result", function (stat) {
 						
 						var check = {
@@ -2576,17 +2577,17 @@ FLEX.execute.events = function Execute(req, res) {
 					});
 
 						if (bins) 			// record delay stats or levels
-						sql.query("SELECT * FROM jobs WHERE ?", {label:label}, function (err, recs) {
+						sql.query("SELECT * FROM app.jobs WHERE ?", {label:label}, function (err, recs) {
 
 							statJobs(recs, bins, function (stats) {
 								
-								sql.query("DELETE FROM jobstats WHERE ?", {label:label});
+								sql.query("DELETE FROM app.jobstats WHERE ?", {label:label});
 								
 								if ( levels )  		// save delay times at prescibed levels of confidence
 									levels.each( function (n, level) {
 										Each( stats, function (bin, x) {
 											if ( (1 - x.pr) < level ) {
-												sql.query("INSERT INTO jobstats SET ?", {
+												sql.query("INSERT INTO app.jobstats SET ?", {
 													label: label,
 													pr: level,
 													delay: bin * dT
@@ -2682,8 +2683,8 @@ FLEX.execute.events = function Execute(req, res) {
 	else {
 		res(SUBMITTED);
 		
-		sql.query("SELECT avg(datdiff(Departed,Arrived)) AS Tsrv FROM queues", [], function (err,stats) {
-		sql.query("SELECT datediff(Now(),Arrived) AS Tage FROM queues ORDER BY Arrived ASC", [], function (err,load) {
+		sql.query("SELECT avg(datdiff(Departed,Arrived)) AS Tsrv FROM app.queues", [], function (err,stats) {
+		sql.query("SELECT datediff(Now(),Arrived) AS Tage FROM app.queues ORDER BY Arrived ASC", [], function (err,load) {
 			
 			var Tint = 0;
 			for (var n=1,N=load.length; n<N; n++) Tint += load[n].Tage - load[n-1].Tage;
@@ -2815,7 +2816,7 @@ FLEX.execute.parms = function Execute(req, res) {
 	});*/
 	
 	if (false)
-	sql.query("SELECT * FROM parms", function (err,parms) { // sync DB with parms table
+	sql.query("SELECT * FROM app.parms", function (err,parms) { // sync DB with parms table
 		
 		parms.each(function (n,parm) {
 			var pname = parm.Parm;
@@ -2958,6 +2959,7 @@ FLEX.execute.lookups = function Execute(req, res) {
 		}); */
 }
 
+/*
 FLEX.execute.searches = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -2987,7 +2989,8 @@ FLEX.execute.searches = function Execute(req, res) {
 		});
 	});
 }
-					
+*/
+
 /*
 FLEX.execute.chips = function Execute(req, res) {   
 	// flush old/bad chips. prime chip address
@@ -3028,7 +3031,7 @@ FLEX.execute.swaps = function Execute(req, res) {
 
 	// poll repos for new packages
 	
-	sql.query("SELECT * FROM swaps WHERE Enabled AND least(?,1) GROUP BY SW_Name", guardQuery(query,true) )
+	sql.query("SELECT * FROM openv.swaps WHERE Enabled AND least(?,1) GROUP BY SW_Name", guardQuery(query,true) )
 	.on("result", function (swap) {
 
 		var	package = swap.SW_Name,
@@ -3046,7 +3049,7 @@ FLEX.execute.swaps = function Execute(req, res) {
 
 		// submit swaps that have not already been submitted 
 		
-		sql.query("SELECT * FROM swaps WHERE Enabled AND NOT Submitted")
+		sql.query("SELECT * FROM openv.swaps WHERE Enabled AND NOT Submitted")
 		.on("result", function (swap) {
 			sql.query("UPDATE swaps SET ? WHERE ?",[{Submitted: new Date()}, {ID:swap.ID}]);
 			
@@ -3066,7 +3069,7 @@ FLEX.execute.swaps = function Execute(req, res) {
 		
 		// create a swap pdf
 		
-		sql.query("SELECT * FROM lookups WHERE ?",{Ref:form_name}, function (err,looks) {
+		sql.query("SELECT * FROM app.lookups WHERE ?",{Ref:form_name}, function (err,looks) {
 			
 			var form_map = {};
 			
@@ -3327,26 +3330,26 @@ FLEX.execute.detectors = function Execute(req, res) {
 			function (err) {	
 
 		sql.query( 		// allocate positives to this job
-			"UPDATE proofs SET ? WHERE ? AND ?",
+			"UPDATE app.proofs SET ? WHERE ? AND ?",
 			[{posLock:job.Name}, {cat:"digit"}, {label:label}],
 		//	"UPDATE proofs SET ? WHERE MATCH (label) AGAINST (? IN BOOLEAN MODE) AND enabled",
 		//	[{posLock:job.Name},posFilter], 
 			function (err) {
 
 		sql.query(		// allocate negatives to this job
-			"UPDATE proofs SET ? WHERE ? AND NOT ?",
+			"UPDATE app.proofs SET ? WHERE ? AND NOT ?",
 			[{negLock:job.Name}, {cat:"digit"}, {label:label}],
 		//	"UPDATE proofs SET ? WHERE MATCH (label) AGAINST (? IN BOOLEAN MODE) AND enabled",
 		//	[{negLock:job.Name},negFilter], 
 			function (err) {
 
 		sql.query(
-			"SELECT * FROM proofs WHERE ? LIMIT 0,?",		// get allocated positives
+			"SELECT * FROM app.proofs WHERE ? LIMIT 0,?",		// get allocated positives
 			[{posLock:job.Name},job.MaxPos],
 			function (err,posProofs) {
 
 		sql.query(								// get allocated negatives
-			"SELECT * FROM proofs WHERE ? LIMIT 0,?",
+			"SELECT * FROM app.proofs WHERE ? LIMIT 0,?",
 			[{negLock:job.Name},job.MaxNeg],
 			function (err,negProofs) {
 				
@@ -3358,7 +3361,8 @@ FLEX.execute.detectors = function Execute(req, res) {
 
 		if (posProofs.length && negProofs.length) {	// must have some proofs to execute job
 			
-			var	posDirty = posProofs.sum("dirty"),
+			var	
+				posDirty = posProofs.sum("dirty"),
 				negDirty = negProofs.sum("dirty"),
 				totDirty = posDirty + negDirty,
 				totProofs = posProofs.length + negProofs.length,
@@ -3623,7 +3627,7 @@ function statRepo(sql) {
 }
 
 function feedNews(sql, engine) {
-	sql.query("SELECT * FROM features WHERE NOT ad")
+	sql.query("SELECT * FROM openv.feeds WHERE NOT ad")
 	.on("result", function (feature) {
 		NEWSFEED.addItem({
 			title:          feature.feature,
