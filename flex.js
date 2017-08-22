@@ -104,6 +104,12 @@ var
 			return list;
 		},
 
+		paths: {
+			newsread: "http://craphound.com:80/?feed=rss2",
+			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
+			host: ""
+		},
+			
 		billingCycle: 0,  // job billing cycle [ms] ( 0 disables)
 		diagCycle: 0, // self diagnostic cycle [ms] (0 disables)
 		hawkingCycle: 0, // job hawking cycle [ms] (0 disables)
@@ -3621,17 +3627,17 @@ function feedNews(sql, engine) {
 	.on("result", function (feature) {
 		NEWSFEED.addItem({
 			title:          feature.feature,
-			link:           `${FLEX.paths.HOST}/feed.view`,
+			link:           `${FLEX.paths.host}/feed.view`,
 			description:    JSON.stringify(feature),
 			author: [{
 				name:   FLEX.site.title,
 				email:  FLEX.mailer.SOURCE,
-				link:   FLEX.paths.HOST
+				link:   FLEX.paths.host
 			}],
 			/*contributor: [{
 				name:   FLEX.TITLE,
 				email:  site.email.SOURCE,
-				link:   FLEX.paths.HOST
+				link:   FLEX.paths.host
 			}],*/
 			date:           feature.found
 			//image:          posts[key].image
