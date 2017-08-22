@@ -80,7 +80,8 @@ var
 			noEngine: new Error("requested engine does not exist"),
 			missingEngine: new Error("missing engine query"),
 			protectedQueue: new Error("action not allowed on this job queues"),
-			noCase: new Error("plugin case not found")
+			noCase: new Error("plugin case not found"),
+			badAgent: new Error("agent failed")
 		},
 		
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
@@ -193,87 +194,79 @@ var
 		out-sourced to the requested agent, which is periodically polled for its results, then
 		responds with res(results).  Related comments in FLEX.config.
 		*/
+			
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
-				query = req.query;
+				ctx = req.query;
 
-			//console.log({runplugin: query});
-			
-			if (query.ID) var dsquery = {ID: query.ID};
+			if (ctx.ID) var dsquery = {ID: ctx.ID};
 			else
-			if (query.Name) var dsquery = {Name: query.Name};
+			if (ctx.Name) var dsquery = {Name: ctx.Name};
 			else
 				var dsquery = null;
 			
 			if (dsquery) 
-				sql.query(	
-					"SELECT *,count(ID) AS Found FROM ?? WHERE ? LIMIT 0,1", 
-					[dsname, dsquery] )
-				
-				.on("result", function (test) {	
-					Copy(test,query);
-					//console.log({plugin:query});
+				sql.eachRec( 
+					"SELECT * FROM ?? WHERE ? LIMIT 0,1", 
+					[dsname, dsquery],
+					function ( err, test, isLast ) {	
+						
+					if (err) 
+						res( err );
+						
+					else 
+					if (isLast) 
+						if (test) {
+							Copy(test,ctx);
 
-					if (test.Found) 
-						sql.jsonKeys( dsname, function (keys) {  // parse json keys
-							keys.each(function (n,key) {
-								if (key != "Save")
-									try { 
-										query[key] = JSON.parse( query[key] ); 
-									}
-
-									catch (err) {
-										query[key] = null;
-									}
-								
-							});
-
-							if ( query.Job )
-								res( query, true );
-							
-							else
-							if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-								viaAgent(req, function (rtn, sql) {  // allow out-sourcing of plugin
-
-									//console.log(["agent returns", rtn]);
-
-									if (rtn)
-										if ("Save" in test) {
-											try {
-												sql.query(   // save results
-													"UPDATE ?? SET Save=? WHERE ?", [ 
-													dsname,  JSON.stringify(rtn), { ID: test.ID }
-												]);
-												res( "saved" );
-											}
-											catch (err) {
-												res( err );
-											}
+							sql.jsonKeys( dsname, function (keys) {  // parse json keys
+								keys.each(function (n,key) {
+									if (key != "Save")
+										try { 
+											ctx[key] = JSON.parse( ctx[key] ); 
 										}
 
-										else
-											res( rtn );
+										catch (err) {
+											ctx[key] = null;
+										}
 
-									else
-										res( new Error("agent failed") );
-									
-									//sql.release();
 								});
 
-							else  // in-source the plugin
-								FLEX.runEngine(req, res);
-						});
+								if ( ctx.Job )
+									res( null, null, ctx );
 
-					else 
-						res( FLEX.errors.noCase );
-				})
-				.on("error", function (err) {
-					res( err );
+								else
+								if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
+									viaAgent(req, function (rtn, sql) {  // allow out-sourcing of plugin
+
+										if (rtn)
+											res( null, rtn, ctx );
+
+										else
+											res( FLEX.errors.badAgent );
+
+									});
+
+								else  // in-source the plugin
+									FLEX.runEngine(req, function (rtn) {
+										res( null, rtn, ctx );
+									});
+							});
+						}
+						
+						else
+							res( FLEX.errors.noCase );
+						
+					else { // parallel process plugin
+					}
+						
 				});
-
-			else	// run using app.engines
-				FLEX.runEngine(req, res);
+								
+			else	// run using given query
+				FLEX.runEngine(req, function (rtn) {
+					res( null, rtn, ctx );
+				});
 		},
 		
 		plugins: { //< Plugins defined on config()
@@ -946,15 +939,12 @@ FLEX.delete.files = function (req,res) {
 
 	res( SUBMITTED );
 	
-	sql.query("SELECT *, count(ID) AS Count FROM app.files WHERE least(?,1)", {
+	sql.eachRec("SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
-	})
-	.on("result", function (file) {
-	
-		//console.log(file);
+	}, function (err, file, isLast) {
 		
-		if (file.Count) 
+		if (file) 
 			CP.exec(`rm ./public/${file.Area}/${file.Name}`, function (err) {
 				sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
 
@@ -4804,8 +4794,6 @@ function get(ctx, res) {
 		});
 	});
 }
-
-//=================== Debug
 
 function Trace(msg,arg) {
 	ENUM.trace("F>",msg,arg);
