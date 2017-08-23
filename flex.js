@@ -2717,6 +2717,56 @@ FLEX.execute.ispreqts = function Execute(req, res) {
 	statRepo(sql);	
 }
 
+FLEX.delete.ped = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	console.log(["del",req.group, query]);
+	//sql.query("ALTER TABLE ??.?? DROP ??", [req.group, query.ds, query.ID]);
+	res("removed");
+}
+
+FLEX.insert.ped = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	console.log(["add",req.group, query, req.body]);
+	//sql.query("ALTER TABLE ??.?? DROP ??", [req.group, query.ds, query.ID]);
+	res("nada");
+}
+
+FLEX.update.ped = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query, body = req.body;
+	
+	console.log(["up",req.group, query, req.body]);
+	//sql.query("ALTER TABLE ??.?? ADD ?? "+query.type, [req.group, body.Name, body.Name]);
+	res("added");
+}
+
+FLEX.select.ped = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	console.log(["sel",req.group, query]);
+	
+	sql.query("DESCRIBE ??.??", [req.group, query.ds], function (err, parms) {
+		
+		if (err) return res(err);
+		
+		var recs = [];
+		parms.each ( function (n,parm) {
+			if ( parm.Field != "ID" )
+				recs.push( {ID: parm.Field, ds: query.ds, Name: parm.Field, Type: parm.Type, Samples:0, Dist:"gaus",MinMax:"", AvgSig:""} );
+		});
+		res(recs);
+	});
+}
+
+FLEX.execute.ped = function (req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	console.log(["exe",req.group, query]);
+	res("monted");
+}
+
+/*
 FLEX.execute.parms = function Execute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	var parms = {};
@@ -2772,7 +2822,7 @@ FLEX.execute.parms = function Execute(req, res) {
 		
 	});
 	
-	/*if (true)
+	/ *if (true)
 	sql.query("SHOW TABLES FROM app WHERE Tables_in_app1 NOT LIKE '\\_%'", function (err,tables) {	// sync parms table with DB
 		var allparms = {}, ntables = 0;
 
@@ -2809,7 +2859,7 @@ FLEX.execute.parms = function Execute(req, res) {
 			});
 
 		});
-	});*/
+	}); * /
 	
 	if (false)
 	sql.query("SELECT * FROM app.parms", function (err,parms) { // sync DB with parms table
@@ -2830,6 +2880,7 @@ FLEX.execute.parms = function Execute(req, res) {
 
 }
 
+
 FLEX.execute.attrs = function Execute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	var created = [];
@@ -2841,6 +2892,7 @@ FLEX.execute.attrs = function Execute(req, res) {
 		sql.query("CREATE TABLE ?? (ID float unique auto_increment)", dsattr.Table);
 	});
 }
+*/
 
 FLEX.execute.lookups = function Execute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
