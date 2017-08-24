@@ -4574,7 +4574,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 	var 
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
-		obs = {},
+		obs = ctx.obs,
 		evs = ctx.events,
 		sco = ctx.scenario,	
 		evlist = [];
