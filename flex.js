@@ -1018,7 +1018,7 @@ FLEX.select.ACTIVITY = function Select(req, res) {
 	});
 }
 
-FLEX.select.VIEWS = function Select(req, res) {
+FLEX.select.views = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var views = [];
 	var path = `./public/jade/`;
@@ -1038,18 +1038,18 @@ FLEX.select.VIEWS = function Select(req, res) {
 	res(views);
 }
 
-FLEX.select.LINKS = function Select(req, res) {
+FLEX.select.links = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
-	var type = unescape(query.class || query.area || "");
-	var path = `./public/jade/${type}/`;
-	var id = 0;
-	var taken = {};
-	var links = [{
-		ID: id++,
-		Name: "&diams; HOME".tag("a",{
-			href: "home.view"
-		})
-	}];
+	var 
+		path = "./public/jade/" + unescape(query.area || "") + "/",
+		id = 0,
+		taken = {},
+		links = [{
+			ID: id++,
+			Name: "&diams; HOME".tag("a",{
+				href: "home.view"
+			})
+		}];
 
 	FLEX.indexer( path, function (files) {
 
@@ -1059,19 +1059,18 @@ FLEX.select.LINKS = function Select(req, res) {
 			
 			if (stats.isDirectory()) 
 				if (file.charAt(0) == ".") 
-					FLEX.indexer( path+file, function (names) {
-						
-						names.each(function (n,name) {
+					FLEX.indexer( path+file, function (subs) {
+						subs.each(function (n,sub) {
 							links.push({
 								ID: id++,
-								Name: (file.substr(1)+" &rrarr; "+name).tag("a",{
+								Name: (file + " &rrarr; "+sub).tag("a",{
 									href: `${name}.view`
-										/*(FLEX.statefulViews[name] ? FLEX.WORKER : "") + area + name +".view"*/
 								})
 							});
-							taken[name] = 1;
+							taken[sub] = 1;
 						});
 					});
+				
 				else 
 					links.push({
 						ID: id++,
@@ -1079,13 +1078,14 @@ FLEX.select.LINKS = function Select(req, res) {
 							href: file + ".home.view"
 						})
 					});
+			
 			else {
 				var name = file.replace(".view","");
 				
-				if (!taken[name])
+				if ( !taken[name] )
 					links.push({
 						ID: id++,
-						Name: name.tag("a",{
+						Name: name.tag("a", {
 							href: `${name}.view`
 							/*(FLEX.statefulViews[name] ? FLEX.WORKER : "") + area + file*/
 						})
@@ -1098,7 +1098,8 @@ FLEX.select.LINKS = function Select(req, res) {
 	res(links);
 }
 
-FLEX.select.THEMES = function (req, res) {
+/*
+FLEX.select.themes = function (req, res) {
 	var themes = [];
 	var path = ENV.THEMES;
 
@@ -1113,8 +1114,9 @@ FLEX.select.THEMES = function (req, res) {
 	
 	res(themes);	
 }
+*/
 
-FLEX.select.SUMMARY = function Select(req, res) {
+FLEX.select.summary = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
 	var cnts = FLEX.diag.counts;
 	
@@ -1129,10 +1131,10 @@ FLEX.select.SUMMARY = function Select(req, res) {
 	);
 }
 
-FLEX.select.USERS = function Select(req, res) {
+FLEX.select.users = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM openv.sockets WHERE least(?,1) ORDER BY Client", 
+	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM openv.session WHERE least(?,1) ORDER BY Client", 
 		guardQuery(query,true),
 		function (err, recs) {
 			res(err || recs);
@@ -1149,7 +1151,7 @@ FLEX.select.ENGINES = function Select(req, res) {
 	});
 }
 
-FLEX.select.CONFIG = function Select(req, res) {
+FLEX.select.config = function Select(req, res) {
 	var sql = req.sql;
 	
 	CP.exec("df -h", function (err,dfout,dferr) {
@@ -1189,7 +1191,7 @@ FLEX.select.CONFIG = function Select(req, res) {
 	});
 }
 	
-FLEX.select.TABLES = function Select(req, res) {
+FLEX.select.datasets = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
@@ -1244,7 +1246,7 @@ FLEX.select.QUEUES = function Select(req, res) {
 	});
 }
 
-FLEX.select.CLIQUES = function v(req, res) {
+FLEX.select.cliques = function v(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	 
 	res([]);
@@ -1258,7 +1260,7 @@ FLEX.select.CLIQUES = function v(req, res) {
 	});*/
 }
 
-FLEX.select.HEALTH = function Select(req, res) {
+FLEX.select.health = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var isp = "ISP".tag("a",{href:req.isp});
 	var asp = "ASP".tag("a",{href:req.asp});
@@ -1422,7 +1424,7 @@ FLEX.select.HEALTH = function Select(req, res) {
 FLEX.select.likeus = function Select(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
-console.log(FLEX.site.pocs);
+	//TRACE(FLEX.site.pocs);
 	
 	if ( FLEX.site.pocs.admin )
 		sendMail({
@@ -1448,12 +1450,12 @@ console.log(FLEX.site.pocs);
 	
 	if ( req.profile.Credit ) {
 		sql.query(
-			"UPDATE openv.profiles SET Challenge=0,Likeus=Likeus+1,QoS=greatest(QoS-1000,0) WHERE ?",
+			"UPDATE openv.profiles SET Challenge=0,Likeus=Likeus+1,QoS=greatest(QoS-1,0) WHERE ?",
 			{Client:req.client}
 		);
 
-		req.profile.QoS = Math.max(req.profile.QoS-1000,0);
-		var qos = user[Math.floor(req.profile.QoS/1000)] || user.default;
+		req.profile.QoS = Math.max(req.profile.QoS-1,0);  // takeoff 1 sec
+		var qos = user[Math.floor(req.profile.QoS)] || user.default;
 		res( `Thanks ${req.client} for liking ${FLEX.site.nick} !  As a ${qos} user your ` 
 			+ "QoS profile".tag("a",{href:'/profile.view'})
 			+ " may have improved !" )	
@@ -3917,6 +3919,7 @@ function hawkCatalog(req,res) {
 		});*/
 }
 
+//=========== Job queue interface
 /*
  * Job queue interface
  * 
@@ -4006,9 +4009,10 @@ function deleteJob(req, cb) {
 		
 		cb(sql,job, function (ack) {
 			sql.query("UPDATE queues SET Departed=now(), Age=(now()-Arrived)/3600e3, Notes=concat(Notes,'stopped') WHERE ?", {
-				Name:job.name,
+				Task:job.task,
 				Client:job.client,
-				Class:job.class
+				Class:job.class,
+				QoS:job.qos
 			});
 
 			delete FLEX.queues[job.qos].batch[job.priority];
@@ -4023,12 +4027,12 @@ function insertJob(job, cb) {
 @method insertJob
 @param {Object} job arriving job
 @param {Function} cb callback(sql,job) when job departs
-*
- * Adds job to requested job.qos, job.priority queue and updates the
- * queuing log keyed by job (name,client,class).  A departing job 
- * execute the supplied callback cb(sql,job) on a new sql thread, or
- * spawns the job if job.cmd provided. Serve rate is set by job.rate [s]
- * where 0 disables regulation.
+
+Adds job to requested job.qos, job.priority queue and updates the
+queuing log keyed by job (name,client,class).  A departing job 
+execute the supplied callback cb(sql,job) on a new sql thread, or
+spawns the job if job.cmd provided. Serve rate is set by job.rate [s]
+where 0 disables regulation.
  */
 	function cpuavgutil() {				// compute average cpu utilization
 		var avgUtil = 0;
@@ -4065,9 +4069,9 @@ function insertJob(job, cb) {
 		if (!batch) 
 			Trace("MAKE BATCH", batch = queue.batch[job.priority] = new Array() );
 
-		batch.push( Copy(job, {cb:cb}) );
+		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
 		
-		if (!queue.timer) 		// restart idle queue
+		if ( !queue.timer ) 		// restart idle queue
 			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
 
 				var job = null;
@@ -4076,10 +4080,14 @@ function insertJob(job, cb) {
 
 					job = batch.pop(); 			// last-in first-out
 
-					if (job) {
+					if (job) {  // there is a departing job 
 //console.log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-						if (job.cmd) {	// spawn job and return its pid
+						if (job.holding)  // in holding / stopped state so requeue it
+							batch.push(job);
+									   
+						else
+						if (job.cmd) {	// this is a spawned job so spawn and hold its pid
 							job.pid = CP.exec(
 									job.cmd, 
 									  {cwd: "./public/dets", env:process.env}, 
@@ -4087,14 +4095,12 @@ function insertJob(job, cb) {
 
 								job.err = err || stderr || stdout;
 
-								if (job.cb)
-									job.cb( job );
+								if (job.cb) job.cb( job );  // execute job's callback
 							});
 						}
 					
-						else  			// execute job callback
-						if (job.cb) 
-							job.cb(job);
+						else  			// execute job's callback
+						if (job.cb) job.cb(job);
 
 						break;
 					}
@@ -4111,7 +4117,7 @@ function insertJob(job, cb) {
 	var 
 		sql = this;
 	
-	if ( !FLEX.biller && FLEX.billingCycle)
+	if ( ! FLEX.biller && FLEX.billingCycle)
 		FLEX.biller = setInterval( function (queues) { // setup job billing
 			
 			FLEX.thread( function (sql) {
@@ -4150,10 +4156,14 @@ function insertJob(job, cb) {
 	
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
-			"INSERT INTO app.queues SET ? ON DUPLICATE KEY " +
-			"UPDATE Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
-				Client: job.client || "guest",
-				Class: job.class || "job",
+			"INSERT INTO app.queues SET ? ON DUPLICATE KEY UPDATE " +
+			"Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
+				// mysql unique keys should not be null
+				Client: job.client || "",
+				Class: job.class || "",
+				Task: job.task || "",
+				QoS: job.qos || 0,
+				// others 
 				State: 0,
 				Arrived	: new Date(),
 				Departed: null,
@@ -4164,8 +4174,6 @@ function insertJob(job, cb) {
 				//Util: cpuavgutil(),
 				Priority: job.priority || 0,
 				Notes: job.notes,
-				QoS: job.qos,
-				Task: job.task,
 				Finished: 0,
 				Billed: 0,
 				Funded: job.credit ? 1 : 0,
@@ -4173,10 +4181,12 @@ function insertJob(job, cb) {
 				Done: 0
 			}, {
 				Notes: job.notes,
-				Task: job.task
+				Task: job.task || ""
 			}
 		], function (err,info) {  // increment work backlog for this job
 
+			//console.log([job,err,info]);
+			
 			if (err) 
 				return Trace(err);
 			
@@ -4211,6 +4221,23 @@ function insertJob(job, cb) {
 }
 	
 function executeJob(req, exe) {
+
+	function flip(job) {  // flip job holding state
+		if ( queue = FLEX.queues[job.qos] ) 	// get job's qos queue
+			if ( batch = queue.batch[job.priority] )  // get job's priority batch
+				batch.each( function (n, test) {  // matched jobs placed into holding state
+					if ( test.task==job.task && test.client==job.client && test.class==job.class )
+						test.holding = !test.holding;
+				});
+	}
+	
+	var sql = req.sql, query = req.query;
+	
+	sql.query("UPDATE ??.queues SET Holding = NOT Holding WHERE ?", {ID: query.ID}, function (err) {
+		
+		if ( !err )
+			flip();
+	});
 }
 
 /*
@@ -4246,7 +4273,7 @@ function executeData(req, cb) {
 }
 */
 
-// Database CRUDE interface
+//============  Database CRUDE interface
 
 function queryDS(req, res) {
 		
@@ -4284,6 +4311,8 @@ function queryDS(req, res) {
 		
 	});
 }
+
+//============ misc 
 
 FLEX.select.agent = function (req,res) {
 	var
