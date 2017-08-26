@@ -81,7 +81,8 @@ var
 			missingEngine: new Error("missing engine query"),
 			protectedQueue: new Error("action not allowed on this job queues"),
 			noCase: new Error("plugin case not found"),
-			badAgent: new Error("agent failed")
+			badAgent: new Error("agent failed"),
+			badDS: new Error("dataset could not be modified")
 		},
 		
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
@@ -191,7 +192,7 @@ var
 		/**
 		@method runPlugin
 		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
-		or (if Q.ID or Q.Name specified) dataset X parameters derived from the matched  
+		or (if Q.id or Q.name specified) dataset X parameters derived from the matched  
 		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
 		method then responds on res(results).   If Q.Save is present, the engine's results are
 		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
@@ -204,19 +205,16 @@ var
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
-				ctx = req.query;
-
-			if (ctx.ID) var dsquery = {ID: ctx.ID};
-			else
-			if (ctx.Name) var dsquery = {Name: ctx.Name};
-			else
-				var dsquery = null;
+				ctx = req.query,
+				id = ctx.id || ctx.ID,
+				name = ctx.name || ctx.Name,
+				dsquery = id ? {ID: id} : name ? {Name: name} : null;
 			
 			if (dsquery) 
 				sql.eachRec( 
 					"SELECT * FROM ?? WHERE ? LIMIT 0,1", 
 					[dsname, dsquery],
-					function ( err, test, isLast ) {	
+					function ( err, test, isLast ) {
 						
 					if (err) 
 						res( err );
@@ -264,7 +262,7 @@ var
 						else
 							res( FLEX.errors.noCase );
 						
-					else { // parallel process plugin
+					else { // parallel process plugin?
 					}
 						
 				});
@@ -401,19 +399,19 @@ var
 									Code: FLEX.plugins[name] + "",
 									Vars: JSON.stringify({port:name}),
 									Engine: "js",
-									Enabled: 1
+									Enabled: 0
 								});
 					}
 
-				sql.query("SELECT Name FROM app.engines WHERE Enabled")
-				.on("result", function (eng) { // prime the associated dataset
-					//Trace("PRIME PLUGIN "+eng.Name);
-					if (false)
-					sql.query(
-						"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), "
-						+ "Description mediumtext)",
-						eng.Name );
-				});
+				if (false)
+					sql.query("SELECT Name FROM app.engines WHERE Enabled")
+					.on("result", function (eng) { // prime the associated dataset
+						Trace("PRIME PLUGIN "+eng.Name);
+						sql.query(
+							"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), "
+							+ "Description mediumtext)",
+							eng.Name );
+					});
 				
 				sql.release();
 			});
@@ -581,7 +579,7 @@ var
 
 /*
 // Job queue CRUDE interface
-FLEX.select.jobs = function Select(req, res) { 
+FLEX.select.jobs = function Xselect(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	// route valid jobs matching sql-where clause to its assigned callback res(job).
@@ -638,7 +636,7 @@ FLEX.insert.jobs = function Insert(req, res) {
 */
 
 /*
-FLEX.select.sql = function Select(req, res) {
+FLEX.select.sql = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT Code,Name FROM engines WHERE LEAST(?) LIMIT 0,1",{Enabled:true,Engine:"select",Name:log.Table})
@@ -706,7 +704,7 @@ FLEX.update.sql = function Update(req, res) {
 @class GIT interface
 */
 
-FLEX.execute.baseline = function Execute(req,res) {  // baseline changes
+FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 
 	var	sql = req.sql, 
 		query = req.query,
@@ -764,7 +762,7 @@ FLEX.execute.baseline = function Execute(req,res) {  // baseline changes
 	
 }
 
-FLEX.select.git = function Select(req, res) {
+FLEX.select.git = function Xselect(req, res) {
 
 	var gitlogs = 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog';
 	
@@ -802,7 +800,7 @@ FLEX.select.git = function Select(req, res) {
 @class EMAIL peer-to-peer email exchange interface
 */
 	
-FLEX.select.email = function Select(req,res) {
+FLEX.select.email = function Xselect(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
 	sql.query("SELECT * FROM app.emails WHERE Pending", function (err,recs) {
@@ -813,7 +811,7 @@ FLEX.select.email = function Select(req,res) {
 	
 }
 	
-FLEX.execute.email = function Execute(req,res) {
+FLEX.execute.email = function Xexecute(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
 	res(SUBMITTED);
@@ -835,7 +833,7 @@ FLEX.execute.email = function Execute(req,res) {
 
 // Master catalog interface
 
-/*FLEX.select.CATALOG = function Select(req, res) {
+/*FLEX.select.CATALOG = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 
 	if (flags.has)
@@ -861,7 +859,7 @@ FLEX.execute.email = function Execute(req,res) {
 }
 */
 
-FLEX.execute.catalog = function Execute(req, res) {
+FLEX.execute.catalog = function Xexecute(req, res) {
 	var 
 		sql = req.sql, log = req.log, query = req.query, flags = req.flags,
 		catalog = FLEX.flatten.catalog || {},
@@ -892,7 +890,7 @@ FLEX.execute.catalog = function Execute(req, res) {
 	
 }
 
-FLEX.select.plugins = function (req,res) {
+FLEX.select.plugins = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 	var plugins = [];
 	
@@ -921,7 +919,7 @@ FLEX.select.plugins = function (req,res) {
 	
 }
 
-FLEX.select.tasks = function (req,res) {
+FLEX.select.tasks = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 	var tasks = [];
 	
@@ -940,7 +938,7 @@ FLEX.select.tasks = function (req,res) {
 	});
 }
 
-FLEX.delete.files = function (req,res) {
+FLEX.delete.files = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 
 	res( SUBMITTED );
@@ -965,7 +963,7 @@ FLEX.delete.files = function (req,res) {
 
 // Getters
 
-FLEX.select.ACTIVITY = function Select(req, res) {
+FLEX.select.ACTIVITY = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var recs = {};
 	
@@ -1018,7 +1016,7 @@ FLEX.select.ACTIVITY = function Select(req, res) {
 	});
 }
 
-FLEX.select.views = function Select(req, res) {
+FLEX.select.views = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var views = [];
 	var path = `./public/jade/`;
@@ -1038,7 +1036,7 @@ FLEX.select.views = function Select(req, res) {
 	res(views);
 }
 
-FLEX.select.links = function Select(req, res) {
+FLEX.select.links = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
 	var 
 		path = "./public/jade/" + unescape(query.area || "") + "/",
@@ -1116,7 +1114,7 @@ FLEX.select.themes = function (req, res) {
 }
 */
 
-FLEX.select.summary = function Select(req, res) {
+FLEX.select.summary = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;	
 	var cnts = FLEX.diag.counts;
 	
@@ -1131,17 +1129,17 @@ FLEX.select.summary = function Select(req, res) {
 	);
 }
 
-FLEX.select.users = function Select(req, res) {
+FLEX.select.users = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,Connects,userinfo(Client,Org,Location) AS Name FROM openv.session WHERE least(?,1) ORDER BY Client", 
+	sql.query("SELECT ID,Connects,Client AS Name, Location AS Path FROM openv.sessions WHERE least(?,1) ORDER BY Client", 
 		guardQuery(query,true),
 		function (err, recs) {
 			res(err || recs);
 	});
 }
 
-FLEX.select.ENGINES = function Select(req, res) {
+FLEX.select.ENGINES = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT ID,engineinfo(Name,Engine,Updated,Classif,length(Code),Period,Enabled,length(Special)) AS Name FROM engines WHERE least(?,1) ORDER BY Name",
@@ -1151,7 +1149,7 @@ FLEX.select.ENGINES = function Select(req, res) {
 	});
 }
 
-FLEX.select.config = function Select(req, res) {
+FLEX.select.config = function Xselect(req, res) {
 	var sql = req.sql;
 	
 	CP.exec("df -h", function (err,dfout,dferr) {
@@ -1191,7 +1189,7 @@ FLEX.select.config = function Select(req, res) {
 	});
 }
 	
-FLEX.select.datasets = function Select(req, res) {
+FLEX.select.datasets = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
 	
@@ -1228,7 +1226,7 @@ FLEX.select.datasets = function Select(req, res) {
 	}); */
 }
 
-FLEX.select.ADMIN = function Select(req, res) {
+FLEX.select.ADMIN = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT *,avg_row_length*table_rows AS Used FROM information_schema.tables", [], function (err, recs) {
@@ -1236,7 +1234,7 @@ FLEX.select.ADMIN = function Select(req, res) {
 	});
 }
 	
-FLEX.select.QUEUES = function Select(req, res) {
+FLEX.select.QUEUES = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT ID,queueinfo(Job,min(Arrived),timediff(now(),min(Arrived))/3600,Client,Class,max(State)) AS Name FROM app.queues GROUP BY Client,Class", 
@@ -1246,7 +1244,7 @@ FLEX.select.QUEUES = function Select(req, res) {
 	});
 }
 
-FLEX.select.cliques = function v(req, res) {
+FLEX.select.cliques = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	 
 	res([]);
@@ -1260,7 +1258,7 @@ FLEX.select.cliques = function v(req, res) {
 	});*/
 }
 
-FLEX.select.health = function Select(req, res) {
+FLEX.select.health = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var isp = "ISP".tag("a",{href:req.isp});
 	var asp = "ASP".tag("a",{href:req.asp});
@@ -1421,7 +1419,7 @@ FLEX.select.health = function Select(req, res) {
 
 }
 
-FLEX.select.likeus = function Select(req, res) {
+FLEX.select.likeus = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	//TRACE(FLEX.site.pocs);
@@ -1467,7 +1465,7 @@ FLEX.select.likeus = function Select(req, res) {
 		
 }
 
-FLEX.select.tips = function Select(req, res) {
+FLEX.select.tips = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	var q = sql.query(
@@ -1504,7 +1502,7 @@ FLEX.select.tips = function Select(req, res) {
 	});
 }
 
-FLEX.select.history = function (req,res) {
+FLEX.select.history = function Xselect(req,res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	var pivots = {
@@ -1658,13 +1656,13 @@ FLEX.select.history = function (req,res) {
 
 // Digital globe interface
 
-FLEX.select.DigitalGlobe = function Select(req, res) {  
+FLEX.select.DigitalGlobe = function Xselect(req, res) {  
 	var sql = req.sql, log = req.log, query = req.query;
 }
 
 // Hydra interface
 
-FLEX.select.AlgorithmService = function Select(req, res) { 
+FLEX.select.AlgorithmService = function Xselect(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	var args =  {		// Hydra parameters
@@ -1710,23 +1708,23 @@ FLEX.select.AlgorithmService = function Select(req, res) {
 }
 
 // Reserved for NCL and ESS service alerts
-FLEX.select.NCL = function Select(req, res) { 
+FLEX.select.NCL = function Xselect(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 }
 
-FLEX.select.ESS = function Select(req, res) { 
+FLEX.select.ESS = function Xselect(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 }
 
 // Uploads/Stores file interface
 
-FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
+FLEX.select.uploads = FLEX.select.stores = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query,  body = req.body;
 	var now = new Date();			
 	var rtns = [], area = req.table;
 	var path = `./public/${area}`;
 
-	Trace(`DIR ${path}`);
+	Trace(`INDEX ${path}`);
 		  
 	switch (area) {
 		
@@ -1822,7 +1820,7 @@ FLEX.select.uploads = FLEX.select.stores = function Uploads(req, res) {
 }
 
 FLEX.update.stores = FLEX.insert.stores =
-FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
+FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 	
 	var 
 		sql = req.sql, 
@@ -1930,7 +1928,7 @@ FLEX.update.uploads = FLEX.insert.uploads = function Uploads(req, res) {
 
 }
 
-FLEX.execute.uploads = function Execute(req, res) {
+FLEX.execute.uploads = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	res(SUBMITTED);
@@ -1973,7 +1971,7 @@ FLEX.execute.uploads = function Execute(req, res) {
 // Execute interfaces
 
 /*
-FLEX.execute.intake = function Execute(req, res) {
+FLEX.execute.intake = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	sql.query("SELECT intake.ID,count(dblogs.ID) AS Activity,max(dblogs.Event) AS LastTx FROM intake LEFT JOIN dblogs ON dblogs.RecID=intake.ID  group by intake.ID HAVING LEAST(?,1)",query)
@@ -2040,7 +2038,7 @@ FLEX.update.engines = function Update(req, res) {
 }*/
 
 /*
-FLEX.execute.engines = function Execute(req, res) {
+FLEX.execute.engines = function Xexecute(req, res) {
 	var sql = req.sql, query = req.query, body = req.body;
 	var 
 		Engine = query.Engine, 
@@ -2179,7 +2177,7 @@ FLEX.execute.engines = function Execute(req, res) {
 }
 */
 
-FLEX.execute.milestones = function Execute(req, res) {
+FLEX.execute.milestones = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var map = {SeqNum:1,Num:1,Hours:1,Complete:1,Task:1};
 
@@ -2197,7 +2195,7 @@ FLEX.execute.milestones = function Execute(req, res) {
 	res(SUBMITTED);
 }
 
-FLEX.execute.sessions = function Execute(req, res) {
+FLEX.execute.sessions = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	if (FLEX.emitter)
@@ -2211,7 +2209,7 @@ FLEX.execute.sessions = function Execute(req, res) {
 }
 
 /*
-FLEX.execute.tests = function Execute(req, res) {
+FLEX.execute.tests = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	res(SUBMITTED);
@@ -2252,7 +2250,7 @@ console.log(req.profile);
 */
 
 /*
-FLEX.execute.collects = function Execute(req, res) {
+FLEX.execute.collects = function Xexecute(req, res) {
 	var req = req, sql = req.sql, log = req.log, query = req.query;
 	
 	/ *
@@ -2349,7 +2347,7 @@ FLEX.execute.collects = function Execute(req, res) {
 */
 
 /*
-FLEX.execute.detectors = function Execute(req, res) {
+FLEX.execute.detectors = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
 	function evalROC(rocs, res) {
@@ -2497,7 +2495,7 @@ FLEX.execute.detectors = function Execute(req, res) {
 }
 */
 
-FLEX.execute.events = function Execute(req, res) {
+FLEX.execute.events = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	var	lambdas = (query.lambda||"").parse([1]),
@@ -2712,56 +2710,99 @@ FLEX.execute.events = function Execute(req, res) {
 
 FLEX.execute.issues = 
 FLEX.execute.aspreqts = 
-FLEX.execute.ispreqts = function Execute(req, res) {
+FLEX.execute.ispreqts = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	res(SUBMITTED);
 	statRepo(sql);	
 }
 
-FLEX.delete.ped = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
+FLEX.delete.keyedit = function Xdelete(req, res) { 
+	var sql = req.sql, query = req.query;
 	
 	console.log(["del",req.group, query]);
-	//sql.query("ALTER TABLE ??.?? DROP ??", [req.group, query.ds, query.ID]);
-	res("removed");
-}
-
-FLEX.insert.ped = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? DROP ??", 
+			[req.group, query.ds, query.ID],
+			function (err) {
+				res( {data: {}, success:true, msg:"ok"}  );
+		});
+	}
 	
-	console.log(["add",req.group, query, req.body]);
-	//sql.query("ALTER TABLE ??.?? DROP ??", [req.group, query.ds, query.ID]);
-	res("nada");
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+		
 }
 
-FLEX.update.ped = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query, body = req.body;
+FLEX.insert.keyedit = function Xinsert(req, res) { 
+	var sql = req.sql, body = req.body, query = req.query;
 	
-	console.log(["up",req.group, query, req.body]);
-	//sql.query("ALTER TABLE ??.?? ADD ?? "+query.type, [req.group, body.Name, body.Name]);
-	res("added");
+	console.log(["add",req.group, query, body]);
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? ADD ?? "+body.Type,
+			[req.group, query.ds, body.Key],
+			function (err) {
+				res( {data: {insertID: body.Key}, success:true, msg:"ok"} );
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
 }
 
-FLEX.select.ped = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
+FLEX.update.keyedit = function Xupdate(req, res) { 
+	var sql = req.sql, body = req.body, query = req.query, body = req.body;
+	
+	console.log(["up",req.group, query, body]);
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
+			[req.group, query.ds, query.ID, query.ID],
+			function (err) {
+				res( {data: {}, success:true, msg:"ok"}  );
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+	
+}
+
+FLEX.select.keyedit = function Xselect(req, res) { 
+	var sql = req.sql, query = req.query;
 	
 	console.log(["sel",req.group, query]);
 	
-	sql.query("DESCRIBE ??.??", [req.group, query.ds], function (err, parms) {
-		
-		if (err) return res(err);
-		
-		var recs = [];
-		parms.each ( function (n,parm) {
-			if ( parm.Field != "ID" )
-				recs.push( {ID: parm.Field, ds: query.ds, Name: parm.Field, Type: parm.Type, Samples:0, Dist:"gaus",MinMax:"", AvgSig:""} );
+	try {
+		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
+			if (err) return res(err);
+
+			var recs = [{
+				ID: "XXX", Ds: query.ds, Key: "new", Type: "int(11)", 
+				Samples:0, Dist:"gaus", Parms:"[0,1]" 
+			}];
+			
+			parms.each ( function (n,parm) {
+				if ( parm.Field != "ID" )
+					recs.push( {
+							ID: parm.Field, Ds: query.ds, Key: parm.Field, Type: parm.Type, 
+							Samples:0, Dist:"gaus", Parms:"[0,1]" } );
+			});
+			res(recs);
 		});
-		res(recs);
-	});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
 }
 
-FLEX.execute.ped = function (req, res) { 
+FLEX.execute.keyedit = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	console.log(["exe",req.group, query]);
@@ -2769,7 +2810,7 @@ FLEX.execute.ped = function (req, res) {
 }
 
 /*
-FLEX.execute.parms = function Execute(req, res) { 
+FLEX.execute.parms = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	var parms = {};
 	var types = {
@@ -2883,7 +2924,7 @@ FLEX.execute.parms = function Execute(req, res) {
 }
 
 
-FLEX.execute.attrs = function Execute(req, res) { 
+FLEX.execute.attrs = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	var created = [];
 		
@@ -2896,7 +2937,7 @@ FLEX.execute.attrs = function Execute(req, res) {
 }
 */
 
-FLEX.execute.lookups = function Execute(req, res) {
+FLEX.execute.lookups = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
 	// language (l18-abide) lookups
@@ -3010,7 +3051,7 @@ FLEX.execute.lookups = function Execute(req, res) {
 }
 
 /*
-FLEX.execute.searches = function Execute(req, res) {
+FLEX.execute.searches = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	res(SUBMITTED);
@@ -3042,7 +3083,7 @@ FLEX.execute.searches = function Execute(req, res) {
 */
 
 /*
-FLEX.execute.chips = function Execute(req, res) {   
+FLEX.execute.chips = function Xexecute(req, res) {   
 	// flush old/bad chips. prime chip address
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -3071,7 +3112,7 @@ FLEX.execute.chips = function Execute(req, res) {
 }
 */
 
-FLEX.execute.swaps = function Execute(req, res) {   
+FLEX.execute.swaps = function Xexecute(req, res) {   
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	res(SUBMITTED);
@@ -3169,7 +3210,7 @@ FLEX.execute.swaps = function Execute(req, res) {
 	
 }
 
-FLEX.execute.hawks = function Execute(req, res) {
+FLEX.execute.hawks = function Xexecute(req, res) {
 /*
  * Hawk over jobs in the queues table given {Action,Condition,Period} rules 
  * defined in the hawks table.  The rule is run on the interval specfied 
@@ -3357,7 +3398,7 @@ console.log({
 }
 */
 
-FLEX.execute.detectors = function Execute(req, res) { 
+FLEX.execute.detectors = function Xexecute(req, res) { 
 // execute(client,job,res): create detector-trainging job for client with callback to res(job) when completed.
 
 	var sql = req.sql, log = req.log, query = req.query, job = req.body;
@@ -4028,11 +4069,12 @@ function insertJob(job, cb) {
 @param {Object} job arriving job
 @param {Function} cb callback(sql,job) when job departs
 
-Adds job to requested job.qos, job.priority queue and updates the
-queuing log keyed by job (name,client,class).  A departing job 
+Adds job to requested job (cliet,class,qos,task)-queue.  Departing jobs
 execute the supplied callback cb(sql,job) on a new sql thread, or
-spawns the job if job.cmd provided. Serve rate is set by job.rate [s]
-where 0 disables regulation.
+spawn a new process if job.cmd provided.  Jobs are regulated by their job.rate [s]
+(0 disables regulation). If the client's credit has been exhausted, the
+job is added to the queue, but not the regulator.  Queues are periodically
+monitored to store billing information.
  */
 	function cpuavgutil() {				// compute average cpu utilization
 		var avgUtil = 0;
@@ -4883,7 +4925,7 @@ function get(ctx, res) {
 }
 
 function Trace(msg,arg) {
-	ENUM.trace("F>",msg,arg);
+	ENUM.trace("X>",msg,arg);
 }
 
 // UNCLASSIFIED
