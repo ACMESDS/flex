@@ -397,8 +397,8 @@ var
 								"REPLACE INTO app.engines SET ?", {
 									Name: name,
 									Code: FLEX.plugins[name] + "",
-									Vars: JSON.stringify({port:name}),
-									Engine: "js",
+									State: JSON.stringify({port:name}),
+									Type: "js",
 									Enabled: 0
 								});
 					}
@@ -1142,7 +1142,7 @@ FLEX.select.users = function Xselect(req, res) {
 FLEX.select.ENGINES = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	sql.query("SELECT ID,engineinfo(Name,Engine,Updated,Classif,length(Code),Period,Enabled,length(Special)) AS Name FROM engines WHERE least(?,1) ORDER BY Name",
+	sql.query("SELECT ID,engineinfo(Name,Type,Updated,Classif,length(Code),Period,Enabled,length(Special)) AS Name FROM engines WHERE least(?,1) ORDER BY Name",
 		guardQuery(query,true), 
 		function (err, recs) {
 			res(err || recs);
