@@ -948,15 +948,28 @@ FLEX.delete.files = function Xselect(req,res) {
 		Client: req.client
 	}, function (err, file, isLast) {
 		
-		if (file) 
-			CP.exec(`rm ./public/${file.Area}/${file.Name}`, function (err) {
-				sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
+		if (file)  {
+			var 
+				area = file.Area,
+				name = file.Name,
+				path = `${area}/${name}`,
+				pub = "./public",
+				arch = `${pub}/${path}`,
+				zip = `${arch}.zip`;
+				
+			CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push gitlab master; rm ${zip}`, function (err) {
+			CP.exec(`rm ${arch}`, function (err) {
+				//sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
 
+				sql.query("UPDATE app.files SET State='archived' WHERE least(?)", {Area:file.Area, Name:file.Name});
+		
 				sql.query( // credit the client
 					"UPDATE openv.profiles SET useDisk=useDisk-? WHERE ?", [ 
 						file.Size, {Client: req.client} 
 				]);
 			});
+			});
+		}
 	});
 	
 }
