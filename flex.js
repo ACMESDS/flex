@@ -399,7 +399,7 @@ var
 									Code: FLEX.plugins[name] + "",
 									State: JSON.stringify({port:name}),
 									Type: "js",
-									Enabled: 0
+									Enabled: 1
 								});
 					}
 
