@@ -4718,11 +4718,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 	var 
 		Mix = ctx.Mix,
-		JumpRates = ctx.JumpRates,
-		Symbols = ctx.Symbols,
 		Deltas = ctx.Deltas,
 		Offsets = ctx.Offsets,
-		Intervals = ctx.Intervals,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 	if (!Mix) Mix = [];
@@ -4802,11 +4799,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		},  // samplers
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode]; // sampler
-
-	RAN.config({ // configure the random process generator
+		
+	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
-		A: JumpRates,  // jump rates 
+		A: ctx.JumpRates,  // jump rates 
 		/*  enable for a realtime process
 		A: {
 			dt: 1,
@@ -4815,39 +4812,37 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			fetch: TOTEM.fetch.http
 		},
 		*/
-		sym: Symbols,  // state symbols
+		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // sampling rate
-		store: {  // stores for ...
-			jump: null,  // state-jump observations
-			step: []  // time-step observations
-		},  // event stores
 		bins: 50,  // bins to create stats
-		on: {
-			jump: function (x) {},
+		store: [], 	// use sync streaming for a web service
+		intervals: ctx.Intervals, // coherence intervals to monitor process
+		filter: function (str, ev) {  // retain only step info
+			if (ev[0] == "step") {
+				var 
+					mix = floor(rand() * mixes),  // mixing index
+					us = sampler(mix);  // mixing sample
 
-			step: function (y) { // callback to monitor process after being forward stepped
-				RAN.U.each( function (id, state) {
-					var 
-						mix = floor(rand() * mixes),  // mixing index
-						us = sampler(mix),  // mixing sample
-						ys = {
-							t: RAN.t, // time sampled
-							u: state,   // state occupied
-							m: mix, // gauss mix dran from
-							f: mode, // process family
-							c: RAN.corr(), // ensemble correlation
-							s: RAN.t / RAN.Tc, // coherence Intervals
-							n: RAN.steps, // step counter
-							p: RAN.NU[state] / RAN.N // pr ensemble in this state
-						};
-
-					for (var n=0, N=us.length; n<N; n++) ys[labels[n]] = us[n];
-					y.push( new Object(ys) );
+				ran.U.each( function (id, state) {
+					str.push({
+						t: ran.t, // time sampled
+						u: state,   // state occupied
+						m: mix, // gauss mix drawn from
+						f: mode, // process family
+						c: ran.corr(), // ensemble correlation
+						s: ran.t / ran.Tc, // coherence Intervals
+						n: ran.steps, // step counter
+						p: ran.NU[state] / ran.N, // pr ensemble in this state
+						x: us[0],
+						y: us[1],
+						z: us[2]
+					});	
 				});
 			}
 		}  // on-event callbacks
 	});
 
+	/*
 	var
 		steps = Intervals * RAN.Tc/RAN.dt,
 		states = RAN.K,
@@ -4866,7 +4861,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			wiener_walks: RAN.wiener ? "yes" : "no",
 			sample_time: RAN.dt,
 			avg_rate: RAN.lambda
-			/*
+			/ **
 			initial_pr: RAN.pi,
 			cumTxPr: RAN.P,
 			state_symbols: RAN.sym,
@@ -4874,9 +4869,10 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			state_times: RAN.T,
 			hold_times: RAN.R,
 			time_in_state: RAN.ZU
-			*/
+			** /
 		};
-
+	*/
+	
 	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
 		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			console.log([k, floor(k / 20), k % 20, mix, Deltas]);
@@ -4891,9 +4887,13 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
 		});
 
-	//console.log({mix: JSON.stringify(Mix)});
-	console.log(info);
-
+	ran.pipe( [], function (evs) {
+		//Trace("Events generated "+evs.length);
+		res( evs );
+	}); 
+	
+	
+	/*
 	RAN.start( Math.min(1000, steps), function (x,y,stats) {
 		//console.log({randprs:y.length});
 
@@ -4902,7 +4902,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			steps: y,
 			stats: stats,
 			info: info
-			/*info: Copy(info, {
+			/ ** info: Copy(info, {
 				processSteps: RAN.steps,
 				processSamples: RAN.jumps
 				/ *processStats: JSON.stringify({
@@ -4913,9 +4913,10 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 					symbols: RAN.sym,
 					initPr: RAN.pi						
 				})* /
-			}) */
+			}) ** /
 		});
-	});
+	}); */
+	
 }
 
 function res1pr(ctx,res) {
