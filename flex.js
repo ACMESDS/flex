@@ -4571,8 +4571,8 @@ Use the FLEX randpr plugin to send spoofed streaming data.
 */
 	//console.log(ctx);
 	
-	FLEX.randpr( ctx, function (rtn) {
-		res( rtn.steps ? rtn.steps : rtn );
+	FLEX.randpr( ctx, function (evs) {
+		res( evs );
 	});
 }
 
@@ -4815,15 +4815,15 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // sampling rate
 		bins: 50,  // bins to create stats
-		store: [], 	// use sync streaming for a web service
+		store: [], 	// use sync pipe() since we are running a web service
 		intervals: ctx.Intervals, // coherence intervals to monitor process
 		filter: function (str, ev) {  // retain only step info
 			if (ev[0] == "step") {
-				var 
-					mix = floor(rand() * mixes),  // mixing index
-					us = sampler(mix);  // mixing sample
-
 				ran.U.each( function (id, state) {
+					var 
+						mix = floor(rand() * mixes),  // mixing index
+						us = sampler(mix);  // mixing sample
+
 					str.push({
 						t: ran.t, // time sampled
 						u: state,   // state occupied
@@ -4831,11 +4831,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 						f: mode, // process family
 						c: ran.corr(), // ensemble correlation
 						s: ran.t / ran.Tc, // coherence Intervals
-						n: ran.steps, // step counter
+						n: id, 	// unique identifier
 						p: ran.NU[state] / ran.N, // pr ensemble in this state
-						x: us[0],
-						y: us[1],
-						z: us[2]
+						x: us[0],  	// lat
+						y: us[1],  	// lon
+						z: us[2] 	// alt
 					});	
 				});
 			}
