@@ -42,7 +42,8 @@ var 									// 3rd party bindings
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
-var 											// globals
+var 						
+// globals
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted";
 
@@ -4739,7 +4740,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			});
 	}
 
-	console.log({randpr_mix:Mix});
+	console.log({randpr_mix:Mix,txpr:ctx.TxPrs,dt:ctx.Ts});
 
 	var
 		mvd = [], 	// multivariate distribution parms
@@ -4803,7 +4804,9 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
-		A: ctx.JumpRates,  // jump rates 
+		//A: ctx.JumpRates,  // jump rates 
+		P: ctx.TxPrs, // state transition probs
+		dt: ctx.Ts, // sampling time
 		/*  enable for a realtime process
 		A: {
 			dt: 1,
@@ -4818,7 +4821,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		store: [], 	// use sync pipe() since we are running a web service
 		intervals: ctx.Intervals, // coherence intervals to monitor process
 		filter: function (str, ev) {  // retain only step info
-			if (ev[0] == "step") {
+			if (ev.at == "step") {
 				ran.U.each( function (id, state) {
 					var 
 						mix = floor(rand() * mixes),  // mixing index
