@@ -4827,19 +4827,31 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 						mix = floor(rand() * mixes),  // mixing index
 						us = sampler(mix);  // mixing sample
 
-					str.push({
-						t: ran.t, // time sampled
-						u: state,   // state occupied
-						m: mix, // gauss mix drawn from
-						f: mode, // process family
-						c: ran.corr(), // ensemble correlation
-						s: ran.t / ran.Tc, // coherence Intervals
-						n: id, 	// unique identifier
-						p: ran.NU[state] / ran.N, // pr ensemble in this state
-						x: us[0],  	// lat
-						y: us[1],  	// lon
-						z: us[2] 	// alt
-					});	
+					switch (1) {
+						case 0: 
+							str.push({
+								t: ran.t, // time sampled
+								u: state,   // state occupied
+								m: mix, // gauss mix drawn from
+								f: mode, // process family
+								c: ran.corr(), // ensemble correlation
+								s: ran.t / ran.Tc, // coherence Intervals
+								n: id, 	// unique identifier
+								p: ran.NU[state] / ran.N, // pr ensemble in this state
+								x: us[0],  	// lat
+								y: us[1],  	// lon
+								z: us[2] 	// alt
+							});	
+							break;
+							
+						case 1:
+							str.push({
+								t: ran.t, // time sampled
+								u: state,   // state occupied
+								n: id 	// unique identifier
+							});	
+							break;
+					}
 				});
 			}
 		}  // on-event callbacks
