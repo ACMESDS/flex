@@ -4695,12 +4695,12 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Offsets = [x,y,z] = voxel offsets
 	Deltas = [x,y,z] = voxel dimensions
 	Mix = [ {mu, covar}, .... ] = desired process stats
-	JumpRates = [ [rate, ...], ... ] = (KxK) jump rate process or {K} to generate 
+	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
 	Symbols: [sym, ...] = (K) state symboles || null to generate
 	Ensemble = numer in process ensemble
 	Wiener = switch to enable wiener process
 	Nyquest = over sampling factor
-	Intervals = number of coherence Intervals to return samples				
+	steps = number of process steps	
 */
 
 	function randint(a) {
@@ -4724,6 +4724,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 	if (!Mix) Mix = [];
+	
 	else
 	if (Mix.constructor == Object) {  // generate random gauss mixes
 		var 
@@ -4816,10 +4817,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		},
 		*/
 		sym: ctx.Symbols,  // state symbols
-		nyquist: ctx.Nyquist, // sampling rate
-		bins: 50,  // bins to create stats
+		//nyquist: ctx.Nyquist, // sampling rate
+		//bins: 50,  // bins to create stats
 		store: [], 	// use sync pipe() since we are running a web service
-		intervals: ctx.Intervals, // coherence intervals to monitor process
+		steps: ctx.steps, // process steps
+		batch: ctx.batch, // batch size in steps
 		filter: function (str, ev) {  // retain only step info
 			if (ev.at == "step") {
 				ran.U.each( function (id, state) {
@@ -4835,9 +4837,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 								m: mix, // gauss mix drawn from
 								f: mode, // process family
 								c: ran.corr(), // ensemble correlation
-								s: ran.t / ran.Tc, // coherence Intervals
+								s: ran.t / ran.Tc, // coherence steps
 								n: id, 	// unique identifier
-								p: ran.NU[state] / ran.N, // pr ensemble in this state
 								x: us[0],  	// lat
 								y: us[1],  	// lon
 								z: us[2] 	// alt
@@ -4859,7 +4860,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 	/*
 	var
-		steps = Intervals * RAN.Tc/RAN.dt,
+		steps = steps * RAN.Tc/RAN.dt,
 		states = RAN.K,
 		info = {
 			mixing_offsets: Offsets,
@@ -4868,7 +4869,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			states: states,
 			ensemble_size: RAN.N,
 			process_steps: steps,
-			coherence_interval: Intervals, 
+			coherence_interval: steps, 
 			coherence_time: RAN.Tc,
 			nyquist_step_time: RAN.dt,
 			coherence_time: RAN.Tc,
