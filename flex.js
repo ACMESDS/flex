@@ -4731,7 +4731,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			K = Mix.K, 
 			Mix = [],
 			a = 0, 
-			b = 0, 
+			b = 0, and
 			xx = 0.9, yy = 0.7, xy = yx = 0.4, zz = 0.1;
 
 		for (var k=0; k<K; k++) 
@@ -4741,7 +4741,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			});
 	}
 
-	console.log({randpr_mix:Mix,txpr:ctx.TxPrs,dt:ctx.Ts});
+	console.log({randpr_mix:Mix,txpr:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
 
 	var
 		mvd = [], 	// multivariate distribution parms
@@ -4805,23 +4805,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
-		//A: ctx.JumpRates,  // jump rates 
 		P: ctx.TxPrs, // state transition probs
-		dt: ctx.Ts, // sampling time
-		/*  enable for a realtime process
-		A: {
-			dt: 1,
-			agent: "/someagent.domain",
-			n: 400,
-			fetch: TOTEM.fetch.http
-		},
-		*/
 		sym: ctx.Symbols,  // state symbols
-		//nyquist: ctx.Nyquist, // sampling rate
-		//bins: 50,  // bins to create stats
 		store: [], 	// use sync pipe() since we are running a web service
-		steps: ctx.steps, // process steps
-		batch: ctx.batch, // batch size in steps
+		steps: ctx.Steps, // process steps
+		batch: ctx.Batch, // batch size in steps
 		filter: function (str, ev) {  // retain only step info
 			if (ev.at == "step") {
 				ran.U.each( function (id, state) {
@@ -4829,6 +4817,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 						mix = floor(rand() * mixes),  // mixing index
 						us = sampler(mix);  // mixing sample
 
+					//console.log(ran.t,state,id);
+					
 					switch (1) {
 						case 0: 
 							str.push({
