@@ -4810,40 +4810,49 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
-		filter: function (str, ev) {  // retain only step info
-			if (ev.at == "step") {
-				ran.U.each( function (id, state) {
-					var 
-						mix = floor(rand() * mixes),  // mixing index
-						us = sampler(mix);  // mixing sample
+		filter: function (str, ev) {  // retain only step info			
+			switch ( ev.at ) {
+				case "step":
+					ran.U.each( function (id, state) {
+						var 
+							mix = floor(rand() * mixes),  // mixing index
+							us = sampler(mix);  // mixing sample
 
-					//console.log(ran.t,state,id);
+						//console.log(ran.t,state,id);
+
+						switch (ctx.Details) {
+							case 0: 
+								str.push({ 
+									at: ev.at,
+									t: ran.t, // time sampled
+									u: state,   // state occupied
+									m: mix, // gauss mix drawn from
+									f: mode, // process family
+									n: id, 	// unique identifier
+									x: us[0],  	// lat
+									y: us[1],  	// lon
+									z: us[2] 	// alt
+								});	
+								break;
+
+							case 1:
+								str.push({ 
+									at: ev.at,
+									t: ran.t, // time sampled
+									u: state,   // state occupied
+									n: id 	// unique identifier
+								});	
+								break;
+						}
+					});
+					break;
 					
-					switch (1) {
-						case 0: 
-							str.push({
-								t: ran.t, // time sampled
-								u: state,   // state occupied
-								m: mix, // gauss mix drawn from
-								f: mode, // process family
-								c: ran.corr(), // ensemble correlation
-								s: ran.t / ran.Tc, // coherence steps
-								n: id, 	// unique identifier
-								x: us[0],  	// lat
-								y: us[1],  	// lon
-								z: us[2] 	// alt
-							});	
-							break;
-							
-						case 1:
-							str.push({
-								t: ran.t, // time sampled
-								u: state,   // state occupied
-								n: id 	// unique identifier
-							});	
-							break;
-					}
-				});
+				case "batch":
+					str.push(ev);
+					break;
+					
+				default:
+					str.push(ev);
 			}
 		}  // on-event callbacks
 	});
