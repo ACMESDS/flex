@@ -63,7 +63,8 @@ var 											// totem bindings
 		]
 	}),
 	Copy = ENUM.copy,
-	Each = ENUM.each;
+	Each = ENUM.each,
+	Log = console.log;
 
 var
 	FLEX = module.exports = {
@@ -165,9 +166,7 @@ var
 		Run the associated engine to the plugin named req.table if it exists and is enabled; otherwise 
 		attempt fallback to the builtin plugin.  Callback res(err,results).
 		**/
-			
 			ENGINE.select(req, function (rtn) {  // compile and step the engine
-				
 				if (rtn.constructor == Error) // if engine not enabled, try builtin
 					if ( plugin = FLEX.plugins[req.table] )  
 						
@@ -243,7 +242,7 @@ var
 
 								else
 								if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-									viaAgent(req, function (rtn, sql) {  // allow out-sourcing of plugin
+									viaAgent(req, function (rtn, sql) {  // potentially out-source the plugin
 
 										if (rtn)
 											res( null, rtn, ctx );
@@ -300,13 +299,13 @@ var
 				query = req.query,
 				jobname = "totem."+ req.client + "." + req.table + "." + query.ID;
 
-			//console.log({viaagent: query});
+			//Log({viaagent: query});
 			
 			if (agent = query.agent) 
 				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
 
 					if ( jobid ) {
-						Trace("AGENT FORKED "+jobname);
+						Trace("FORKED AGENT FOR job-"+jobname,sql);
 
 						sql.query("INSERT INTO queues SET ?", {
 							class: agent,
@@ -319,20 +318,20 @@ var
 						if ( poll = parseInt(query.poll) )
 							var timer = setInterval(function (req) { 
 
-								Trace("AGENT POLLING "+jobid);
+								Trace("POLLING AGENT FOR job"+jobid);
 
 								fetch(req.agent+"?pull="+jobid, function (rtn) {
 
 									if (rtn)
 										FLEX.thread( function (sql) {
-											Trace("AGENT RETURNED "+jobid);
+											Trace("FREEING AGENT FOR job-"+jobid, sql);
 											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
 											req.cb( rtn, sql );
 											sql.release();
 										});
 									
 									else {
-										Trace("AGENT FAILED");
+										Trace("FAULTING AGENT");
 										clearInterval(timer);
 										req.cb( rtn, sql );
 									}
@@ -364,8 +363,6 @@ var
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {
 				
-				Trace("EXTENDING SQL CONNECTOR");
-				
 				ENUM.extend(sql.constructor, [
 					selectJob,
 					deleteJob,
@@ -392,7 +389,7 @@ var
 				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
 					for (var name in FLEX.plugins) {
 						FLEX.execute[name] = runPlugin;
-						//Trace("PUBLISH PLUGIN "+name);
+						Trace("PUBLISH plugin-"+name, sql);
 						if ( name != "plugins")
 							sql.query( 
 								"REPLACE INTO app.engines SET ?", {
@@ -407,7 +404,7 @@ var
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
 					.on("result", function (eng) { // prime the associated dataset
-						Trace("PRIME PLUGIN "+eng.Name);
+						Trace("PRIME plugin-"+eng.Name, sql);
 						sql.query(
 							"CREATE TABLE app.?? (ID float unique auto_increment, Name varchar(32), "
 							+ "Description mediumtext)",
@@ -482,7 +479,7 @@ var
 									else
 									if ( rtn[n] > limits[n] ) rtn.State = "warning";
 
-								Trace("DIAGS ", rtn);								
+								Trace("DIAG SYSTEM", sql);
 								sql.release();
 							});
 							});
@@ -506,7 +503,7 @@ var
 
 					if (email.TX.PORT) {  		// Establish server's email transport
 
-						Trace(`MAILHOST  ${email.TX.HOST} PORT ${email.TX.PORT}`);
+						Trace(`MAILHOST ${email.TX.HOST} ON port-${email.TX.PORT}`);
 
 						email.TX.TRAN = email.USER
 							? MAIL.createTransport({ //"SMTP",{
@@ -735,22 +732,22 @@ FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 	
 	if (!query.noarchive)
 	CP.exec(ex.group, function (err,log) {
-	Trace("BASELINE GROUP "+(err||"OK"));
+	Trace("BASELINE GROUP "+(err||"OK"), sql);
 
 	CP.exec(ex.openv, function (err,log) {
-	Trace("BASELINE OPENV "+(err||"OK"));
+	Trace("BASELINE OPENV "+(err||"OK"), sql);
 
 	CP.exec(ex.clear, function (err,log) {
-	Trace("BASELINE CLEAR "+(err||"OK"));
+	Trace("BASELINE CLEAR "+(err||"OK"), sql);
 
 	CP.exec(ex.prime, function (err,log) {
-	Trace("BASELINE PRIME "+(err||"OK"));
+	Trace("BASELINE PRIME "+(err||"OK"), sql);
 
 	CP.exec(ex.rebase, function (err,log) {
-	Trace("BASELINE REBASE "+(err||"OK"));
+	Trace("BASELINE REBASE "+(err||"OK"), sql);
 
 	CP.exec(ex.commit, function (err,log) {
-	Trace("BASELINE COMMIT "+(err||"OK"));
+	Trace("BASELINE COMMIT "+(err||"OK"), sql);
 
 		if (!query.noexit) process.exit();				
 		
@@ -827,7 +824,7 @@ FLEX.execute.email = function Xexecute(req,res) {
 				contentType: 'text/html; charset="ISO-59-1"',
 				contents: ""
 			}]
-		});
+		}, sql);
 	});
 	
 }
@@ -870,7 +867,7 @@ FLEX.execute.catalog = function Xexecute(req, res) {
 	limits.stamp = new Date();
 
 	if (false)
-		console.log({
+		Log({
 			cat: catalog,
 			lim: limits
 		});
@@ -881,7 +878,7 @@ FLEX.execute.catalog = function Xexecute(req, res) {
 	
 	sql.flattenCatalog( flags, catalog, limits, function (recs) {
 		
-		Trace("FLATTEN "+recs.length);
+		Trace("FLATTEN CATALOG RECS "+recs.length, sql);
 		
 		recs.each( function (n,rec) {
 			sql.query("INSERT INTO catalog SET ?",rec);
@@ -1287,10 +1284,10 @@ FLEX.select.health = function Xselect(req, res) {
 	};
 
 	CP.exec("df -h /home", function (err,dfout,dferr) {
-//console.log(dfout);
+//Log(dfout);
 
 	CP.exec("netstat -tn", function (err,nsout,nserr) {
-//console.log(nsout);
+//Log(nsout);
 
 	sql.query(
 		"SELECT "
@@ -1301,11 +1298,11 @@ FLEX.select.health = function Xselect(req, res) {
 		+ "count(ID) AS logs "
 		+ "FROM app.dblogs")
 	.on("error", function (err) {
-		Trace(err);
+		Log(err);
 	})
 	.on("result", function (lstats) {
 
-//console.log(lstats);
+//Log(lstats);
 
 	sql.query(
 		  "SELECT "
@@ -1314,15 +1311,15 @@ FLEX.select.health = function Xselect(req, res) {
 		+ "sum(Age)*? AS cost_$ "
 		+ "FROM app.queues",[4700])
 	.on("error", function (err) {
-		Trace(err);
+		Log(err);
 	})
 	.on("result", function (qstats) {
 	
-//console.log(qstats);
+//Log(qstats);
 
 	sql.query("SHOW GLOBAL STATUS", function (err,dstats) {
 		
-//console.log(dstats);
+//Log(dstats);
 
 	sql.query("SHOW VARIABLES LIKE 'version'")
 	.on("result", function (vstats) {
@@ -1332,7 +1329,7 @@ FLEX.select.health = function Xselect(req, res) {
 				dbstats[stat.Variable_name] = stat.Value; 
 		});
 		
-//console.log(dbstats);
+//Log(dbstats);
 
 		Each(qstats, function (n,stat) {
 			rtns.push({ID:ID++, Name:"job "+n.tag("a",{href:"/admin.view?goto=Jobs"})+" "+stat});
@@ -1447,7 +1444,7 @@ FLEX.select.likeus = function Xselect(req, res) {
 				contentType: 'text/html; charset="ISO-59-1"',
 				contents: ""
 			}]
-		});
+		}, sql);
 
 	var user = {
 		expired: "your subscription has expired",
@@ -1503,7 +1500,7 @@ FLEX.select.tips = function Xselect(req, res) {
 		function (err, recs) {
 
 			if (err)
-				Trace("tips",[err,q.sql]);
+				Log("tips",[err,q.sql]);
 			else
 				recs.each(function(n,rec) {
 					rec.ID = n;
@@ -1533,7 +1530,7 @@ FLEX.select.history = function Xselect(req,res) {
 			case "signoffs":
 				//var comment = "".tag("input",{type:"file",value:"mycomments.pdf",id:"uploadFile", multiple:"multiple",onchange: "BASE.uploadFile()"});
 				
-				Trace(sql.query(
+				sql.query(
 					"SELECT "
 					+ "Hawk, max(power) AS Power, "
 					//+ "? AS Comment, "
@@ -1554,12 +1551,12 @@ FLEX.select.history = function Xselect(req,res) {
 					function (err, recs) {
 						
 						res( err || recs );
-					}));
+					});
 				break;
 					
 			case "changes":
 
-				Trace(sql.query(
+				sql.query(
 				"SELECT "
 				+ "group_concat(distinct concat(Dataset,'.',Field)) AS Datasets,"
 				+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
@@ -1569,11 +1566,11 @@ FLEX.select.history = function Xselect(req,res) {
 					function (err, recs) {
 					
 					res( err || recs );
-				}));
+				});
 				break;
 				
 			case "earnings":
-				Trace(sql.query(
+				sql.query(
 					"SELECT Client, group_concat(distinct year(Reviewed),'/',month(Reviewed), ' ', Comment) AS Comments, "
 					+ "group_concat( distinct linkrole(roles.Hawk,roles.Earnings,roles.Strength)) AS Earnings "
 					+ "FROM openv.roles "
@@ -1583,7 +1580,7 @@ FLEX.select.history = function Xselect(req,res) {
 					function (err, recs) {
 					
 					res( err || recs );
-				}));
+				});
 				break;
 				
 			case "approve":
@@ -1643,7 +1640,7 @@ FLEX.select.history = function Xselect(req,res) {
 										+ "moderator comments".hyper("/moderate.view") 
 										+ " and " 
 										+ "project status".hyper("/project.view")
-								});
+								}, sql);
 						});
 						});
 				});
@@ -1652,7 +1649,7 @@ FLEX.select.history = function Xselect(req,res) {
 			case "itemized":
 			default:
 					
-				Trace(sql.query(
+				sql.query(
 					"SELECT concat(Dataset,'.',Field) AS Idx, "
 					+ "group_concat(distinct linkrole(Hawk,Updates,Power)) AS Moderators "
 					+ "FROM openv.journal "
@@ -1661,7 +1658,7 @@ FLEX.select.history = function Xselect(req,res) {
 					function (err,recs) {
 
 					res( err || recs );
-				}));
+				});
 
 		}
 	});
@@ -1738,7 +1735,7 @@ FLEX.select.uploads = FLEX.select.stores = function Xselect(req, res) {
 	var rtns = [], area = req.table;
 	var path = `./public/${area}`;
 
-	Trace(`INDEX ${path}`);
+	Trace(`INDEX ${path} FOR ${req.client}`, sql);
 		  
 	switch (area) {
 		
@@ -1853,7 +1850,7 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		}] : body.files || [];
 
 	/*
-	console.log({
+	Log({
 		q: query,
 		b: body,
 		f: files,
@@ -1889,9 +1886,9 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 	if (FLEX.uploader)
 	FLEX.uploader(files, area, function (file) {
 
-		//console.log(file);
+		//Log(file);
 		
-		Trace(`UPLOAD ${area}/${file.filename} FOR ${req.group}.${req.client}`);
+		Trace(`UPLOAD ${area}/${file.filename} FOR ${req.group}.${req.client}`, sql);
 		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
 			   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
@@ -1990,11 +1987,11 @@ FLEX.execute.intake = function Xexecute(req, res) {
 
 	sql.query("SELECT intake.ID,count(dblogs.ID) AS Activity,max(dblogs.Event) AS LastTx FROM intake LEFT JOIN dblogs ON dblogs.RecID=intake.ID  group by intake.ID HAVING LEAST(?,1)",query)
 	.on("result", function (log) {
-//console.log(log);
+//Log(log);
 	
 	sql.query("SELECT Name,Special FROM intake WHERE ? AND Special IS NOT NULL AND Special NOT LIKE '//%'",[{ID:log.ID},{Special:null}])
 	.on("result",function (sys) {
-//console.log(sys);
+//Log(sys);
 
 	var conpdf = {};
 	var maxpdf = 0;
@@ -2012,7 +2009,7 @@ FLEX.execute.intake = function Xexecute(req, res) {
 		if (conpdf[client.Value] > maxpdf) maxpdf = conpdf[client.Value];
 	})
 	.on("end", function () {
-//console.log([cnts,maxpdf]);
+//Log([cnts,maxpdf]);
 
 	sql.query("SELECT count(ID) AS Count FROM queues WHERE LEAST(?)",{State:0,Job:sys.Name,Class:"tips"})
 	.on("result", function (users) {
@@ -2024,12 +2021,12 @@ FLEX.execute.intake = function Xexecute(req, res) {
 		for (var n in stat) if (!sysstat[n]) sysstat[n] = stat[n];
 			
 		sql.query("UPDATE intake SET ? WHERE ?",[sysstat,{ID: sys.ID}], function () {
-//console.log("updated");	
+//Log("updated");	
 		}); // update
 		}); // stats
 	else 		// unconditionally update
 		sql.query("UPDATE intake SET ? WHERE ?",[stat,{ID: sys.ID}], function () {
-//console.log("updated");	
+//Log("updated");	
 		}); // update
 	
 	}); // users
@@ -2202,7 +2199,7 @@ FLEX.execute.milestones = function Xexecute(req, res) {
 		for (var n in map) map[n] = rec[n] || "";
 		
 		sql.query("INSERT INTO openv.milestones SET ?",map, function (err) {
-			if (err) Trace(err);
+			if (err) Log(err);
 		});
 	});
 
@@ -2235,7 +2232,7 @@ FLEX.execute.tests = function Xexecute(req, res) {
 	)
 	.on("result", function (test) {
 		
-console.log(req.profile);
+Log(req.profile);
 		
 		if (FLEX.CHIP)
 		FLEX.CHIP.workflow(sql, {
@@ -2326,7 +2323,7 @@ FLEX.execute.collects = function Xexecute(req, res) {
 
 							}
 							catch (err) {
-								console.log("apperr="+err);
+								Log("apperr="+err);
 							}
 
 						});
@@ -2399,7 +2396,7 @@ FLEX.execute.detectors = function Xexecute(req, res) {
 			
 			roc.qual = qual += ( (TPR - (1-f)) - (FPR - (1-f)) )*df;
 			
-//console.log([f,FPR,TPR,qual,TPR/FPR]);
+//Log([f,FPR,TPR,qual,TPR/FPR]);
 
 		});
 	
@@ -2546,7 +2543,7 @@ FLEX.execute.events = function Xexecute(req, res) {
 				Terr += terr;
 				
 				if (trace)
-				console.log(['a'+event.job, Math.round(event.tArrive,4),  Math.round(terr,4), queue.length]);
+				Log(['a'+event.job, Math.round(event.tArrive,4),  Math.round(terr,4), queue.length]);
 
 				if ( ++n < N ) 			// more arrivals to scedule ?
 					arrival();
@@ -2576,12 +2573,12 @@ FLEX.execute.events = function Xexecute(req, res) {
 									for (var n in check) rtn[n] = check[n][idx];
 								}
 										
-								console.log(JSON.stringify(rtns));
+								Log(JSON.stringify(rtns));
 								break;
 								
 							case "rel":
 								for (var idx in check) check[idx] = Math.round( (1 - check[idx].expected / check[idx].achived)*100, 4) + "%";
-								console.log(JSON.stringify(check));
+								Log(JSON.stringify(check));
 								break;							
 						}
 					});
@@ -2635,14 +2632,14 @@ FLEX.execute.events = function Xexecute(req, res) {
 		head.tDepart = t0 + head.tService; 					// departure time
 
 		if (trace)
-		console.log(JSON.stringify(head));
+		Log(JSON.stringify(head));
 
 		sched(head.tService, head, function (event, terr) {		// service departure
 			
 			Terr += terr;
 
 			if (trace)
-			console.log(['d'+event.job, Math.round(event.tDepart, 4), Math.round(terr,4), queue.length]);
+			Log(['d'+event.job, Math.round(event.tDepart, 4), Math.round(terr,4), queue.length]);
 			
 			event.tWait -= terr;
 			event.tDelay -= terr;
@@ -2734,7 +2731,7 @@ FLEX.execute.ispreqts = function Xexecute(req, res) {
 FLEX.delete.keyedit = function Xdelete(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	console.log(["del",req.group, query]);
+	Log(["del",req.group, query]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? DROP ??", 
@@ -2753,7 +2750,7 @@ FLEX.delete.keyedit = function Xdelete(req, res) {
 FLEX.insert.keyedit = function Xinsert(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query;
 	
-	console.log(["add",req.group, query, body]);
+	Log(["add",req.group, query, body]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? ADD ?? "+body.Type,
@@ -2771,7 +2768,7 @@ FLEX.insert.keyedit = function Xinsert(req, res) {
 FLEX.update.keyedit = function Xupdate(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query, body = req.body;
 	
-	console.log(["up",req.group, query, body]);
+	Log(["up",req.group, query, body]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
@@ -2790,7 +2787,7 @@ FLEX.update.keyedit = function Xupdate(req, res) {
 FLEX.select.keyedit = function Xselect(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	console.log(["sel",req.group, query]);
+	Log(["sel",req.group, query]);
 	
 	try {
 		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
@@ -2819,7 +2816,7 @@ FLEX.select.keyedit = function Xselect(req, res) {
 FLEX.execute.keyedit = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	console.log(["exe",req.group, query]);
+	Log(["exe",req.group, query]);
 	res("monted");
 }
 
@@ -2843,7 +2840,7 @@ FLEX.execute.parms = function Xexecute(req, res) {
 	};
 	
 	function sqlquery(a,b,res) {
-		console.log(a+JSON.stringify(b));
+		Log(a+JSON.stringify(b));
 		res();
 	}
 
@@ -2907,7 +2904,7 @@ FLEX.execute.parms = function Xexecute(req, res) {
 						var ptype = "varchar";
 						for (var tname in tables) ptype = tables[tname];
 						
-						//console.log([pname,ptype]);
+						//Log([pname,ptype]);
 						
 						var parm = {Tables:tablelist, Parm:pname, Type:ptype};
 
@@ -3150,7 +3147,7 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 				".tar": "tar -C $D -xvf $I"
 			};
 
-		Trace("INSTALLING "+package);
+		Trace("UPGRADE "+package, sql);
 
 		// submit swaps that have not already been submitted 
 		
@@ -3166,7 +3163,7 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 					contentType: 'text/html; charset="ISO-59-1"',
 					contents: ""
 				}]
-			});
+			}, sql);
 			
 		});
 		
@@ -3189,15 +3186,15 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 				swap_map[form_map[n]] = swap[n];
 
 			/*PDF.fillForm( form_template, form_final, swap_map, function (err) {
-				if (err) console.log(`SWAP ${package} err`);
+				if (err) Log(`SWAP ${package} err`);
 			});*/
 			
 			/*
 			PDF.mapForm2PDF( swap, form_conv, function (err,swap_map) {
-				console.log("map="+err);
+				Log("map="+err);
 				
 				PDF.fillForm( form_template, form_final, swap_map, function (err) {
-					console.log("fill="+err);
+					Log("fill="+err);
 				});
 			});
 			* */
@@ -3213,7 +3210,7 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 			
 			if (unpack)
 				unpack.command({I:install,D:dest}, "", function () {
-					Trace("UNPACKED "+package);
+					Trace("UNPACK "+package, sql);
 				});
 			else {  // crawl site with phantomjs to pull latest source
 			}
@@ -3251,11 +3248,11 @@ FLEX.execute.hawks = function Xexecute(req, res) {
 
 				FLEX.thread( function (sql) {
 					
-					Trace("SCANNING ",rules);
+					Trace("SCANNING ",rules, sql);
 					
 					sql.query("SELECT * FROM app.queues WHERE Finished AND NOT Billed")
 					.on("result", function (job) {
-						Trace("BILLING ",job);
+						Trace(`BILLING ${job} FOR ${job.Client}`, sql);
 						sql.query( "UPDATE openv.profiles SET Charge=Charge+? WHERE ?", [ 
 							job.Done, {Client: job.Client} 
 						]);
@@ -3303,7 +3300,7 @@ function (req,res) {
 	delete query.key; 
 	delete body.key;
 	
-console.log({
+Log({
 	q: query,
 	f: flags,
 	d: db,
@@ -3462,7 +3459,7 @@ FLEX.execute.detectors = function Xexecute(req, res) {
 			"COMMIT", 
 			function (err) { 
 		
-		Trace("PROOFING ",[posProofs.length,negProofs.length]);
+		Trace("PROOF ",[posProofs.length,negProofs.length], sql);
 
 		if (posProofs.length && negProofs.length) {	// must have some proofs to execute job
 			
@@ -3473,7 +3470,7 @@ FLEX.execute.detectors = function Xexecute(req, res) {
 				totProofs = posProofs.length + negProofs.length,
 				dirtyness = totDirty / totProofs;
 
-			Trace('DIRTY', [dirtyness,job.MaxDirty,posDirty,negDirty,posProofs.length,negProofs.length]);
+			Trace('DIRTY', [dirtyness,job.MaxDirty,posDirty,negDirty,posProofs.length,negProofs.length], sql);
 
 			sql.query("UPDATE detectors SET ? WHERE ?",[{Dirty:dirtyness},{ID:job.ID}]);
 			
@@ -3500,7 +3497,7 @@ FLEX.execute.detectors = function Xexecute(req, res) {
 					det.client = log.client;
 					det.work = det.posCount + det.negCount;
 
-					Trace(`TRAIN ${det.Name} v${ver}`);
+					Trace(`TRAIN ${det.Name} v${ver}`, sql);
 				
 					var Execute = {
 						Purge: "rm -rf " + det.Path,
@@ -3519,7 +3516,7 @@ FLEX.execute.detectors = function Xexecute(req, res) {
 							//"opencv_traincascade -data $Cascade -bg $negPath -vec $Vector -numPos $Positives -numNeg $Negatives -numStages $MaxStages -precalcValBufSize 100 -precalcIdxBufSize 100 -featureType HAAR -w $Width -h $Height -mode BASIC -minHitRate $MinTPR -maxFalseAlarmRate $MaxFPR -weightTrimRate $TrimRate -maxDepth $MaxDepth -maxWeakCount $MaxWeak"										
 					};
 						
-					Trace((det.Execute||"").toUpperCase()+" "+det.name);
+					Trace((det.Execute||"").toUpperCase()+" "+det.name, sql);
 					
 					/**
 					* Training requires:
@@ -3683,7 +3680,7 @@ function statRepo(sql) {
 		default: "Special"
 	};		
 		
-	Trace("STAT GIT");
+	Trace("STAT REPO", sql);
 	
 	CP.exec('git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog', function (err,log) {
 			
@@ -3788,8 +3785,8 @@ function requestService(srv, cb) {
 
 	var req = HTTP.request(srv, function(cb) {
 		
-		console.log(`STATUS: ${cb.statusCode}`);
-		console.log(`HEADERS: ${JSON.stringify(cb.headers)}`);
+		Log(`STATUS: ${cb.statusCode}`);
+		Log(`HEADERS: ${JSON.stringify(cb.headers)}`);
 		
 		cb.setEncoding('utf8');
 
@@ -3809,7 +3806,7 @@ function requestService(srv, cb) {
 	});
 
 	req.on('error', function(err) {
-		console.log("http apperr="+err);
+		Log("http apperr="+err);
 	});
 
 	//req.write('data\n');	// write data to request body
@@ -3824,7 +3821,7 @@ function showIMAP(obj) {
 }
 
 function killIMAP(err) {
-	Trace(err);
+	Log(err);
 	process.exit(1);
 }
 
@@ -3835,9 +3832,9 @@ function openIMAP(cb) {
 	});
 }
 
-function sendMail(opts) {
+function sendMail(opts,sql) {
 	
-	Trace(`MAIL ${opts.to} RE ${opts.subject}`);
+	Trace(`MAIL ${opts.to} RE ${opts.subject}`, sql);
 
 	opts.from = "totem@noreply.gov";
 	
@@ -3845,12 +3842,12 @@ function sendMail(opts) {
 		if (x = FLEX.mailer)
 			if (x = x.TX.TRAN) 
 				x.sendMail(opts,function (err) {
-					Trace("MAIL "+ (err || opts.to) );
+					//Trace("MAIL "+ (err || opts.to) );
 				});
 		
 			else
 				CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
-					Trace("MAIL "+ (err || opts.to) );
+					//Trace("MAIL "+ (err || opts.to) );
 				});
 }
 
@@ -3869,7 +3866,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 			
 			var quality = " using "+ (filter ? filter : "open")  + " search limit " + limits.records;
 			
-			Trace("CATALOG ("+table+quality+") HAS "+rtns.length);
+			Trace("CATALOG "+table+quality+" RECS "+rtns.length, sql);
 		
 			var query = filter 
 					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + filter + " FROM ?? HAVING Score>? LIMIT 0,?"
@@ -3955,11 +3952,11 @@ function hawkCatalog(req,res) {
 		}, exe);
 	}
 	
-	Trace("HAWK CATALOG FOR "+req.client+" find="+flags.has);
+	Trace(`HAWK CATALOG FOR ${req.client}`);
 	
 	if (has = flags.has)
 		queueExe("detector", has, function (req,res) {
-			//console.log("create detector "+req.has);
+			//Log("create detector "+req.has);
 			res("See "+"jobs queue".tag("a",{href:"/jobs.view"}));  
 		});
 		
@@ -4006,7 +4003,7 @@ function selectJob(where, cb) {
 		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
 	)
 	.on("error", function (err) {
-		Trace(err);
+		Log(err);
 	})
 	.on("result", function (rec) {
 		cb(rec);
@@ -4107,12 +4104,12 @@ monitored to store billing information.
 		var queue = FLEX.queues[job.qos];	// get job's qos queue
 		
 		if (!queue)  // prime the queue if it does not yet exist
-			Trace("MAKE QUEUE", queue = FLEX.queues[job.qos] = new Object({
+			queue = FLEX.queues[job.qos] = new Object({
 				timer: 0,
 				batch: {},
 				rate: job.qos,
 				client: {}
-			}) );
+			});
 			
 		var client = queue.client[job.client];  // update client's bill
 		
@@ -4123,7 +4120,7 @@ monitored to store billing information.
 		var batch = queue.batch[job.priority]; 		// get job's priority batch
 		
 		if (!batch) 
-			Trace("MAKE BATCH", batch = queue.batch[job.priority] = new Array() );
+			batch = queue.batch[job.priority] = new Array();
 
 		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
 		
@@ -4137,7 +4134,7 @@ monitored to store billing information.
 					job = batch.pop(); 			// last-in first-out
 
 					if (job) {  // there is a departing job 
-//console.log("job depth="+batch.length+" job="+[job.name,job.qos]);
+//Log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
 						if (job.holding)  // in holding / stopped state so requeue it
 							batch.push(job);
@@ -4184,19 +4181,19 @@ monitored to store billing information.
 					function (err) {
 						
 					if (err) 
-						Trace(err);
+						Log(err);
 						
 					else
 						Each(queues, function (rate, queue) {  // save collected queuing charges to profiles
 							Each(queue.client, function (client, charge) {
 
 								if ( charge.bill ) {
-									Trace(`BILL ${client} ${charge.bill} CREDITS`);
+									Trace(`BILL ${client} ${charge.bill} CREDITS`, sql);
 									sql.query(
 										"UPDATE openv.profiles SET Charge=Charge+?,Credit=greatest(0,Credit-?) WHERE ?" , 
 										 [charge.bill, charge.bill, {Client:client}], 
 										function (err) {
-											console.log({charging:err});
+											Log({charging:err});
 									});
 									charge.bill = 0;
 								}
@@ -4241,10 +4238,10 @@ monitored to store billing information.
 			}
 		], function (err,info) {  // increment work backlog for this job
 
-			//console.log([job,err,info]);
+			//Log([job,err,info]);
 			
 			if (err) 
-				return Trace(err);
+				return Log(err);
 			
 			job.ID = info.insertId || 0;
 			
@@ -4492,7 +4489,7 @@ function news(ctx, res) {
 		to = rhs.substr(0,rhs.indexOf(" ")),
 		body = rhs.substr(to.length);
 
-	Trace(`NEWS ${to}`);
+	Trace(`FEEDNEWS ${to}`, sql);
 
 	switch (to) {
 		case "conseq":
@@ -4517,7 +4514,7 @@ function news(ctx, res) {
 					contentType: 'text/html; charset="ISO-8859-1"',
 					contents: ""
 				}]
-			});
+			}, sql);
 	}
 
 	sql.query("SELECT ID,datediff(now(),Starts) AS Age, Stay FROM news HAVING Age>Stay")
@@ -4544,7 +4541,7 @@ function news(ctx, res) {
 			+ "LEFT JOIN states ON (states.Class='TRL' and states.State=intake.TRL) "
 			+ "WHERE intake.?", ["/intake.view?name=","/queue.view?name=",client,{ Name:name }] ) 
 		.on("error", function (err) {
-			Trace(err);
+			Log(err);
 		})
 		.on("result", function (sys) {
 			var msg = sys.Link+" "+make.format(sys);
@@ -4570,7 +4567,7 @@ function sss(ctx,res) {
 /*
 Use the FLEX randpr plugin to send spoofed streaming data.
 */
-	//console.log(ctx);
+	//Log(ctx);
 	
 	FLEX.randpr( ctx, function (evs) {
 		res( evs );
@@ -4628,6 +4625,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 */
 
 	var 
+		Log = console.log,
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
 		obs = ctx.obs,
@@ -4650,7 +4648,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		return {idx: imin, err: emin};
 	}
 
-	console.log({guassmix:{mixes:Mixes, refs:Refs,evs:evs.length,sco:sco}});
+	Log({guassmix:{mixes:Mixes, refs:Refs,evs:evs.length,sco:sco}});
 	
 	evs.each( function (n,ev) {
 		evlist.push( [ev.x,ev.y,ev.z] );
@@ -4684,7 +4682,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		});
 	}
 
-	console.log({shipstats:JSON.stringify(obs)});
+	Log({shipstats:JSON.stringify(obs)});
 	res(obs);  //ship it
 
 }
@@ -4699,8 +4697,9 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Symbols: [sym, ...] = (K) state symboles || null to generate
 	Ensemble = numer in process ensemble
 	Wiener = switch to enable wiener process
-	Nyquest = over sampling factor
-	steps = number of process steps	
+	Nyquist = over sampling factor
+	Steps = number of process steps	
+	Details = 0,1, ... level of step details to return
 */
 
 	function randint(a) {
@@ -4718,6 +4717,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	}
 
 	var 
+		Log = console.log,
 		Mix = ctx.Mix,
 		Deltas = ctx.Deltas,
 		Offsets = ctx.Offsets,
@@ -4741,7 +4741,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			});
 	}
 
-	console.log({randpr_mix:Mix,txpr:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
+	Log({randpr_mix:Mix,txpr:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
 
 	var
 		mvd = [], 	// multivariate distribution parms
@@ -4802,11 +4802,26 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode]; // sampler
 		
+	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
+		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
+			Log([k, floor(k / 20), k % 20, mix, Deltas]);
+
+			offsetvec( scalevec(mix.mu,Deltas), [
+				floor(k / 20) * Deltas[0] + Offsets[0],
+				(k % 20) * Deltas[1] + Offsets[1],
+				mix.mu[2] + Offsets[2]
+			]);  
+			for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
+
+			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
+		});
+
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
 		P: ctx.TxPrs, // state transition probs
 		sym: ctx.Symbols,  // state symbols
+		nyquist: ctx.Nyquist, // oversampling factor
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
@@ -4818,7 +4833,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 							mix = floor(rand() * mixes),  // mixing index
 							us = sampler(mix);  // mixing sample
 
-						//console.log(ran.t,state,id);
+						//Log(ran.t,state,id);
 
 						switch (ctx.Details) {
 							case 0: 
@@ -4856,81 +4871,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			}
 		}  // on-event callbacks
 	});
-
-	/*
-	var
-		steps = steps * RAN.Tc/RAN.dt,
-		states = RAN.K,
-		info = {
-			mixing_offsets: Offsets,
-			mixings_deltas: Deltas,
-			mixing_dim: mixdim,
-			states: states,
-			ensemble_size: RAN.N,
-			process_steps: steps,
-			coherence_interval: steps, 
-			coherence_time: RAN.Tc,
-			nyquist_step_time: RAN.dt,
-			coherence_time: RAN.Tc,
-			initial_activity: RAN.p,
-			wiener_walks: RAN.wiener ? "yes" : "no",
-			sample_time: RAN.dt,
-			avg_rate: RAN.lambda
-			/ **
-			initial_pr: RAN.pi,
-			cumTxPr: RAN.P,
-			state_symbols: RAN.sym,
-			jump_rates: RAN.A,
-			state_times: RAN.T,
-			hold_times: RAN.R,
-			time_in_state: RAN.ZU
-			** /
-		};
-	*/
 	
-	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
-		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
-			console.log([k, floor(k / 20), k % 20, mix, Deltas]);
-
-			offsetvec( scalevec(mix.mu,Deltas), [
-				floor(k / 20) * Deltas[0] + Offsets[0],
-				(k % 20) * Deltas[1] + Offsets[1],
-				mix.mu[2] + Offsets[2]
-			]);  
-			for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
-
-			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
-		});
-
 	ran.pipe( [], function (evs) {
 		//Trace("Events generated "+evs.length);
 		res( evs );
 	}); 
-	
-	
-	/*
-	RAN.start( Math.min(1000, steps), function (x,y,stats) {
-		//console.log({randprs:y.length});
-
-		res({  // ship it
-			jumps: x,
-			steps: y,
-			stats: stats,
-			info: info
-			/ ** info: Copy(info, {
-				processSteps: RAN.steps,
-				processSamples: RAN.jumps
-				/ *processStats: JSON.stringify({
-					jumpRates: RAN.A,
-					cumTxPr: RAN.P,
-					jumpCounts: RAN.T,
-					holdTimes: RAN.R,
-					symbols: RAN.sym,
-					initPr: RAN.pi						
-				})* /
-			}) ** /
-		});
-	}); */
 	
 }
 
@@ -4953,8 +4898,8 @@ function get(ctx, res) {
 	});
 }
 
-function Trace(msg,arg) {
-	ENUM.trace("X>",msg,arg);
+function Trace(msg,sql) {
+	ENUM.trace("X>",msg,sql);
 }
 
 // UNCLASSIFIED
