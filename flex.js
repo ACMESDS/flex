@@ -42,8 +42,7 @@ var 									// 3rd party bindings
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
-var 						
-// globals
+var 						// globals
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted";
 
