@@ -4698,7 +4698,6 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Wiener = switch to enable wiener process
 	Nyquist = over sampling factor
 	Steps = number of process steps	
-	Details = 0,1, ... level of step details to return
 */
 
 	function randint(a) {
@@ -4747,6 +4746,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		ooW = [], // wiener/oo process look ahead
 		mixes = Mix.length,	// number of mixes
 		mixing = mixes > 0, // we are mixing
+		walking = ctx.Wiener ? true : false, // random walking
 		mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
 		mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
 		mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
@@ -4827,15 +4827,25 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		filter: function (str, ev) {  // retain only step info			
 			switch ( ev.at ) {
 				case "step":
-					ran.U.each( function (id, state) {
-						var 
-							mix = floor(rand() * mixes),  // mixing index
-							us = sampler(mix);  // mixing sample
+					if (walking) {
+						var ev = { 
+							at: ev.at,
+							t: ran.t 
+						};
 
-						//Log(ran.t,state,id);
+						ran.WU.each(function (id, state) {
+							ev["walk"+id] = state;
+						});
+						str.push(ev);
+					}
+					else
+						ran.U.each( function (id, state) {
 
-						switch (ctx.Details) {
-							case 0: 
+							if (mixing) {
+								var 
+									mix = floor(rand() * mixes),  // mixing index
+									us = sampler(mix);  // mixing sample
+
 								str.push({ 
 									at: ev.at,
 									t: ran.t, // time sampled
@@ -4846,19 +4856,19 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 									x: us[0],  	// lat
 									y: us[1],  	// lon
 									z: us[2] 	// alt
-								});	
-								break;
+								});
+							}
 
-							case 1:
+							else
 								str.push({ 
 									at: ev.at,
 									t: ran.t, // time sampled
 									u: state,   // state occupied
 									n: id 	// unique identifier
 								});	
-								break;
-						}
-					});
+
+						});
+					
 					break;
 					
 				case "batch":
