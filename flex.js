@@ -187,7 +187,93 @@ var
 			});
 		},
 		
-		runPlugin: function runPlugin(req,res) {  //< method to execute a plugin
+		getPlugins: function ( sql, group, cb ) {  // callback cb(eng) with plugins in requested group
+			sql.eachTable( group, function (table) { 
+				ENGINE.getEngine( sql, group, table, function (eng) {
+					if (eng) cb( eng );
+				});
+			});
+		},
+		
+		taskPlugins: function ( sql, group, job, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
+			
+			FLEX.getPlugins( sql, group, function (eng) {
+				var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
+				
+				sql.query(  // get plugin usecase keys
+					"SHOW FIELDS FROM ??.?? WHERE Field != 'ID' ",  [ group, pluginName ], function (err,keys) {
+
+					keys.each( function (n,key) { // look for Job key
+						var keyesc = "`" + key.Field + "`";
+						switch (key.Field) {
+							case "Save":
+								break;
+							case "Job":
+								hasJob = true;
+							case "Name":
+								srckeys.push("? AS "+keyesc);
+								tarkeys.push(keyesc);
+								break;
+							default:
+								srckeys.push(keyesc);
+								tarkeys.push(keyesc);
+						}
+					});
+
+					if (hasJob) 
+						sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
+							"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE name='ingest' ", [
+								group, pluginName,
+								"ingest " + new Date(),
+								JSON.stringify(job),
+								group, pluginName
+						], function (err, info) {
+							if ( !err ) cb( info.insertId, pluginName );
+						});
+				});
+			});
+		},
+		
+		loadPlugin: function ( sql, ds, ctx, cb ) {  //< callback cb(ctx) with primed context or null
+			
+			var 
+				id = ctx.id || ctx.ID,
+				name = ctx.name || ctx.Name,
+				dsquery = id ? {ID: id} : name ? {Name: name} : null;
+			
+			if (dsquery)  // get context from dataset
+				sql.query( "SELECT * FROM ?? WHERE ? LIMIT 0,1", 	[ds, dsquery], function ( err, ctxs ) {						
+					if (err) 
+						cb( null );
+						
+					else 
+					if ( isEmpty = ctxs.each() )
+						cb( null );
+					
+					else {
+						Copy( ctxs[0], ctx );
+						
+						sql.jsonKeys( ds, function (keys) {  // parse json keys
+							keys.each(function (n,key) {
+								if (key != "Save")
+									try { 
+										ctx[key] = JSON.parse( ctx[key] ); 
+									}
+
+									catch (err) {
+										ctx[key] = null;
+									}
+							});
+						});
+						cb( ctxs[0] );
+					}
+				});
+			
+			else
+				cb( ctx );
+		},
+		
+		runPlugin: function runPlugin(req, res) {  //< respond res(err,rtn,ctx) with rtn results (null if ctx.Job) and ctx context
 		/**
 		@method runPlugin
 		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
@@ -201,6 +287,35 @@ var
 		responds with res(results).  Related comments in FLEX.config.
 		*/
 			
+			FLEX.loadPlugin( req.sql, "app."+req.table, req.query, function (ctx) {
+				
+				if (ctx) 
+					if ( ctx.Job )
+						res( null, null, ctx );
+
+					else
+					if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
+						viaAgent(req, function (rtn, sql) {  // potentially out-source the plugin
+
+							if (rtn)
+								res( null, rtn, ctx );
+
+							else
+								res( FLEX.errors.badAgent );
+
+						});
+
+					else  // in-source the plugin
+						FLEX.runEngine(req, function (rtn) {
+							res( null, rtn, ctx );
+						});
+					
+				else
+					res( FLEX.errors.noCase );
+				
+			});
+				
+			/*
 			var 
 				sql = req.sql, 
 				dsname = "app." + req.table,
@@ -270,6 +385,7 @@ var
 				FLEX.runEngine(req, function (rtn) {
 					res( null, rtn, ctx );
 				});
+				*/
 		},
 		
 		plugins: { //< Plugins defined on config()
@@ -973,7 +1089,7 @@ FLEX.delete.files = function Xselect(req,res) {
 
 // Getters
 
-FLEX.select.ACTIVITY = function Xselect(req, res) {
+FLEX.select.activity = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var recs = {};
 	
@@ -1149,6 +1265,7 @@ FLEX.select.users = function Xselect(req, res) {
 	});
 }
 
+/*
 FLEX.select.ENGINES = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -1158,6 +1275,7 @@ FLEX.select.ENGINES = function Xselect(req, res) {
 			res(err || recs);
 	});
 }
+*/
 
 FLEX.select.config = function Xselect(req, res) {
 	var sql = req.sql;
@@ -1236,7 +1354,7 @@ FLEX.select.datasets = function Xselect(req, res) {
 	}); */
 }
 
-FLEX.select.ADMIN = function Xselect(req, res) {
+FLEX.select.admin = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT *,avg_row_length*table_rows AS Used FROM information_schema.tables", [], function (err, recs) {
@@ -1244,7 +1362,8 @@ FLEX.select.ADMIN = function Xselect(req, res) {
 	});
 }
 	
-FLEX.select.QUEUES = function Xselect(req, res) {
+/*
+FLEX.select.queues = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT ID,queueinfo(Job,min(Arrived),timediff(now(),min(Arrived))/3600,Client,Class,max(State)) AS Name FROM app.queues GROUP BY Client,Class", 
@@ -1253,6 +1372,7 @@ FLEX.select.QUEUES = function Xselect(req, res) {
 			res(err || recs);
 	});
 }
+*/
 
 FLEX.select.cliques = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
