@@ -162,8 +162,7 @@ var
 		runEngine: function (req,res) {
 		/**
 		@method runEngine 
-		Run the associated engine to the plugin named req.table if it exists and is enabled; otherwise 
-		attempt fallback to the builtin plugin.  Callback res(err,results).
+		Run the req.table named engine in req.query context if engine enabled; otherwise run builtin plugin.  Callback res(err,results).
 		**/
 			ENGINE.select(req, function (rtn) {  // compile and step the engine
 				if (rtn.constructor == Error) // if engine not enabled, try builtin
@@ -180,62 +179,85 @@ var
 						}
 
 					else
-						res( FLEX.errors.noEngine);
+						res( FLEX.errors.noEngine );
 
 				else
 					res( rtn );
 			});
 		},
 		
-		getPlugins: function ( sql, group, cb ) {  // callback cb(eng) with plugins in requested group
+		getPlugins: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			sql.eachTable( group, function (table) { 
 				ENGINE.getEngine( sql, group, table, function (eng) {
-					if (eng) cb( eng );
+					if (eng)
+						FLEX.getPlugin( sql, group+"."+table, where, function (ctx) {
+							if (ctx)
+								cb( eng, ctx );
+						});
 				});
 			});
 		},
 		
 		taskPlugins: function ( sql, group, job, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
 			
-			FLEX.getPlugins( sql, group, function (eng) {
+			FLEX.getPlugins( sql, group, {Name:"ingest"}, function (eng,ctx) {
 				var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
 				
-				sql.query(  // get plugin usecase keys
-					"SHOW FIELDS FROM ??.?? WHERE Field != 'ID' ",  [ group, pluginName ], function (err,keys) {
-
-					keys.each( function (n,key) { // look for Job key
-						var keyesc = "`" + key.Field + "`";
-						switch (key.Field) {
-							case "Save":
-								break;
-							case "Job":
-								hasJob = true;
-							case "Name":
-								srckeys.push("? AS "+keyesc);
-								tarkeys.push(keyesc);
-								break;
-							default:
-								srckeys.push(keyesc);
-								tarkeys.push(keyesc);
-						}
-					});
-
-					if (hasJob) 
-						sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
-							"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE name='ingest' ", [
-								group, pluginName,
-								"ingest " + new Date(),
-								JSON.stringify(job),
-								group, pluginName
-						], function (err, info) {
-							if ( !err ) cb( info.insertId, pluginName );
-						});
+				Object.keys(ctx).each( function (n,key) { // look for Job key
+					var keyesc = "`" + key.Field + "`";
+					switch (key.Field) {
+						case "Save":
+							break;
+						case "Job":
+							hasJob = true;
+						case "Name":
+							srckeys.push("? AS "+keyesc);
+							tarkeys.push(keyesc);
+							break;
+						default:
+							srckeys.push(keyesc);
+							tarkeys.push(keyesc);
+					}
 				});
+
+				if (hasJob) 
+					sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
+						"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE ID=?", [
+							group, pluginName,
+							"ingest " + new Date(),
+							JSON.stringify(job),
+							group, pluginName,
+							ctx.ID
+					], function (err, info) {
+						if ( !err ) cb( info.insertId, pluginName );
+					});
 			});
 		},
 		
-		loadPlugin: function ( sql, ds, ctx, cb ) {  //< callback cb(ctx) with primed context or null
+		getPlugin: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
+			sql.query("SELECT * FROM ?? WHERE least(?,1)", [ds,where])
+			.on("result", function (ctx) {
+				
+				sql.jsonKeys( ds, function (keys) {  // parse json keys
+					keys.each(function (n,key) {
+						//Log(key, key.indexOf("Save") );
+						if ( key.indexOf("Save")<0 )
+							try { 
+								ctx[key] = JSON.parse( ctx[key] ); 
+							}
+
+							catch (err) {
+								//ctx[key] = null;  // uncomment when db json enabled
+							}
+					});
+					
+					cb(ctx);
+				});
+
+			});
+			
+			/*
 			var 
 				id = ctx.id || ctx.ID,
 				name = ctx.name || ctx.Name,
@@ -255,7 +277,7 @@ var
 						
 						sql.jsonKeys( ds, function (keys) {  // parse json keys
 							keys.each(function (n,key) {
-								if (key != "Save")
+								if ( key.indexOf("Save")<0 )
 									try { 
 										ctx[key] = JSON.parse( ctx[key] ); 
 									}
@@ -271,6 +293,7 @@ var
 			
 			else
 				cb( ctx );
+			*/
 		},
 		
 		runPlugin: function runPlugin(req, res) {  //< respond res(err,rtn,ctx) with rtn results (null if ctx.Job) and ctx context
@@ -287,9 +310,11 @@ var
 		responds with res(results).  Related comments in FLEX.config.
 		*/
 			
-			FLEX.loadPlugin( req.sql, "app."+req.table, req.query, function (ctx) {
+			FLEX.getPlugin( req.sql, "app."+req.table, req.query, function (ctx) {
 				
-				if (ctx) 
+				if (ctx) {
+					Copy(ctx,req.query);
+					
 					if ( ctx.Job )
 						res( null, null, ctx );
 
@@ -309,6 +334,7 @@ var
 						FLEX.runEngine(req, function (rtn) {
 							res( null, rtn, ctx );
 						});
+				}
 					
 				else
 					res( FLEX.errors.noCase );
@@ -4921,6 +4947,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode]; // sampler
 		
+	Log("randpr gm", Mix);
+	
 	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
 		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			Log([k, floor(k / 20), k % 20, mix, Deltas]);
@@ -4935,6 +4963,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
 		});
 
+	Log("call ran", ctx.Ensemble, ctx.Steps);
+	
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
@@ -4944,6 +4974,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
+		events: ctx.Events,  // event feed callback
 		filter: function (str, ev) {  // retain only step info			
 			switch ( ev.at ) {
 				case "step":
