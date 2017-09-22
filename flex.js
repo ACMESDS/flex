@@ -415,7 +415,6 @@ var
 		},
 		
 		plugins: { //< Plugins defined on config()
-			get: get,
 			news: news,
 			xss: xss,		
 			sss: sss,
@@ -4963,8 +4962,6 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
 		});
 
-	Log("call ran", ctx.Ensemble, ctx.Steps);
-	
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process switch
@@ -4974,7 +4971,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
-		events: ctx.Events,  // event feed callback
+		events: ctx.Job,
+		evget: ctx.getEvents,
 		filter: function (str, ev) {  // retain only step info			
 			switch ( ev.at ) {
 				case "step":
@@ -5027,6 +5025,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 					break;
 					
 				default:
+					Log(ev);
 					str.push(ev);
 			}
 		}  // on-event callbacks
@@ -5043,19 +5042,6 @@ function res1pr(ctx,res) {
 }
 
 function res2pr(ctx,res) {
-}
-
-function get(ctx, res) {
-	FLEX.thread( function (sql) {
-		sql.query(ctx.where
-			? "SELECT * FROM ??.?? WHERE least(?,1)"
-			: "SELECT * FROM ??.??"
-				  [ "app", ctx.ds, ctx.where ], 
-				  function (err,recs) {
-			
-					res( err ? [] : recs );
-		});
-	});
 }
 
 function Trace(msg,sql) {
