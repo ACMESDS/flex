@@ -261,7 +261,7 @@ var
 						//Log(key, key.indexOf("Save") );
 						if ( key.indexOf("Save")<0 )
 							try { 
-								ctx[key] = JSON.parse( ctx[key] ); 
+								ctx[key] = JSON.parse( ctx[key].replace(/<br>/g,"") ); 
 							}
 
 							catch (err) {
@@ -659,7 +659,6 @@ var
 					email.PASS = parts[1];
 
 					if (email.TX.PORT) {  		// Establish server's email transport
-
 						Trace(`MAILHOST ${email.TX.HOST} ON port-${email.TX.PORT}`);
 
 						email.TX.TRAN = email.USER
@@ -677,6 +676,8 @@ var
 							});
 
 					}
+					else
+						email.TX = {};
 
 					if (email.RX.PORT)
 						email.RX.TRAN = new IMAP({
@@ -688,6 +689,8 @@ var
 							  //debug: function (err) { console.warn(ME+">"+err); } ,
 							  connTimeout: 10000
 							});
+					else
+						email.RX = {};
 
 					if (email.RX.TRAN)					// Establish server's email inbox			
 						openIMAP(function(err, mailbox) {
