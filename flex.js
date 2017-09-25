@@ -146,6 +146,23 @@ var
 			counts: {State:""}
 		},
 
+		batchEvents: function (evs,maxbuf,maxstep,cb) {
+			Log("batch events", maxbuf, maxstep, evs.length);
+			var pos = 0, evbatch = [], t=0;
+
+			while ( ev = evs[pos++] ) 
+				if (ev.t - t > maxstep  || evbatch.length == maxbuf) {
+					t = cb( evbatch ); evbatch = [ev];
+				}
+
+				else
+					evbatch.push (ev );
+
+			if ( evbatch.length ) cb( evbatch );
+
+			cb(null);
+		},
+		
 		// CRUDE interface
 		select: {ds: queryDS}, 
 		delete: {ds: queryDS}, 
@@ -4949,7 +4966,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Log("randpr gm", Mix);
 	
 	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
-		Mix.each(function (k,mix) {  // scale mix mu,sigma to voxel dimensions
+		Mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			Log([k, floor(k / 20), k % 20, mix, Deltas]);
 
 			offsetvec( scalevec(mix.mu,Deltas), [
@@ -4964,70 +4981,78 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 	var ran = new RAN({ // configure the random process generator
 		N: ctx.Ensemble,  // ensemble size
+		K: ctx.States,	// number of states (realtime mode)
 		wiener: ctx.Wiener,  // wiener process switch
-		P: ctx.TxPrs, // state transition probs
+		P: ctx.TxPrs, // state transition probs (simulation mode)
 		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
-		batch: ctx.Batch, // batch size in steps
-		events: ctx.Job,
-		evget: ctx.getEvents,
-		filter: function (str, ev) {  // retain only step info			
-			switch ( ev.at ) {
-				case "step":
-					if (walking) {
-						var ev = { 
-							at: ev.at,
-							t: ran.t 
-						};
-
-						ran.WU.each(function (id, state) {
-							ev["walk"+id] = state;
-						});
+		batch: ctx.Batch, // batch size in steps for realtime mode
+		events: ctx.Events,  // event getter in realtime mode
+		filter: function (str, ev, realtime) {  // retain selected onEvent info
+			if ( realtime )   // realtime mode
+				switch ( ev.at ) {
+					case "end":
+					case "batch":
 						str.push(ev);
-					}
-					else
-						ran.U.each( function (id, state) {
+				}
+						
+			else 		// simulation model
+				switch ( ev.at ) {
+					case "step":
+						if (walking) {
+							var ev = { 
+								at: ev.at,
+								t: ran.t 
+							};
 
-							if (mixing) {
-								var 
-									mix = floor(rand() * mixes),  // mixing index
-									us = sampler(mix);  // mixing sample
+							ran.WU.each(function (id, state) {
+								ev["walk"+id] = state;
+							});
+							str.push(ev);
+						}
+						else
+							ran.U.each( function (id, state) {
 
-								str.push({ 
-									at: ev.at,
-									t: ran.t, // time sampled
-									u: state,   // state occupied
-									m: mix, // gauss mix drawn from
-									f: mode, // process family
-									n: id, 	// unique identifier
-									x: us[0],  	// lat
-									y: us[1],  	// lon
-									z: us[2] 	// alt
-								});
-							}
+								if (mixing) {
+									var 
+										mix = floor(rand() * mixes),  // mixing index
+										us = sampler(mix);  // mixing sample
 
-							else
-								str.push({ 
-									at: ev.at,
-									t: ran.t, // time sampled
-									u: state,   // state occupied
-									n: id 	// unique identifier
-								});	
+									str.push({ 
+										at: ev.at,
+										t: ran.t, // time sampled
+										u: state,   // state occupied
+										m: mix, // gauss mix drawn from
+										f: mode, // process family
+										n: id, 	// unique identifier
+										x: us[0],  	// lat
+										y: us[1],  	// lon
+										z: us[2] 	// alt
+									});
+								}
 
-						});
-					
-					break;
-					
-				case "batch":
-					str.push(ev);
-					break;
-					
-				default:
-					Log(ev);
-					str.push(ev);
-			}
+								else
+									str.push({ 
+										at: ev.at,
+										t: ran.t, // time sampled
+										u: state,   // state occupied
+										n: id 	// unique identifier
+									});	
+
+							});
+
+						break;
+
+					case "batch":
+						str.push(ev);
+						break;
+
+					default:
+						str.push(ev);
+				}
+			
 		}  // on-event callbacks
 	});
 	
