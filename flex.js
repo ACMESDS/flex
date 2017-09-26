@@ -38,7 +38,7 @@ var 									// 3rd party bindings
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
 	ENGINE = require("engine"), 		// tauif simulation engines
-	RAN = require("randpr"), 		// random process
+	RAND = require("randpr"), 		// random process
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
@@ -203,55 +203,65 @@ var
 			});
 		},
 		
-		getPlugins: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
+		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			sql.eachTable( group, function (table) { 
-				ENGINE.getEngine( sql, group, table, function (eng) {
-					if (eng)
-						FLEX.getPlugin( sql, group+"."+table, where, function (ctx) {
-							if (ctx)
-								cb( eng, ctx );
-						});
-				});
+				ENGINE.getEngine( sql, group, table, cb);
 			});
 		},
 		
-		taskPlugins: function ( sql, group, job, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
-			
-			FLEX.getPlugins( sql, group, {Name:"ingest"}, function (eng,ctx) {
-				var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
-				
-				Object.keys(ctx).each( function (n,key) { // look for Job key
-					var keyesc = "`" + key.Field + "`";
-					switch (key.Field) {
-						case "Save":
-							break;
-						case "Job":
-							hasJob = true;
-						case "Name":
-							srckeys.push("? AS "+keyesc);
-							tarkeys.push(keyesc);
-							break;
-						default:
-							srckeys.push(keyesc);
-							tarkeys.push(keyesc);
-					}
-				});
-
-				if (hasJob) 
-					sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
-						"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE ID=?", [
-							group, pluginName,
-							"ingest " + new Date(),
-							JSON.stringify(job),
-							group, pluginName,
-							ctx.ID
-					], function (err, info) {
-						if ( !err ) cb( info.insertId, pluginName );
+		eachUsecase: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
+			FLEX.eachPlugin( sql, group, function (eng) {
+				if (eng)
+					FLEX.eachContext( sql, group+"."+table, where, function (ctx) {
+						if (ctx)
+							cb( eng, ctx );
 					});
 			});
 		},
 		
-		getPlugin: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
+		taskPlugins: function ( sql, group, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
+			
+			if (false) // clone Name="ingest" mode
+				FLEX.eachUsecase( sql, group, {Name:"ingest"}, function (eng,ctx) {
+					var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
+
+					Object.keys(ctx).each( function (n,key) { // look for Job key
+						var keyesc = "`" + key.Field + "`";
+						switch (key.Field) {
+							case "Save":
+								break;
+							case "Job":
+								hasJob = true;
+							case "Name":
+								srckeys.push("? AS "+keyesc);
+								tarkeys.push(keyesc);
+								break;
+							default:
+								srckeys.push(keyesc);
+								tarkeys.push(keyesc);
+						}
+					});
+
+					if (hasJob) 
+						sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
+							"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE ID=?", [
+								group, pluginName,
+								"ingest " + new Date(),
+								JSON.stringify(job),
+								group, pluginName,
+								ctx.ID
+						], function (err, info) {
+							if ( !err ) cb( info.insertId, pluginName );
+						});
+				});
+			
+			else 
+				FLEX.eachPlugin( sql, group, function (eng) {
+					if (eng) cb( 0, eng.Name );
+				});
+		},
+		
+		eachContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
 			sql.query("SELECT * FROM ?? WHERE least(?,1)", [ds,where])
 			.on("result", function (ctx) {
@@ -327,7 +337,7 @@ var
 		responds with res(results).  Related comments in FLEX.config.
 		*/
 			
-			FLEX.getPlugin( req.sql, "app."+req.table, req.query, function (ctx) {
+			FLEX.eachContext( req.sql, "app."+req.table, req.query, function (ctx) {
 				
 				if (ctx) {
 					Copy(ctx,req.query);
@@ -4819,7 +4829,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 	});
 
 	var 
-		gmms = obs.gmms = RAN.MLE(evlist, Mixes),
+		gmms = obs.gmms = RAND.MLE(evlist, Mixes),
 		refs = obs.refs = {};
 
 	if (false && Refs)  {  // requesting a ref check
@@ -4859,7 +4869,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	Mix = [ {mu, covar}, .... ] = desired process stats
 	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
 	Symbols: [sym, ...] = (K) state symboles || null to generate
-	Ensemble = numer in process ensemble
+	Members = numer in process ensemble
 	Wiener = switch to enable wiener process
 	Nyquist = over sampling factor
 	Steps = number of process steps	
@@ -4931,15 +4941,15 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 			wi: function (u) {  // wiener (need to vectorize)
 				var 
-					t = RAN.s, 
-					Wt = RAN.W[0];
+					t = RAND.s, 
+					Wt = RAND.W[0];
 
 				return mu + sigma * Wt;
 			},
 
 			oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
 				var 
-					t = RAN.s, 
+					t = RAND.s, 
 					Et = exp(-theta*t),
 					Et2 = exp(2*theta*t),
 					Wt = ooW[floor(Et2 - 1)] || 0;
@@ -4953,8 +4963,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 			br: function (u) { // geometric brownian (need to vectorize)
 				var 
-					t = RAN.s, 
-					Wt = RAN.WQ[0];
+					t = RAND.s, 
+					Wt = RAND.WQ[0];
 
 				return exp( (mu-a.br)*t + sigma*Wt );
 			},
@@ -4979,11 +4989,11 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			]);  
 			for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
 
-			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
+			mvd.push( RAND.MVN( mix.mu, mix.sigma ) );
 		});
 
-	var ran = new RAN({ // configure the random process generator
-		N: ctx.Ensemble,  // ensemble size
+	var ran = new RAND({ // configure the random process generator
+		N: ctx.Members,  // ensemble size
 		K: ctx.States,	// number of states (realtime mode)
 		wiener: ctx.Wiener,  // wiener process switch
 		P: ctx.TxPrs, // state transition probs (simulation mode)
