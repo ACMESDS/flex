@@ -251,13 +251,13 @@ var
 								group, pluginName,
 								ctx.ID
 						], function (err, info) {
-							if ( !err ) cb( info.insertId, pluginName );
+							if ( !err ) cb( pluginName, info.insertId );
 						});
 				});
 			
 			else 
 				FLEX.eachPlugin( sql, group, function (eng) {
-					if (eng) cb( 0, eng.Name );
+					if (eng) cb( eng.Name );
 				});
 		},
 		
@@ -4941,15 +4941,15 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 			wi: function (u) {  // wiener (need to vectorize)
 				var 
-					t = RAND.s, 
-					Wt = RAND.W[0];
+					t = ran.s, 
+					Wt = ran.W[0];
 
 				return mu + sigma * Wt;
 			},
 
 			oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
 				var 
-					t = RAND.s, 
+					t = ran.s, 
 					Et = exp(-theta*t),
 					Et2 = exp(2*theta*t),
 					Wt = ooW[floor(Et2 - 1)] || 0;
@@ -4963,8 +4963,8 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 
 			br: function (u) { // geometric brownian (need to vectorize)
 				var 
-					t = RAND.s, 
-					Wt = RAND.WQ[0];
+					t = ran.s, 
+					Wt = ran.WQ[0];
 
 				return exp( (mu-a.br)*t + sigma*Wt );
 			},
@@ -5015,30 +5015,36 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 				switch ( ev.at ) {
 					case "step":
 						if (walking) {
-							var ev = { 
-								at: ev.at,
-								t: ran.t 
-							};
+							var 
+								ev = { 
+									at: ev.at,
+									t: ran.t,
+									u: 0,
+									n: 0
+								},
+								lab = ["x","y","z"];								
 
 							ran.WU.each(function (id, state) {
-								ev["walk"+id] = state;
+								ev[ lab[id] || ("w"+id) ] = state;
 							});
+
 							str.push(ev);
 						}
+						
 						else
 							ran.U.each( function (id, state) {
 
 								if (mixing) {
 									var 
-										mix = floor(rand() * mixes),  // mixing index
+										mix = state, // floor(rand() * mixes),  // mixing index
 										us = sampler(mix);  // mixing sample
 
 									str.push({ 
 										at: ev.at,
 										t: ran.t, // time sampled
 										u: state,   // state occupied
-										m: mix, // gauss mix drawn from
-										f: mode, // process family
+										//m: mix, // gauss mix drawn from
+										//f: mode, // process family
 										n: id, 	// unique identifier
 										x: us[0],  	// lat
 										y: us[1],  	// lon
