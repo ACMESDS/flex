@@ -205,7 +205,9 @@ var
 		
 		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			sql.eachTable( group, function (table) { 
-				ENGINE.getEngine( sql, group, table, cb);
+				ENGINE.getEngine( sql, group, table, function (eng) {
+					if (eng) cb(eng);
+				});
 			});
 		},
 		
@@ -213,8 +215,7 @@ var
 			FLEX.eachPlugin( sql, group, function (eng) {
 				if (eng)
 					FLEX.eachContext( sql, group+"."+table, where, function (ctx) {
-						if (ctx)
-							cb( eng, ctx );
+						if (ctx) cb( eng, ctx );
 					});
 			});
 		},
@@ -273,7 +274,7 @@ var
 						//Log(key, key.indexOf("Save") );
 						if ( key.indexOf("Save")<0 )
 							try { 
-								ctx[key] = JSON.parse( ctx[key].replace(/<br>/g,"") ); 
+								ctx[key] = JSON.parse( (ctx[key] || "null").replace(/<br>/g,"") ); 
 							}
 
 							catch (err) {
@@ -1116,7 +1117,7 @@ FLEX.delete.files = function Xselect(req,res) {
 	sql.eachRec("SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
-	}, function (err, file, isLast) {
+	}, function (err, file) {
 		
 		if (file)  {
 			var 
@@ -1127,7 +1128,7 @@ FLEX.delete.files = function Xselect(req,res) {
 				arch = `${pub}/${path}`,
 				zip = `${arch}.zip`;
 				
-			CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push gitlab master; rm ${zip}`, function (err) {
+			CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
 			CP.exec(`rm ${arch}`, function (err) {
 				//sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
 
@@ -1138,6 +1139,32 @@ FLEX.delete.files = function Xselect(req,res) {
 						file.Size, {Client: req.client} 
 				]);
 			});
+			});
+		}
+	});
+	
+}
+
+FLEX.execute.files = function Xselect(req,res) {
+	var sql = req.sql, query = req.query;
+
+	res( SUBMITTED );
+	
+	sql.eachRec("SELECT * FROM app.files WHERE least(?,1)", {
+		ID:query.ID,
+		Client: req.client
+	}, function (err, file) {
+		
+		if (file)  {
+			var 
+				area = file.Area,
+				name = file.Name,
+				path = `${area}/${name}`,
+				pub = "./public",
+				arch = `${pub}/${path}`,
+				zip = `*.zip`;
+				
+			CP.exec(`git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
 			});
 		}
 	});
@@ -4912,7 +4939,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			});
 	} */
 
-	Log({randpr_mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
+	Log({randpr_mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:ctx.States });
 
 	var
 		mvd = [], 	// multivariate distribution parms
@@ -4975,7 +5002,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		},  // samplers
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode], // sampler
-		states = ctx.TxPrs.length,
+		states = ctx.States || ctx.TxPrs.length,
 		dims = mix.dims || [1,1,1],
 		mus = [],
 		sigs = [],
@@ -4993,7 +5020,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			mvd.push( RAND.MVN( mu, sig ) );
 		}
 
-	//Log( states, {mu:mus,sig:sigs} );
+	Log( states, {mu:mus,sig:sigs}, walking, mixing, ctx.Wiener, ctx.Members,ctx.States,ctx.TxPrs,ctx.Nyquist,ctx.Steps,ctx.Batch );
 		/*
 		mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			//Log([k, floor(k / 20), k % 20, mix, dims]);
@@ -5008,11 +5035,12 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			mvd.push( RAND.MVN( mix.mu, mix.sigma ) );
 		});
 		*/
-
+	// [{"mu":[0,0,0],"sigma":[[0.9,0.4,0],[0.4,0.7,0],[0,0,0.1]]}, {"mu":[0.3,0.5,0], "sigma":[[0.8,0.2,0],[0.2,0.8,0],[0,0,0.1]]}]
+	
 	var ran = new RAND({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
 		K: ctx.States,	// number of states (realtime mode)
-		wiener: ctx.Wiener,  // wiener process switch
+		wiener: ctx.Wiener ? 10 : 0,  // wiener process switch
 		P: ctx.TxPrs, // state transition probs (simulation mode)
 		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
@@ -5049,6 +5077,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 							});
 
 							str.push(ev);
+							//Log(ev);
 						}
 						
 						else
@@ -5069,6 +5098,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 										y: us[1],  	// lon
 										z: us[2] 	// alt
 									});
+									//Log(ev);
 								}
 
 								else
