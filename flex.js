@@ -219,9 +219,10 @@ var
 			});
 		},
 		
+		/*
 		taskPlugins: function ( sql, group, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
 			
-			if (false) // clone Name="ingest" mode
+			if (false) // legacy - clone Name="ingest" mode
 				FLEX.eachUsecase( sql, group, {Name:"ingest"}, function (eng,ctx) {
 					var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
 
@@ -260,6 +261,7 @@ var
 					if (eng) cb( eng.Name );
 				});
 		},
+		*/
 		
 		eachContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
@@ -4863,15 +4865,13 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 
 function randpr(ctx,res) {
 /* 
-Respond with random [ {x,y,...}, ...] process given ctx parameters:
-	Offsets = [x,y,z] = voxel offsets
-	Deltas = [x,y,z] = voxel dimensions
-	Mix = [ {mu, covar}, .... ] = desired process stats
+Return random [ {x,y,...}, ...] for ctx parameters:
+	Mix = [ {mu, sigma, dims}, .... ] = desired mixing parms
 	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
 	Symbols: [sym, ...] = (K) state symboles || null to generate
-	Members = numer in process ensemble
-	Wiener = switch to enable wiener process
-	Nyquist = over sampling factor
+	Members = number in process ensemble
+	Wiener = number of wiener processes
+	Nyquist = process over-sampling factor
 	Steps = number of process steps	
 */
 
@@ -4880,22 +4880,20 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 	}
 
 	function scalevec(x,a) {
-		for (var n=0;n<mixdim; n++) x[n] *= a[n];
+		for (var n=0;n<3; n++) x[n] *= a[n];
 		return x;
 	}
 
 	function offsetvec(x,y) {
-		for (var n=0; n<mixdim; n++) x[n] += y[n];
+		for (var n=0; n<3; n++) x[n] += y[n];
 		return x;
 	}
 
 	var 
 		Log = console.log,
-		Mix = ctx.Mix,
-		Deltas = ctx.Deltas,
-		Offsets = ctx.Offsets,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
+	/*
 	if (!Mix) Mix = [];
 	
 	else
@@ -4912,28 +4910,30 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 				mu: [randint(a), randint(a), randint(a)],
 				sigma: [[xx,xy,0],[yx,yy,0],[0,0,zz]]
 			});
-	}
+	} */
 
-	Log({randpr_mix:Mix,txpr:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
+	Log({randpr_mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch});
 
 	var
 		mvd = [], 	// multivariate distribution parms
 		ooW = [], // wiener/oo process look ahead
-		mixes = Mix.length,	// number of mixes
-		mixing = mixes > 0, // we are mixing
-		walking = ctx.Wiener ? true : false, // random walking
-		mixdim = mixing ? Mix[0].mu.length : 0, // mixing dim
-		mode = mixes ? parseFloat(Mix[0].theta) ? "oo" : Mix[0].theta || "gm" : "na",  // Process mode
-		mix0 = Mix[0] || {},  // wiener/oo parms (using Mix[0] now)
-		mu = mix0.mu,	// mean 
-		sigma = mix0.sigma,  // covariance
-		theta = mix0.theta,  	// oo time lag
-		x0 = mix0.x0, 		// oo initial pos
+		
+		mix = ctx.Mix || {},
+		mixing = ctx.Mix ? true : false,
+		
+		walking = ctx.Wiener ? true : false, // random walking		
+		mode = mixing ? parseFloat(mix.theta) ? "oo" : mix.theta || "gm" : "na",  // Process mode
+
+		mu0 = mix.mu,	// mean 
+		sigma0 = mix.sigma,  // covariance
+		theta0 = mix.theta,  	// oo time lag
+		x0 = mix.x0, 		// oo initial pos
+		
 		a = {  // process fixed parms
 			wi: 0,
 			gm: 0,
-			br: sigma*sigma / 2,
-			oo: sigma / sqrt(2*theta)
+			br: sigma0 * sigma0 / 2,
+			oo: sigma0 / sqrt(2*theta0)
 		},  		// sampler constants
 		samplers = {  // sampling methods for specified mix index
 			na: function (u) {  // ignore
@@ -4944,14 +4944,14 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 					t = ran.s, 
 					Wt = ran.W[0];
 
-				return mu + sigma * Wt;
+				return mu0 + sigma0 * Wt;
 			},
 
 			oo: function (u) {  // ornstein-uhlenbeck (need to vectorize)
 				var 
 					t = ran.s, 
-					Et = exp(-theta*t),
-					Et2 = exp(2*theta*t),
+					Et = exp(-theta0*t),
+					Et2 = exp(2*theta0*t),
 					Wt = ooW[floor(Et2 - 1)] || 0;
 
 				ooW.push( WQ[0] );
@@ -4966,7 +4966,7 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 					t = ran.s, 
 					Wt = ran.WQ[0];
 
-				return exp( (mu-a.br)*t + sigma*Wt );
+				return exp( (mu0-a.br)*t + sigma0*Wt );
 			},
 
 			gm: function (u) {  // mixed gaussian (vectorized)
@@ -4974,23 +4974,40 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 			}
 		},  // samplers
 		labels = ["x","y","z"], // vector sample labels
-		sampler = samplers[mode]; // sampler
+		sampler = samplers[mode], // sampler
+		states = ctx.TxPrs.length,
+		dims = mix.dims || [1,1,1],
+		mus = [],
+		sigs = [],
+		sigma = mix.sigma || [ [[0.4, 0.3, 0], [0.3, 0.8, 0], [0, 0, 1]] ],
+		sigmas = sigma.length;
 		
-	Log("randpr gm", Mix);
-	
-	if (mode == "gm")  // config MVNs and mixing offsets (eg voxels) for gauss mixes
-		Mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
-			Log([k, floor(k / 20), k % 20, mix, Deltas]);
+	if ( mixing ) 
+		for (var k=0; k<states; k++) {
+			var 
+				mu = scalevec( [rand(),rand(),rand()] , dims ),
+				sig = sigma[ k % sigmas ];
+			
+			mus.push( mu );
+			sigs.push( sig );
+			mvd.push( RAND.MVN( mu, sig ) );
+		}
 
-			offsetvec( scalevec(mix.mu,Deltas), [
-				floor(k / 20) * Deltas[0] + Offsets[0],
-				(k % 20) * Deltas[1] + Offsets[1],
+	//Log( states, {mu:mus,sig:sigs} );
+		/*
+		mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
+			//Log([k, floor(k / 20), k % 20, mix, dims]);
+
+			offsetvec( scalevec( mix.mu, dims), [
+				floor(k / 20) * dims[0] + Offsets[0],
+				(k % 20) * dims[1] + Offsets[1],
 				mix.mu[2] + Offsets[2]
 			]);  
-			for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], Deltas );
+			//for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], dims );
 
 			mvd.push( RAND.MVN( mix.mu, mix.sigma ) );
 		});
+		*/
 
 	var ran = new RAND({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
@@ -5013,19 +5030,22 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 						
 			else 		// simulation model
 				switch ( ev.at ) {
+					case "config":
+						Copy({mu: mus, sigma:sigs}, ev);
+						str.push(ev);
+						break;
+						
 					case "step":
 						if (walking) {
-							var 
-								ev = { 
+							var ev = { 
 									at: ev.at,
 									t: ran.t,
 									u: 0,
 									n: 0
-								},
-								lab = ["x","y","z"];								
+								};
 
 							ran.WU.each(function (id, state) {
-								ev[ lab[id] || ("w"+id) ] = state;
+								ev[ labels[id] || ("w"+id) ] = state;
 							});
 
 							str.push(ev);
@@ -5033,7 +5053,6 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 						
 						else
 							ran.U.each( function (id, state) {
-
 								if (mixing) {
 									var 
 										mix = state, // floor(rand() * mixes),  // mixing index
@@ -5059,7 +5078,6 @@ Respond with random [ {x,y,...}, ...] process given ctx parameters:
 										u: state,   // state occupied
 										n: id 	// unique identifier
 									});	
-
 							});
 
 						break;
