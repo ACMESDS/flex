@@ -4943,7 +4943,6 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 
 	var
 		mvd = [], 	// multivariate distribution parms
-		ooW = [], // wiener/oo process look ahead
 		
 		mix = ctx.Mix || {},
 		mixing = ctx.Mix ? true : false,
@@ -4955,6 +4954,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		sigma0 = mix.sigma,  // covariance
 		theta0 = mix.theta,  	// oo time lag
 		x0 = mix.x0, 		// oo initial pos
+		ooW = [], // wiener/oo process look ahead
 		
 		a = {  // process fixed parms
 			wi: 0,
@@ -5004,6 +5004,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		sampler = samplers[mode], // sampler
 		states = ctx.States || ctx.TxPrs.length,
 		dims = mix.dims || [1,1,1],
+		offs = mix.offs || [0,0,0],
 		mus = [],
 		sigs = [],
 		sigma = mix.sigma || [ [[0.4, 0.3, 0], [0.3, 0.8, 0], [0, 0, 1]] ],
@@ -5012,7 +5013,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	if ( mixing ) 
 		for (var k=0; k<states; k++) {
 			var 
-				mu = scalevec( [rand(),rand(),rand()] , dims ),
+				mu = offsetvec( scalevec( [rand(),rand(),rand()] , dims ), offs ),
 				sig = sigma[ k % sigmas ];
 			
 			mus.push( mu );
@@ -5040,7 +5041,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	var ran = new RAND({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
 		K: ctx.States,	// number of states (realtime mode)
-		wiener: ctx.Wiener ? 10 : 0,  // wiener process switch
+		wiener: ctx.Wiener,  // wiener process steps
 		P: ctx.TxPrs, // state transition probs (simulation mode)
 		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
