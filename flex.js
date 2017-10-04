@@ -450,10 +450,9 @@ var
 			sss: sss,
 			wms: wms,
 			wfs: wfs,
-			gaussmix: gaussmix,
-			randpr: randpr,
-			res1: res1pr,
-			res2: res2pr
+			estmix: estmix,
+			genpr: genpr,
+			estpr: estpr
 		},
 		
 		viaAgent: function( req, res ) {  //< method to out-source a plugin
@@ -4817,24 +4816,21 @@ Respond with ess-compatible image catalog to induce image-spoofing in the chippe
 	});
 }
 
-function gaussmix(ctx,res) {
+function estmix(ctx,res) {
 /*
 Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
 	Mixes = number of mixed to attempt to find
 	Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
-	events = [ {x, y, z, t, n, ...}, ... ] events within current voxel
-	scenario = { ID, atmpres, ... } voxel attributes
-	obs = { ... } return voxel stats/observations
+	Events = event getter (maxbuf,maxstep,cb(evs))
+	Batch = max batch size in samples
 */
 
 	var 
 		Log = console.log,
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
-		obs = ctx.obs,
-		evs = ctx.events,
-		sco = ctx.scenario,	
-		evlist = [];
+		Events = ctx.Events,
+		Batch = ctx.Batch;
 
 	function dist(a,b) { 
 		var d = [ a[0]-b[0], a[1]-b[1] ];
@@ -4851,55 +4847,64 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		return {idx: imin, err: emin};
 	}
 
-	Log({guassmix:{mixes:Mixes, refs:Refs,evs:evs.length,sco:sco}});
-	
-	evs.each( function (n,ev) {
-		evlist.push( [ev.x,ev.y,ev.z] );
+	Log(Mixes, Refs, Batch, Events);
+
+	Events(Batch, Infinity, function (evs) {
+		
+		var evlist = [];
+		Log("gotevs",evs.length);
+		
+		evs.each( function (n,ev) {
+			evlist.push( [ev.x,ev.y,ev.z] );
+		});
+
+		var 
+			obs = {},  // mixing observations
+			gmms = obs.gmms = RAND.MLE(evlist, Mixes),
+			refs = obs.refs = {};
+
+		Log(gmms);
+		
+		if (Refs)  {  // requesting a ref check
+			gmms.each( function (k,gmm) {  // find nearest ref event
+				gmm.find = Refs.nearestOf( function (ctx) {
+					return dist( Refs, gmm.mu );
+				});
+			});
+
+			gmms.sort( function (a,b) {  // sort em by indexes
+				return a.find.idx < b.find.idx ? 1 : -1;
+			});
+
+			gmms.each(function (n,gmm) {    // save ref checks
+				refs.push({
+					cellIndex: gmm.find.idx,
+					cellType: "mle",
+					cellError: gmm.find.err * 100
+					/*cellParms: JSON.stringify({
+						mu: gmm.mu,
+						sigma: gmm.sigma
+					})*/
+				});
+			});
+		}
+
+		Log({shipstats:JSON.stringify(obs)});
+		res(obs);  //ship it
 	});
-
-	var 
-		gmms = obs.gmms = RAND.MLE(evlist, Mixes),
-		refs = obs.refs = {};
-
-	if (false && Refs)  {  // requesting a ref check
-		gmms.each( function (k,gmm) {  // find nearest ref event
-			gmm.find = Refs.nearestOf( function (ctx) {
-				return dist( Refs, gmm.mu );
-			});
-		});
-
-		gmms.sort( function (a,b) {  // sort em by indexes
-			return a.find.idx < b.find.idx ? 1 : -1;
-		});
-
-		gmms.each(function (n,gmm) {    // save ref checks
-			refs.push({
-				cellIndex: gmm.find.idx,
-				cellType: "mle",
-				cellError: gmm.find.err * 100
-				/*cellParms: JSON.stringify({
-					mu: gmm.mu,
-					sigma: gmm.sigma
-				})*/
-			});
-		});
-	}
-
-	Log({shipstats:JSON.stringify(obs)});
-	res(obs);  //ship it
-
 }
 
-function randpr(ctx,res) {
+function genpr(ctx,res) {
 /* 
 Return random [ {x,y,...}, ...] for ctx parameters:
 	Mix = [ {mu, sigma, dims}, .... ] = desired mixing parms
 	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
 	Symbols: [sym, ...] = (K) state symboles || null to generate
 	Members = number in process ensemble
-	Wiener = number of wiener processes
+	Wiener = number of wiener processes; 0 disables
 	Nyquist = process over-sampling factor
 	Steps = number of process steps	
+	Batch = batch size in steps
 */
 
 	function randint(a) {
@@ -4938,8 +4943,6 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 				sigma: [[xx,xy,0],[yx,yy,0],[0,0,zz]]
 			});
 	} */
-
-	Log({randpr_mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:ctx.States });
 
 	var
 		mvd = [], 	// multivariate distribution parms
@@ -5002,7 +5005,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		},  // samplers
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode], // sampler
-		states = ctx.States || ctx.TxPrs.length,
+		states = ctx.TxPrs.length,
 		dims = mix.dims || [1,1,1],
 		offs = mix.offs || [0,0,0],
 		mus = [],
@@ -5021,7 +5024,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			mvd.push( RAND.MVN( mu, sig ) );
 		}
 
-	Log( states, {mu:mus,sig:sigs}, walking, mixing, ctx.Wiener, ctx.Members,ctx.States,ctx.TxPrs,ctx.Nyquist,ctx.Steps,ctx.Batch );
+	Log({mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:states, mu:mus, sig:sigs});
 		/*
 		mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			//Log([k, floor(k / 20), k % 20, mix, dims]);
@@ -5040,86 +5043,76 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	
 	var ran = new RAND({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
-		K: ctx.States,	// number of states (realtime mode)
 		wiener: ctx.Wiener,  // wiener process steps
-		P: ctx.TxPrs, // state transition probs (simulation mode)
+		P: ctx.TxPrs, // state transition probs 
 		sym: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
-		batch: ctx.Batch, // batch size in steps for realtime mode
-		events: ctx.Events,  // event getter in realtime mode
-		filter: function (str, ev, realtime) {  // retain selected onEvent info
-			if ( realtime )   // realtime mode
-				switch ( ev.at ) {
-					case "end":
-					case "batch":
+		batch: ctx.Batch, // batch size in steps
+		filter: function (str, ev) {  // retain selected onEvent info
+			switch ( ev.at ) {
+				case "config":
+					Copy({mu: mus, sigma:sigs}, ev);
+					str.push(ev);
+					break;
+
+				case "step":
+					if (walking) {
+						var ev = { 
+								at: ev.at,
+								t: ran.t,
+								u: 0,
+								n: 0
+							};
+
+						ran.WU.each(function (id, state) {
+							ev[ labels[id] || ("w"+id) ] = state;
+						});
+
 						str.push(ev);
-				}
-						
-			else 		// simulation model
-				switch ( ev.at ) {
-					case "config":
-						Copy({mu: mus, sigma:sigs}, ev);
-						str.push(ev);
-						break;
-						
-					case "step":
-						if (walking) {
-							var ev = { 
+						//Log(ev);
+					}
+
+					else
+						ran.U.each( function (id, state) {
+							if (mixing) {
+								var 
+									mix = state, // floor(rand() * mixes),  // mixing index
+									us = sampler(mix);  // mixing sample
+
+								str.push({ 
 									at: ev.at,
-									t: ran.t,
-									u: 0,
-									n: 0
-								};
+									t: ran.t, // time sampled
+									u: state,   // state occupied
+									//m: mix, // gauss mix drawn from
+									//f: mode, // process family
+									n: id, 	// unique identifier
+									x: us[0],  	// lat
+									y: us[1],  	// lon
+									z: us[2] 	// alt
+								});
+								//Log(ev);
+							}
 
-							ran.WU.each(function (id, state) {
-								ev[ labels[id] || ("w"+id) ] = state;
-							});
+							else
+								str.push({ 
+									at: ev.at,
+									t: ran.t, // time sampled
+									u: state,   // state occupied
+									n: id 	// unique identifier
+								});	
+						});
 
-							str.push(ev);
-							//Log(ev);
-						}
-						
-						else
-							ran.U.each( function (id, state) {
-								if (mixing) {
-									var 
-										mix = state, // floor(rand() * mixes),  // mixing index
-										us = sampler(mix);  // mixing sample
+					break;
 
-									str.push({ 
-										at: ev.at,
-										t: ran.t, // time sampled
-										u: state,   // state occupied
-										//m: mix, // gauss mix drawn from
-										//f: mode, // process family
-										n: id, 	// unique identifier
-										x: us[0],  	// lat
-										y: us[1],  	// lon
-										z: us[2] 	// alt
-									});
-									//Log(ev);
-								}
+				case "batch":
+					str.push(ev);
+					break;
 
-								else
-									str.push({ 
-										at: ev.at,
-										t: ran.t, // time sampled
-										u: state,   // state occupied
-										n: id 	// unique identifier
-									});	
-							});
-
-						break;
-
-					case "batch":
-						str.push(ev);
-						break;
-
-					default:
-						str.push(ev);
-				}
+				default:
+					str.push(ev);
+			}
 			
 		}  // on-event callbacks
 	});
@@ -5131,10 +5124,46 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	
 }
 
-function res1pr(ctx,res) {
-}
+function estpr(ctx,res) {
+/* 
+Return random [ {x,y,...}, ...] for ctx parameters:
+	States = # of process states
+	Events = event getter (maxbuf, maxstep, cb(evs)); null enables forward direction
+	Symbols
+	Members
+	Wiener
+	Steps
+*/
 
-function res2pr(ctx,res) {
+	var 
+		Log = console.log,
+		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
+
+	Log(ctx);
+
+	var ran = new RAND({ // configure the random process generator
+		N: ctx.Members,  // ensemble size
+		wiener: ctx.Wiener,  // wiener process steps
+		sym: ctx.Symbols,  // state symbols
+		store: [], 	// use sync pipe() since we are running a web service
+		steps: ctx.Steps, // process steps
+		batch: ctx.Batch, // batch size in steps 
+		K: ctx.States,	// number of states (realtime mode)
+		events: ctx.Events,  // event getter (realtime mode)
+		filter: function (str, ev) {  // retain selected onEvent info
+			switch ( ev.at ) {
+				case "end":
+				case "batch":
+					str.push(ev);
+			}			
+		}  // on-event callbacks
+	});
+	
+	ran.pipe( [], function (evs) {
+		//Trace("Events generated "+evs.length);
+		res( evs );
+	}); 
+	
 }
 
 function Trace(msg,sql) {
