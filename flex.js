@@ -160,7 +160,7 @@ var
 
 			if ( evbatch.length ) cb( evbatch );
 
-			cb(null);
+			//cb(null);
 		},
 		
 		// CRUDE interface
@@ -340,8 +340,7 @@ var
 		responds with res(results).  Related comments in FLEX.config.
 		*/
 			
-			FLEX.eachContext( req.sql, "app."+req.table, req.query, function (ctx) {
-				
+			FLEX.eachContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
 				if (ctx) {
 					Copy(ctx,req.query);
 					
@@ -4903,7 +4902,7 @@ function genpr(ctx,res) {
 Return random [ {x,y,...}, ...] for ctx parameters:
 	Mix = [ {mu, sigma, dims}, .... ] = desired mixing parms
 	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
-	Symbols: [sym, ...] = (K) state symboles || null to generate
+	Symbols = [sym, ...] state symbols or null to generate
 	Members = number in process ensemble
 	Wiener = number of wiener processes; 0 disables
 	Nyquist = process over-sampling factor
@@ -5130,41 +5129,36 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 
 function estpr(ctx,res) {
 /* 
-Return random [ {x,y,...}, ...] for ctx parameters:
-	States = # of process states
-	Events = event getter (maxbuf, maxstep, cb(evs)); null enables forward direction
-	Symbols
-	Members
-	Wiener
-	Steps
+Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
+	Job = {Actors: mumber of members participating in process, Steps: number of time steps, States: number of states consumed by process}
+	Events = event getter (maxbuf, maxstep, cb(evs))
+	Symbols = [sym, ...] state symbols or null to generate
+	Batch = batch size in steps
 */
 
 	var 
 		Log = console.log,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
-	Log(ctx);
-
-	var ran = new RAND({ // configure the random process generator
-		N: ctx.Members,  // ensemble size
-		wiener: ctx.Wiener,  // wiener process steps
-		sym: ctx.Symbols,  // state symbols
-		store: [], 	// use sync pipe() since we are running a web service
-		steps: ctx.Steps, // process steps
-		batch: ctx.Batch, // batch size in steps 
-		K: ctx.States,	// number of states (realtime mode)
-		events: ctx.Events,  // event getter (realtime mode)
-		filter: function (str, ev) {  // retain selected onEvent info
-			switch ( ev.at ) {
-				case "end":
-				case "batch":
-					str.push(ev);
-			}			
-		}  // on-event callbacks
-	});
+	var 
+		ran = new RAND({ // configure the random process generator
+			N: ctx.Job.Actors,  // ensemble size
+			wiener: 0,  // wiener process steps
+			sym: ctx.Symbols,  // state symbols
+			store: [], 	// use sync pipe() since we are running a web service
+			steps: ctx.Job.Steps, // process steps
+			batch: ctx.Batch, // batch size in steps 
+			K: ctx.Job.States,	// number of states (realtime mode)
+			events: ctx.Events,  // event getter (realtime mode)
+			filter: function (str, ev) {  // retain selected onEvent info
+				switch ( ev.at ) {
+					case "end":
+						str.push(ev);
+				}			
+			}  // on-event callbacks
+		});
 	
 	ran.pipe( [], function (evs) {
-		//Trace("Events generated "+evs.length);
 		res( evs );
 	}); 
 	
