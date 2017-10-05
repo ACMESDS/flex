@@ -547,7 +547,11 @@ var
 					*/
 					hawkCatalog,
 					queryDS, 
-					flattenCatalog
+					flattenCatalog,
+					
+					beginBulk,
+					endBulk
+					
 					//hawkJobs
 				]);
 
@@ -5168,6 +5172,18 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 
 function Trace(msg,sql) {
 	ENUM.trace("X>",msg,sql);
+}
+
+function beginBulk() {
+	this.query("START TRANSACTION");
+	this.query("SET GLOBAL sync_binlog=0");
+	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=0");
+}
+
+function endBulk() {
+	this.query("COMMIT");
+	this.query("SET GLOBAL sync_binlog=1");
+	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
 }
 
 // UNCLASSIFIED
