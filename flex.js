@@ -147,7 +147,6 @@ var
 		},
 
 		batchEvents: function (evs,maxbuf,maxstep,cb) {
-			Log("batch events", maxbuf, maxstep, evs.length);
 			var pos = 0, evbatch = [], t=0;
 
 			while ( ev = evs[pos++] ) 
@@ -4833,7 +4832,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
 		Events = ctx.Events,
-		Batch = ctx.Batch;
+		Batch = 100000; //ctx.Batch;
 
 	function dist(a,b) { 
 		var d = [ a[0]-b[0], a[1]-b[1] ];
@@ -4850,40 +4849,35 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		return {idx: imin, err: emin};
 	}
 
-	Log(Mixes, Refs, Batch, Events);
-
 	Events(Batch, Infinity, function (evs) {
 		
 		var evlist = [];
-		Log("gotevs",evs.length);
+		//Log("mix evs", evs.length, Mixes);
 		
 		evs.each( function (n,ev) {
 			evlist.push( [ev.x,ev.y,ev.z] );
 		});
 
 		var 
-			obs = {},  // mixing observations
-			gmms = obs.gmms = RAND.MLE(evlist, Mixes),
-			refs = obs.refs = {};
+			obs = {at: "end", mles: RAND.MLE(evlist, Mixes), refs: Refs},
+			mles = obs.mles,
+			refs = obs.refs;
 
-		Log(gmms);
-		
-		if (Refs)  {  // requesting a ref check
-			gmms.each( function (k,gmm) {  // find nearest ref event
-				gmm.find = Refs.nearestOf( function (ctx) {
-					return dist( Refs, gmm.mu );
+		if (refs)  {  // requesting a ref check
+			mles.each( function (k,mle) {  // find nearest ref event
+				mle.find = refs.nearestOf( function (ctx) {
+					return dist( refs, mle.mu );
 				});
 			});
 
-			gmms.sort( function (a,b) {  // sort em by indexes
+			mles.sort( function (a,b) {  // sort em by indexes
 				return a.find.idx < b.find.idx ? 1 : -1;
 			});
 
-			gmms.each(function (n,gmm) {    // save ref checks
+			mles.each(function (n,mle) {    // save ref checks
 				refs.push({
-					cellIndex: gmm.find.idx,
-					cellType: "mle",
-					cellError: gmm.find.err * 100
+					idx: mle.find.idx,
+					err: mle.find.err 
 					/*cellParms: JSON.stringify({
 						mu: gmm.mu,
 						sigma: gmm.sigma
@@ -4892,8 +4886,13 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 			});
 		}
 
-		Log({shipstats:JSON.stringify(obs)});
-		res(obs);  //ship it
+		mles.each( function (n,mle) {
+			delete mle._gaussian;
+			delete mle._sinv;
+		});
+		
+		//Log({mixes:JSON.stringify(obs)});
+		res([obs]);  //ship it
 	});
 }
 
