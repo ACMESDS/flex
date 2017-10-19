@@ -379,7 +379,7 @@ var
 				dsquery = id ? {ID: id} : name ? {Name: name} : null;
 			
 			if (dsquery) 
-				sql.eachRec( 
+				sql.eachRecord( 
 					"SELECT * FROM ?? WHERE ? LIMIT 0,1", 
 					[dsname, dsquery],
 					function ( err, test, isLast ) {
@@ -1115,33 +1115,31 @@ FLEX.delete.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.eachRec("SELECT * FROM app.files WHERE least(?,1)", {
+	sql.eachRecord("SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
-	}, function (err, file) {
+	}, function (file) {
 		
-		if (file)  {
-			var 
-				area = file.Area,
-				name = file.Name,
-				path = `${area}/${name}`,
-				pub = "./public",
-				arch = `${pub}/${path}`,
-				zip = `${arch}.zip`;
-				
-			CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
-			CP.exec(`rm ${arch}`, function (err) {
-				//sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
+		var 
+			area = file.Area,
+			name = file.Name,
+			path = `${area}/${name}`,
+			pub = "./public",
+			arch = `${pub}/${path}`,
+			zip = `${arch}.zip`;
 
-				sql.query("UPDATE app.files SET State='archived' WHERE least(?)", {Area:file.Area, Name:file.Name});
-		
-				sql.query( // credit the client
-					"UPDATE openv.profiles SET useDisk=useDisk-? WHERE ?", [ 
-						file.Size, {Client: req.client} 
-				]);
-			});
-			});
-		}
+		CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
+		CP.exec(`rm ${arch}`, function (err) {
+			//sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
+
+			sql.query("UPDATE app.files SET State='archived' WHERE least(?)", {Area:file.Area, Name:file.Name});
+
+			sql.query( // credit the client
+				"UPDATE openv.profiles SET useDisk=useDisk-? WHERE ?", [ 
+					file.Size, {Client: req.client} 
+			]);
+		});
+		});
 	});
 	
 }
@@ -1151,23 +1149,21 @@ FLEX.execute.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.eachRec("SELECT * FROM app.files WHERE least(?,1)", {
+	sql.eachRecord("SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
-	}, function (err, file) {
+	}, function (file) {
 		
-		if (file)  {
-			var 
-				area = file.Area,
-				name = file.Name,
-				path = `${area}/${name}`,
-				pub = "./public",
-				arch = `${pub}/${path}`,
-				zip = `*.zip`;
-				
-			CP.exec(`git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
-			});
-		}
+		var 
+			area = file.Area,
+			name = file.Name,
+			path = `${area}/${name}`,
+			pub = "./public",
+			arch = `${pub}/${path}`,
+			zip = `*.zip`;
+
+		CP.exec(`git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
+		});
 	});
 	
 }
