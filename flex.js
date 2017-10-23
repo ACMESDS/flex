@@ -134,7 +134,7 @@ var
 			}
 		},
 		
-		txGroup: {  //< default table -> db.table translators
+		dbRoutes: {  //< default table -> db.table translators
 		},
 		
 		diag : {  // self diag parms
@@ -4539,7 +4539,7 @@ function queryDS(req, res) {
 	delete body.ID;
 
 	sql.context({ds: {
-			table:	(FLEX.txGroup[req.table] || req.group)+"."+req.table,
+			table:	(FLEX.dbRoutes[req.table] || req.group)+"."+req.table,
 			where:	flags.where || query,
 			res:	res,
 			order:	flags.sort,
