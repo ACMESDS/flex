@@ -265,10 +265,26 @@ var
 		
 		eachContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
+			function config(js, ctx) {
+				Log("config", js);
+				ctx.cor = function (N) {
+					Log("gen coridoor");
+				}
+				try {
+					VM.runInContext( js, VM.createContext(ctx)  );	
+				}
+				catch (err) {
+					Log(err);
+				}
+				//Log("ctx",ctx);
+			}
+			
 			sql.query("SELECT * FROM ?? WHERE least(?,1)", [ds,where])
 			.on("result", function (ctx) {
 				
-				sql.jsonKeys( ds, function (keys) {  // parse json keys
+				if ( ctx.Config ) config(ctx.Config.replace(/<br>/g,""), ctx);
+
+				sql.jsonKeys( ds, [], function (keys) {  // parse json keys
 					keys.each(function (n,key) {
 						//Log(key, key.indexOf("Save") );
 						if ( key.indexOf("Save")<0 )
@@ -4895,7 +4911,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 function genpr(ctx,res) {
 /* 
 Return random [ {x,y,...}, ...] for ctx parameters:
-	Mix = [ {mu, sigma, dims}, .... ] = desired mixing parms
+	Mix = [ {dims, offs}, .... ] = desired mixing parms
 	TxPrs = [ [rate, ...], ... ] = (KxK) from-to state transition probs
 	Symbols = [sym, ...] state symbols or null to generate
 	Members = number in process ensemble
@@ -5008,18 +5024,21 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		offs = mix.offs || [0,0,0],
 		mus = [],
 		sigs = [],
-		sigma = mix.sigma || [ [[0.4, 0.3, 0], [0.3, 0.8, 0], [0, 0, 1]] ],
+		sigma = mix.sigma || [ [ scalevec([0.4, 0.3, 0],dims), scalevec([0.3, 0.8, 0],dims), scalevec([0, 0, 1],dims)] ],
 		sigmas = sigma.length;
 		
 	if ( mixing ) 
 		for (var k=0; k<states; k++) {
 			var 
-				mu = offsetvec( scalevec( [rand(),rand(),rand()] , dims ), offs ),
+				mu = offsetvec( 
+								scalevec( [rand(),rand(),rand()] , dims ), 
+								scalevec( [floor(rand()*offs[0]),floor(rand()*offs[1]),floor(rand()*offs[2])] , dims ) ),
 				sig = sigma[ k % sigmas ];
 			
 			mus.push( mu );
 			sigs.push( sig );
 			mvd.push( RAND.MVN( mu, sig ) );
+			Log(k,mu,sig);
 		}
 
 	Log({mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:states, mu:mus, sig:sigs});
