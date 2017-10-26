@@ -5019,28 +5019,10 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		},  // samplers
 		labels = ["x","y","z"], // vector sample labels
 		sampler = samplers[mode], // sampler
-		states = ctx.TxPrs.length,
-		dims = mix.dims || [1,1,1],
-		offs = mix.offs || [0,0,0],
-		mus = [],
-		sigs = [],
-		sigma = mix.sigma || [ [ scalevec([0.4, 0.3, 0],dims), scalevec([0.3, 0.8, 0],dims), scalevec([0, 0, 1],dims)] ],
-		sigmas = sigma.length;
-		
-	if ( mixing ) 
-		for (var k=0; k<states; k++) {
-			var 
-				mu = offsetvec( 
-								scalevec( [rand(),rand(),rand()] , dims ), 
-								scalevec( [floor(rand()*offs[0]),floor(rand()*offs[1]),floor(rand()*offs[2])] , dims ) ),
-				sig = sigma[ k % sigmas ];
-			
-			mus.push( mu );
-			sigs.push( sig );
-			mvd.push( RAND.MVN( mu, sig ) );
-			Log(k,mu,sig);
-		}
+		states = ctx.TxPrs.length;
 
+	//sigma = mix.sigma || [ [ scalevec([0.4, 0.3, 0],dims), scalevec([0.3, 0.8, 0],dims), scalevec([0, 0, 1],dims)] ],
+		
 	Log({mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:states, mu:mus, sig:sigs});
 		/*
 		mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
@@ -5061,8 +5043,12 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	var ran = new RAND({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process steps
-		P: ctx.TxPrs, // state transition probs 
-		sym: ctx.Symbols,  // state symbols
+		trP: ctx.TxPrs, // state transition probs 
+		obs: {
+			dims: [5,5],
+			sigmas: 4
+		},
+		symbols: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
 		store: [], 	// use sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
