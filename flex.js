@@ -4979,7 +4979,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			br: sigma0 * sigma0 / 2,
 			oo: sigma0 / sqrt(2*theta0)
 		},  		// sampler constants
-		samplers = {  // sampling methods for specified mix index
+		samplers = {  // reserved sampling methods when taking wiener walks
 			na: function (u) {  // ignore
 			},
 
@@ -5044,10 +5044,6 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		N: ctx.Members,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process steps
 		trP: ctx.TxPrs, // state transition probs 
-		obs: {
-			dims: [5,5],
-			sigmas: 4
-		},
 		symbols: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
 		store: [], 	// use sync pipe() since we are running a web service
@@ -5079,32 +5075,16 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 
 					else
 						ran.U.each( function (id, state) {
-							if (mixing) {
-								var 
-									mix = state, // floor(rand() * mixes),  // mixing index
-									us = sampler(mix);  // mixing sample
-
-								str.push({ 
-									at: ev.at,
-									t: ran.t, // time sampled
-									u: state,   // state occupied
-									//m: mix, // gauss mix drawn from
-									//f: mode, // process family
-									n: id, 	// unique identifier
-									x: us[0],  	// lat
-									y: us[1],  	// lon
-									z: us[2] 	// alt
-								});
-								//Log(ev);
-							}
-
-							else
-								str.push({ 
-									at: ev.at,
-									t: ran.t, // time sampled
-									u: state,   // state occupied
-									n: id 	// unique identifier
-								});	
+							var ys = ran.Y[id];
+							str.push({ 
+								at: ev.at,
+								t: ran.t, // time sampled
+								u: state,   // state occupied
+								n: id, 	// unique identifier
+								x: ys[0],  	// lat
+								y: ys[1],  	// lon
+								z: ys[2] 	// alt
+							});
 						});
 
 					break;
