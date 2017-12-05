@@ -16,6 +16,7 @@
 
 @requires pdffiller
 @requires nodemailer
+@requires nodemailer-smtp-transport
 @requires imap
 @requires feed
 @requires feed-read
@@ -38,7 +39,7 @@ var 									// 3rd party bindings
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
 	ENGINE = require("engine"), 		// tauif simulation engines
-	RAND = require("randpr"), 		// random process
+	RAN = require("randpr"), 		// random process
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
@@ -4871,7 +4872,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		});
 
 		var 
-			obs = {at: "end", mles: RAND.MLE(evlist, Mixes), refs: Refs},
+			obs = {at: "end", mles: RAN.MLE(evlist, Mixes), refs: Refs},
 			mles = obs.mles,
 			refs = obs.refs;
 
@@ -5035,12 +5036,12 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			]);  
 			//for (var i=0;i<mixdim; i++) scalevec( mix.sigma[i], dims );
 
-			mvd.push( RAND.MVN( mix.mu, mix.sigma ) );
+			mvd.push( RAN.MVN( mix.mu, mix.sigma ) );
 		});
 		*/
 	// [{"mu":[0,0,0],"sigma":[[0.9,0.4,0],[0.4,0.7,0],[0,0,0.1]]}, {"mu":[0.3,0.5,0], "sigma":[[0.8,0.2,0],[0.2,0.8,0],[0,0,0.1]]}]
 	
-	var ran = new RAND({ // configure the random process generator
+	var ran = new RAN({ // configure the random process generator
 		N: ctx.Members,  // ensemble size
 		wiener: ctx.Wiener,  // wiener process steps
 		trP: ctx.TxPrs, // state transition probs 
@@ -5121,7 +5122,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 	var 
-		ran = new RAND({ // configure the random process generator
+		ran = new RAN({ // configure the random process generator
 			N: ctx.Job.Actors,  // ensemble size
 			wiener: 0,  // wiener process steps
 			sym: ctx.Symbols,  // state symbols
