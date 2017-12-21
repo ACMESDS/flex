@@ -146,22 +146,6 @@ var
 			counts: {State:""}
 		},
 
-		batchEvents: function (evs,maxbuf,maxstep,cb) {
-			var pos = 0, evbatch = [], t=0;
-
-			while ( ev = evs[pos++] ) 
-				if (ev.t - t > maxstep  || evbatch.length == maxbuf) {
-					t = cb( evbatch ); evbatch = [ev];
-				}
-
-				else
-					evbatch.push (ev );
-
-			if ( evbatch.length ) cb( evbatch );
-
-			//cb(null);
-		},
-		
 		// CRUDE interface
 		select: {ds: queryDS}, 
 		delete: {ds: queryDS}, 
@@ -341,7 +325,7 @@ var
 			*/
 		},
 		
-		runPlugin: function runPlugin(req, res) {  //< respond res(err,rtn,ctx) with rtn results (null if ctx.Job) and ctx context
+		runPlugin: function runPlugin(req, res) {  //< callback res(ctx || null) with results in ctx.save
 		/**
 		@method runPlugin
 		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
@@ -360,102 +344,26 @@ var
 					Copy(ctx,req.query);
 					
 					if ( ctx.Job )
-						res( null, null, ctx );
+						res( ctx );
 
 					else
 					if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-						viaAgent(req, function (rtn, sql) {  // potentially out-source the plugin
-
-							if (rtn)
-								res( null, rtn, ctx );
-
-							else
-								res( FLEX.errors.badAgent );
-
+						viaAgent(req, function (rtn) {  // potentially out-source the plugin and save returned results
+							ctx.save = rtn;
+							res( ctx );
 						});
 
-					else  // in-source the plugin
+					else  // in-source the plugin and save returned results
 						FLEX.runEngine(req, function (rtn) {
-							res( null, rtn, ctx );
+							ctx.save = rtn;
+							res( ctx );
 						});
 				}
 					
 				else
-					res( FLEX.errors.noCase );
-				
+					res( null );
 			});
-				
-			/*
-			var 
-				sql = req.sql, 
-				dsname = "app." + req.table,
-				ctx = req.query,
-				id = ctx.id || ctx.ID,
-				name = ctx.name || ctx.Name,
-				dsquery = id ? {ID: id} : name ? {Name: name} : null;
-			
-			if (dsquery) 
-				sql.eachRecord( 
-					"SELECT * FROM ?? WHERE ? LIMIT 0,1", 
-					[dsname, dsquery],
-					function ( err, test, isLast ) {
-						
-					if (err) 
-						res( err );
-						
-					else 
-					if (isLast) 
-						if (test) {
-							Copy(test,ctx);
 
-							sql.jsonKeys( dsname, function (keys) {  // parse json keys
-								keys.each(function (n,key) {
-									if (key != "Save")
-										try { 
-											ctx[key] = JSON.parse( ctx[key] ); 
-										}
-
-										catch (err) {
-											ctx[key] = null;
-										}
-
-								});
-
-								if ( ctx.Job )
-									res( null, null, ctx );
-
-								else
-								if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-									viaAgent(req, function (rtn, sql) {  // potentially out-source the plugin
-
-										if (rtn)
-											res( null, rtn, ctx );
-
-										else
-											res( FLEX.errors.badAgent );
-
-									});
-
-								else  // in-source the plugin
-									FLEX.runEngine(req, function (rtn) {
-										res( null, rtn, ctx );
-									});
-							});
-						}
-						
-						else
-							res( FLEX.errors.noCase );
-						
-					else { // parallel process plugin?
-					}
-						
-				});
-								
-			else	// run using given query
-				FLEX.runEngine(req, function (rtn) {
-					res( null, rtn, ctx );
-				});
-				*/
 		},
 		
 		plugins: { //< Plugins defined on config()
@@ -469,7 +377,7 @@ var
 			estpr: estpr
 		},
 		
-		viaAgent: function( req, res ) {  //< method to out-source a plugin
+		viaAgent: function( req, res ) {  //< out-source a plugin callback res(rtn || null)
 		/**
 		@method viaAgent
 		Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
@@ -480,11 +388,11 @@ var
 				fetch = FLEX.fetcher,
 				sql = req.sql,
 				query = req.query,
-				jobname = "totem."+ req.client + "." + req.table + "." + query.ID;
+				jobname = "totem."+ req.client + "." + req.table + "." + (query.ID||0);
 
 			//Log({viaagent: query});
 			
-			if (agent = query.agent) 
+			if (agent = query.agent)   // attempt out-source
 				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
 
 					if ( jobid ) {
@@ -509,14 +417,14 @@ var
 										FLEX.thread( function (sql) {
 											Trace("FREEING AGENT FOR job-"+jobid, sql);
 											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
-											req.cb( rtn, sql );
 											sql.release();
+											req.cb( rtn );
 										});
 									
 									else {
 										Trace("FAULTING AGENT");
 										clearInterval(timer);
-										req.cb( rtn, sql );
+										req.cb( null );
 									}
 
 								});
@@ -527,8 +435,8 @@ var
 				});
 
 			else 
-				FLEX.runEngine(req, function (rtn) {
-					res(rtn,sql);
+				FLEX.runEngine(req, function (rtn) {  // in-source
+					res(rtn);
 				});
 		},
 		
@@ -2099,8 +2007,8 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		}
 	});
 
-	if (FLEX.uploader)
-	FLEX.uploader(files, area, function (file) {
+	if (uploader = FLEX.uploader)
+	uploader(files, area, function (file) {
 
 		//Log(file);
 		
@@ -4835,16 +4743,14 @@ function estmix(ctx,res) {
 Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx parameters:
 	Mixes = number of mixed to attempt to find
 	Refs = [ref, ref, ...] optional references [x,y,z] to validate estimates
-	Events = event getter (maxbuf,maxstep,cb(evs))
-	Batch = max batch size in samples
+	Select = event getter (cb(evs))
 */
 
 	var 
 		Log = console.log,
 		Mixes = ctx.Mixes,
 		Refs = ctx.Refs,
-		Events = ctx.Events,
-		Batch = 100000; //ctx.Batch;
+		Select = ctx.Select;
 
 	function dist(a,b) { 
 		var d = [ a[0]-b[0], a[1]-b[1] ];
@@ -4861,7 +4767,7 @@ Respond with {mu,sigma} estimates to the [x,y,...] app.events given ctx paramete
 		return {idx: imin, err: emin};
 	}
 
-	Events(Batch, Infinity, function (evs) {
+	Select( function (evs) {
 		
 		var evlist = [];
 		//Log("mix evs", evs.length, Mixes);
@@ -5046,7 +4952,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		trP: ctx.TxPrs, // state transition probs 
 		symbols: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
-		store: [], 	// use sync pipe() since we are running a web service
+		store: [], 	// provide a sync pipe() since we are running a web service
 		steps: ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
 		filter: function (str, ev) {  // retain selected onEvent info
@@ -5101,7 +5007,6 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	});
 	
 	ran.pipe( [], function (evs) {
-		//Trace("Events generated "+evs.length);
 		res( evs );
 	}); 
 	
@@ -5111,7 +5016,7 @@ function estpr(ctx,res) {
 /* 
 Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 	Job = {Actors: mumber of members participating in process, Steps: number of time steps, States: number of states consumed by process}
-	Events = event getter (maxbuf, maxstep, cb(evs))
+	Select = event getter (maxbuf, maxstep, cb(evs))
 	Symbols = [sym, ...] state symbols or null to generate
 	Batch = batch size in steps
 */
@@ -5129,7 +5034,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 			steps: ctx.Job.Steps, // process steps
 			batch: ctx.Batch, // batch size in steps 
 			K: ctx.Job.States,	// number of states (realtime mode)
-			events: ctx.Events,  // event getter (realtime mode)
+			events: ctx.Select,  // event getter (realtime mode)
 			filter: function (str, ev) {  // retain selected onEvent info
 				switch ( ev.at ) {
 					case "end":
