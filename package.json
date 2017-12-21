@@ -16,8 +16,6 @@
   "author": "ACME Software Disposal Service",
   "license": "ISC",
   "dependencies": {
-    "jade": "^1.11.0",
-    "mysql": "^2.10.2"
   },
   "devDependencies": {}
 }
