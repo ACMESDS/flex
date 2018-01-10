@@ -491,7 +491,7 @@ var
 								"REPLACE INTO app.engines SET ?", {
 									Name: name,
 									Code: FLEX.plugins[name] + "",
-									State: JSON.stringify({Port:name}),
+									State: "{}",  //JSON.stringify({Port:name}),
 									Type: "js",
 									Enabled: 1
 								});
