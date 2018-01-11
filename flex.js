@@ -5016,10 +5016,13 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 function estpr(ctx,res) {
 /* 
 Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
-	Job = {Actors: mumber of members participating in process, Steps: number of time steps, States: number of states consumed by process}
+	Job = { ... }
 	Select = event getter (maxbuf, maxstep, cb(evs))
 	Symbols = [sym, ...] state symbols or null to generate
 	Batch = batch size in steps
+	Actors = number of members participating in process
+	States = number of states consumed by process
+	Steps = number of time steps
 */
 
 	var 
@@ -5028,13 +5031,13 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 
 	var 
 		ran = new RAN({ // configure the random process generator
-			N: ctx.Job.Actors,  // ensemble size
+			N: ctx.Actors,  // ensemble size
 			wiener: 0,  // wiener process steps
 			sym: ctx.Symbols,  // state symbols
 			store: [], 	// use sync pipe() since we are running a web service
-			steps: ctx.Job.Steps, // process steps
+			steps: ctx.Steps, // process steps
 			batch: ctx.Batch, // batch size in steps 
-			K: ctx.Job.States,	// number of states (realtime mode)
+			K: ctx.States,	// number of states (realtime mode)
 			events: ctx.Select,  // event getter (realtime mode)
 			filter: function (str, ev) {  // retain selected onEvent info
 				switch ( ev.at ) {
