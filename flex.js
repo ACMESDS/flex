@@ -344,6 +344,8 @@ var
 				if (ctx) {
 					Copy(ctx,req.query);
 					
+					//Log("plugin ctx",ctx);
+					
 					if ( ctx.Job )
 						res( ctx );
 
