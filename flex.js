@@ -165,8 +165,9 @@ var
 		@method runEngine 
 		Run the req.table named engine in req.query context if engine enabled; otherwise run builtin plugin.  Callback res(err,results).
 		**/
+			//Log("flex run eng",req.query);
 			ENGINE.select(req, function (rtn) {  // compile and step the engine
-				if (rtn.constructor == Error) // if engine not enabled, try builtin
+				if ( (rtn||0).constructor == Error) // if engine not enabled, try builtin
 					if ( plugin = FLEX.plugins[req.table] )  
 						
 						try {
@@ -340,11 +341,12 @@ var
 		responds with res(results).  Related comments in FLEX.config.
 		*/
 			
+			//Log("run req",req);
 			FLEX.eachContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
 				if (ctx) {
 					Copy(ctx,req.query);
 					
-					//Log("plugin ctx",ctx);
+					//Log("plugin ctx",req.query);
 					
 					if ( ctx.Job )
 						res( ctx );
@@ -487,7 +489,8 @@ var
 				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
 					for (var name in FLEX.plugins) {
 						FLEX.execute[name] = runPlugin;
-						Trace("PUBLISH plugin-"+name, sql);
+						Trace("PUBLISH "+name, sql);
+						
 						if ( name != "plugins")
 							sql.query( 
 								"REPLACE INTO app.engines SET ?", {
@@ -4845,7 +4848,6 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 	}
 
 	var 
-		Log = console.log,
 		exp = Math.exp, log = Math.log, sqrt = Math.sqrt, floor = Math.floor, rand = Math.random;
 
 	/*
@@ -4867,6 +4869,8 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 			});
 	} */
 
+	Log("genpr ctx",ctx);
+	
 	var
 		mvd = [], 	// multivariate distribution parms
 		
@@ -4932,7 +4936,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 
 	//sigma = mix.sigma || [ [ scalevec([0.4, 0.3, 0],dims), scalevec([0.3, 0.8, 0],dims), scalevec([0, 0, 1],dims)] ],
 		
-	Log({mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:states, mu:mus, sig:sigs});
+	Log({mix:ctx.Mix,txprs:ctx.TxPrs,steps:ctx.Steps,batch:ctx.Batch, States:states}); //, mu:mus, sig:sigs});
 		/*
 		mix.each( function (k,mix) {  // scale mix mu,sigma to voxel dimensions
 			//Log([k, floor(k / 20), k % 20, mix, dims]);
@@ -4955,13 +4959,18 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 		trP: ctx.TxPrs, // state transition probs 
 		symbols: ctx.Symbols,  // state symbols
 		nyquist: ctx.Nyquist, // oversampling factor
-		store: [], 	// provide a sync pipe() since we are running a web service
-		steps: ctx.Steps, // process steps
+		store: [], 	// provide an event store (forces a sync pipe) since we are running a web service
+		steps: 20, //ctx.Steps, // process steps
 		batch: ctx.Batch, // batch size in steps
+		obs: {		// emission/observation parms
+			weights: [1,1,1],  // lat,lon,alt
+			parts: [0.5,0.5,0.1],
+		},  
 		filter: function (str, ev) {  // retain selected onEvent info
 			switch ( ev.at ) {
 				case "config":
-					Copy({mu: mus, sigma:sigs}, ev);
+					//Copy({mu: mus, sigma:sigs}, ev);
+					Log(ev);
 					str.push(ev);
 					break;
 
@@ -4985,8 +4994,9 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 					else
 						ran.U.each( function (id, state) {
 							var ys = ran.Y[id];
+							//Log(id,state,ran.Y.length, ys);
 							str.push({ 
-								at: ev.at,
+								at: ev.at,  // step name
 								t: ran.t, // time sampled
 								u: state,   // state occupied
 								n: id, 	// unique identifier
@@ -5022,7 +5032,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 	Select = event getter (maxbuf, maxstep, cb(evs))
 	Symbols = [sym, ...] state symbols or null to generate
 	Batch = batch size in steps
-	Actors = number of members participating in process
+	Members = number of members participating in process
 	States = number of states consumed by process
 	Steps = number of time steps
 */
@@ -5033,7 +5043,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 
 	var 
 		ran = new RAN({ // configure the random process generator
-			N: ctx.Actors,  // ensemble size
+			N: ctx.Members,  // ensemble size
 			wiener: 0,  // wiener process steps
 			sym: ctx.Symbols,  // state symbols
 			store: [], 	// use sync pipe() since we are running a web service
@@ -5045,7 +5055,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 				switch ( ev.at ) {
 					case "end":
 						str.push(ev);
-				}			
+				}
 			}  // on-event callbacks
 		});
 	
