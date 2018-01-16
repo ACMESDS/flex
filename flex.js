@@ -160,31 +160,28 @@ var
 		thread: null, 					// FLEX connection threader
 		skinner : null, 				// Jade renderer
 		
-		runEngine: function (req,res) {
-		/**
-		@method runEngine 
-		Run the req.table named engine in req.query context if engine enabled; otherwise run builtin plugin.  Callback res(err,results).
-		**/
-			//Log("flex run eng",req.query);
-			ENGINE.select(req, function (rtn) {  // compile and step the engine
-				if ( (rtn||0).constructor == Error) // if engine not enabled, try builtin
+		runEngine: function (req,res) {  // run engine and callback res(ctx || null) with updated context ctx
+			
+			ENGINE.select(req, function (ctx) {  // compile and step the engine
+				//Log("run eng", ctx);
+				
+				if (ctx)  
+					res( ctx );
+				
+				else  { // engine does not exist/failed so try builtin
 					if ( plugin = FLEX.plugins[req.table] )  
 						
 						try {
-							plugin(req.query, function (rtn) {
-								res( rtn );
-							});
+							plugin(req.query, res);
 						}
 						
 						catch (err) {
-							res(err);
+							res( null );
 						}
 
 					else
-						res( FLEX.errors.noEngine );
-
-				else
-					res( rtn );
+						res( null );
+				}
 			});
 		},
 		
@@ -252,10 +249,7 @@ var
 		eachContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
 			function config(js, ctx) {
-				Log("config", js);
-				ctx.cor = function (N) {
-					Log("gen coridoor");
-				}
+				//Log("config", js);
 				try {
 					VM.runInContext( js, VM.createContext(ctx)  );	
 				}
@@ -268,7 +262,7 @@ var
 			sql.query("SELECT * FROM ?? WHERE least(?,1)", [ds,where])
 			.on("result", function (ctx) {
 				
-				if ( ctx.Config ) config(ctx.Config.replace(/<br>/g,""), ctx);
+				if ( ctx.Config ) config(ctx.Config, ctx);
 
 				sql.jsonKeys( ds, [], function (keys) {  // parse json keys
 					keys.each(function (n,key) {
@@ -327,7 +321,7 @@ var
 			*/
 		},
 		
-		runPlugin: function runPlugin(req, res) {  //< callback res(ctx || null) with results in ctx.save
+		runPlugin: function runPlugin(req, res) {  //< callback res(ctx || null) with results in ctx
 		/**
 		@method runPlugin
 		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
@@ -343,26 +337,22 @@ var
 			
 			//Log("run req",req);
 			FLEX.eachContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
+				
+				//Log("plugin each", ctx);
+				
 				if (ctx) {
 					Copy(ctx,req.query);
+					//Log("plugin req query", req.query);
 					
-					//Log("plugin ctx",req.query);
-					
-					if ( ctx.Job )
+					if ( ctx.Job )  // let host chipping-regulating service run this engine
 						res( ctx );
 
 					else
 					if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-						viaAgent(req, function (rtn) {  // potentially out-source the plugin and save returned results
-							ctx.save = rtn;
-							res( ctx );
-						});
+						viaAgent(req, res);
 
 					else  // in-source the plugin and save returned results
-						FLEX.runEngine(req, function (rtn) {
-							ctx.save = rtn;
-							res( ctx );
-						});
+						FLEX.runEngine(req, res);
 				}
 					
 				else
@@ -382,7 +372,7 @@ var
 			estpr: estpr
 		},
 		
-		viaAgent: function( req, res ) {  //< out-source a plugin callback res(rtn || null)
+		viaAgent: function( req, res ) {  //< out-source a plugin callback res(ctx || null)
 		/**
 		@method viaAgent
 		Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
@@ -416,14 +406,14 @@ var
 
 								Trace("POLLING AGENT FOR job"+jobid);
 
-								fetch(req.agent+"?pull="+jobid, function (rtn) {
+								fetch(req.agent+"?pull="+jobid, function (ctx) {
 
-									if (rtn)
+									if (ctx)
 										FLEX.thread( function (sql) {
 											Trace("FREEING AGENT FOR job-"+jobid, sql);
 											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
 											sql.release();
-											req.cb( rtn );
+											req.cb( ctx );
 										});
 									
 									else {
@@ -439,10 +429,8 @@ var
 
 				});
 
-			else 
-				FLEX.runEngine(req, function (rtn) {  // in-source
-					res(rtn);
-				});
+			else  // in-source
+				FLEX.runEngine(req, res);
 		},
 		
 		config: function (opts) {
@@ -2761,8 +2749,7 @@ FLEX.execute.events = function Xexecute(req, res) {
 		head.tDelay = head.tWait + head.tService;		// delay time through the queue
 		head.tDepart = t0 + head.tService; 					// departure time
 
-		if (trace)
-		Log(JSON.stringify(head));
+		if (trace) Log(JSON.stringify(head));
 
 		sched(head.tService, head, function (event, terr) {		// service departure
 			
@@ -2861,7 +2848,7 @@ FLEX.execute.ispreqts = function Xexecute(req, res) {
 FLEX.delete.keyedit = function Xdelete(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	Log(["del",req.group, query]);
+	Log(["delkey",req.group, query]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? DROP ??", 
@@ -2880,7 +2867,7 @@ FLEX.delete.keyedit = function Xdelete(req, res) {
 FLEX.insert.keyedit = function Xinsert(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query;
 	
-	Log(["add",req.group, query, body]);
+	Log(["addkey",req.group, query, body]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? ADD ?? "+body.Type,
@@ -2898,7 +2885,7 @@ FLEX.insert.keyedit = function Xinsert(req, res) {
 FLEX.update.keyedit = function Xupdate(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query, body = req.body;
 	
-	Log(["up",req.group, query, body]);
+	Log(["updkey",req.group, query, body]);
 	try {
 		sql.query(
 			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
@@ -2917,7 +2904,7 @@ FLEX.update.keyedit = function Xupdate(req, res) {
 FLEX.select.keyedit = function Xselect(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	Log(["sel",req.group, query]);
+	Log(["getkey",req.group, query]);
 	
 	try {
 		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
@@ -2946,7 +2933,7 @@ FLEX.select.keyedit = function Xselect(req, res) {
 FLEX.execute.keyedit = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	Log(["exe",req.group, query]);
+	Log(["exekey",req.group, query]);
 	res("monted");
 }
 
@@ -5028,8 +5015,7 @@ Return random [ {x,y,...}, ...] for ctx parameters:
 function estpr(ctx,res) {
 /* 
 Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
-	Job = { ... }
-	Select = event getter (maxbuf, maxstep, cb(evs))
+	Job = { ... } event getter
 	Symbols = [sym, ...] state symbols or null to generate
 	Batch = batch size in steps
 	Members = number of members participating in process
@@ -5050,7 +5036,7 @@ Return MLEs for random event process [ {x,y,...}, ...] given ctx parameters:
 			steps: ctx.Steps, // process steps
 			batch: ctx.Batch, // batch size in steps 
 			K: ctx.States,	// number of states (realtime mode)
-			events: ctx.Select,  // event getter (realtime mode)
+			events: ctx.Job,  // event getter (realtime mode)
 			filter: function (str, ev) {  // retain selected onEvent info
 				switch ( ev.at ) {
 					case "end":
