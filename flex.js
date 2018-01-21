@@ -4197,12 +4197,12 @@ function insertJob(job, cb) {
 @param {Object} job arriving job
 @param {Function} cb callback(sql,job) when job departs
 
-Adds job to requested job (cliet,class,qos,task)-queue.  Departing jobs
-execute the supplied callback cb(sql,job) on a new sql thread, or
-spawn a new process if job.cmd provided.  Jobs are regulated by their job.rate [s]
-(0 disables regulation). If the client's credit has been exhausted, the
-job is added to the queue, but not the regulator.  Queues are periodically
-monitored to store billing information.
+Adds job to the specified (client,class,qos,task) queue.  A departing job will execute the supplied 
+callback cb(sql,job) on a new sql thread (or spawn a new process if job.cmd provided).  The job
+is regulated by its job.rate [s] (0 disables regulation). If the client's job.credit has been exhausted, the
+job is added to the queue, but not to the regulator.  Queues are periodically monitored to store 
+billing information.  When using insertJob within an async loop, the caller should pass a cloned copy
+of the job.
  */
 	function cpuavgutil() {				// compute average cpu utilization
 		var avgUtil = 0;
@@ -4362,8 +4362,8 @@ monitored to store billing information.
 			
 			job.ID = info.insertId || 0;
 			
-			if (job.credit)				// client's credit is still good so place it in the regulators
-				regulate(job, function (job) { // provide callback when job departs
+			if (job.credit)				// client still has credit so place it in the regulators
+				regulate( job , function (job) { // provide callback when job departs
 					FLEX.thread( function (sql) {  // callback on new sql thread
 						cb(sql,job);
 
