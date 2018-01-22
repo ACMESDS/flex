@@ -388,7 +388,7 @@ var
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // attempt out-source
-				fetch(agent.tagurl(Copy(query,{push:jobname})), function (jobid) {
+				fetch(agent.tag( "?", Copy(query,{push:jobname})), function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
