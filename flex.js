@@ -265,7 +265,7 @@ var
 						//Log(key, key.indexOf("Save") );
 						if ( key.indexOf("Save")<0 )
 							try { 
-								ctx[key] = JSON.parse( (ctx[key] || "null").replace(/<br>/g,"") ); 
+								ctx[key] = JSON.parse( (ctx[key] || "null") ); 
 							}
 
 							catch (err) {
