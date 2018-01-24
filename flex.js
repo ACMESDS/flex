@@ -107,15 +107,20 @@ var
 			return list;
 		},
 
+		diag: { // configured for system health info
+		},
+		
 		paths: {
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
 			host: ""
 		},
 			
+		/*
 		billingCycle: 0,  // job billing cycle [ms] ( 0 disables)
 		diagCycle: 0, // self diagnostic cycle [ms] (0 disables)
 		hawkingCycle: 0, // job hawking cycle [ms] (0 disables)
+		*/
 		
 		flatten: { 		// catalog flattening 
 			catalog: {  // default tables to flatten and their fulltext keys
@@ -138,15 +143,6 @@ var
 		dbRoutes: {  //< default table -> db.table translators
 		},
 		
-		diag : {  // self diag parms
-			limits: {
-				pigs : 2,
-				jobs : 5
-			},
-			status: "", 
-			counts: {State:""}
-		},
-
 		// CRUDE interface
 		select: {ds: queryDS}, 
 		delete: {ds: queryDS}, 
@@ -545,38 +541,6 @@ var
 						
 					}, FLEX.likeus.PING*(3600*24*1000) );
 					*/
-				
-				if (diag = FLEX.diag) 
-				if (FLEX.diagCycle)
-					FLEX.diags = setInterval( function() {
-
-						FLEX.thread( function (sql) {
-
-							sql.query("SELECT count(ID) AS Count FROM app.engines WHERE Enabled")
-							.on("result", function (engs) {
-							sql.query("SELECT count(ID) AS Count FROM app.queues WHERE Departed IS NULL")
-							.on("result", function (jobs) {
-							sql.query("SELECT sum(DateDiff(Departed,Arrived)>1) AS Count from app.queues")
-							.on("result", function (pigs) {
-							sql.query("SELECT sum(Delay>20)+sum(Fault != '') AS Count FROM app.dblogs")
-							.on("result", function (isps) {
-								var rtn = diag.counts = {Engines:engs.Count,Jobs:jobs.Count,Pigs:pigs.Count,Faults:isps.Count,State:"ok"};
-								var limits = diag.limits;
-
-								for (var n in limits) 
-									if ( rtn[n] > 5*limits[n] ) rtn.State = "critical";
-									else
-									if ( rtn[n] > limits[n] ) rtn.State = "warning";
-
-								Trace("DIAG SYSTEM", sql);
-								sql.release();
-							});
-							});
-							});
-							});
-						});
-
-					}, FLEX.diagCycle*1e3);
 				
 				if (email) {
 					email.TX = {};
@@ -3338,65 +3302,6 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 	
 }
 
-FLEX.execute.hawks = function Xexecute(req, res) {
-/*
- * Hawk over jobs in the queues table given {Action,Condition,Period} rules 
- * defined in the hawks table.  The rule is run on the interval specfied 
- * by Period (minutes).  Condition in any valid sql where clause. Actions 
- * supported:
- * 		stop=halt=kill to kill matched jobs and update its queuing history
- * 		remove=destroy=delete to kill matched jobs and obliterate its queuing history
- * 		log=notify=flag=tip to email client a status of matched jobs
- * 		improve=promote to increase priority of matched jobs
- * 		reduce=demote to reduce priority of matached jobs
- * 		start=run to run jobs against dirty records
- * 		set expression to revise queuing history of matched jobs	 
- * */
-
-	var sql = req.sql, query = req.query;
-	
-	res(SUBMITTED);
-	
-	//sql.hawkJobs(req.client,FLEX.site.masterURL);
-	if ( !FLEX.hawks) 
-	if (FLEX.hawkingCycle)
-		sql.query("SELECT * FROM app.jobrules", function (err, rules) {
-			FLEX.hawks = setInterval( function (rules) {
-
-				FLEX.thread( function (sql) {
-					
-					Trace("SCANNING ",rules, sql);
-					
-					sql.query("SELECT * FROM app.queues WHERE Finished AND NOT Billed")
-					.on("result", function (job) {
-						Trace(`BILLING ${job} FOR ${job.Client}`, sql);
-						sql.query( "UPDATE openv.profiles SET Charge=Charge+? WHERE ?", [ 
-							job.Done, {Client: job.Client} 
-						]);
-						
-						sql.query( "UPDATE app.queues SET Billed=1 WHERE ?", {ID: job.ID})
-					});
-
-					sql.query("SELECT * FROM app.queues WHERE NOT Funded AND now()-Arrived>?", 10)
-					.on("result", function (job) {
-						Trace("KILLING ",job);
-						sql.query(
-							//"DELETE FROM app.queues WHERE ?", {ID:job.ID}
-						);
-					});
-					
-					// let this sql time-out
-				});
-
-			}, FLEX.hawkingCycle*1e3, rules);
-		});
-	
-	else {
-		clearInterval(FLEX.hawks);
-		FLEX.hawks = 0;
-	}
-}
-
 /*
 // legacy JSON editor for mysql cluster < 7.5
 
@@ -4286,43 +4191,6 @@ of the job.
 
 	var 
 		sql = this;
-	
-	if ( ! FLEX.biller && FLEX.billingCycle)
-		FLEX.biller = setInterval( function (queues) { // setup job billing
-			
-			FLEX.thread( function (sql) {
-				
-				sql.query(  // mark job departed if no work remains
-					"UPDATE app.queues SET Departed=now(), Notes=concat(Notes, ' is ', link('billed', '/profile.view')), Age=Age + (now()-Arrived)/3600e3, Finished=1 WHERE least(Departed IS NULL,Done=Work)", 
-					// {ID:job.ID} //jobID
-					function (err) {
-						
-					if (err) 
-						Log(err);
-						
-					else
-						Each(queues, function (rate, queue) {  // save collected queuing charges to profiles
-							Each(queue.client, function (client, charge) {
-
-								if ( charge.bill ) {
-									Trace(`BILL ${client} ${charge.bill} CREDITS`, sql);
-									sql.query(
-										"UPDATE openv.profiles SET Charge=Charge+?,Credit=greatest(0,Credit-?) WHERE ?" , 
-										 [charge.bill, charge.bill, {Client:client}], 
-										function (err) {
-											Log({charging:err});
-									});
-									charge.bill = 0;
-								}
-
-							});
-						});
-						
-					sql.release();
-				});
-			});
-					
-		}, FLEX.billingCycle, FLEX.queues );
 	
 	if (job.qos)  // regulated job
 		sql.query(  // insert job into queue or update job already in queue
