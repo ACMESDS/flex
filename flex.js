@@ -271,6 +271,9 @@ var
 							catch (err) {
 								//ctx[key] = null;  // uncomment when db json enabled
 							}
+						
+						else
+							ctx[key] = null;
 					});
 					
 					cb(ctx);
