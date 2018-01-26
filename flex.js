@@ -4473,36 +4473,39 @@ FLEX.select.login = function(req,res) {
 		query = req.query,
 		site = FLEX.site,
 		url = site.urls.worker,
-		nick = site.nick.tag("a",{href:url}),
+		nick = site.nick,
+		nickref = nick.tag("a",{href:url}),
 		client = req.client,
-		user = client.split("@"),
-		user = (client[0]+".x.x").split("."),
-		user = (user[0].charAt(0)+user[1].charAt(0)+user[2]).toLowerCase(),
+		user = userid(client),
 		group = req.group,
 		profile = req.profile,
 		pass = query.pass,
+		userHome = `/local/users/${user}`,
+		sudoJoin = 'echo "ILEbooboo9999#2" | sudo -S ',
 		aws = {
 			machine: "tbd.tbd.tbd",
-			admin: "tbd@coe.ic.gov",
+			admin: "brian.d.james@coe.ic.gov",
 			ps: "brian.d.james@coe.ic.gov",
 			remotein: `./shares/${user}.rdp`,
 			sudos: [
-				`sudo adduser ${user} -gid ${group}`,
-				`sudo id ${user}`,
-				`sudo cp ./certs/${user} /home/${user}/.ssh`,
-				`sudo cp ./shares/template.rdp ./shares/${user}.rdp`,
-				`sudo ln -s /local/service /home/${user}/totem`
+				`adduser ${user} -M --gid ${group} -p ${pass}`,
+				`usermod -d ${userHome} ${user}`,
+				`id ${user}`,
+				`mkdir -p ${userHome}/.ssh`,
+				`cp ./certs/${user} ${userHome}/.ssh`,
+				`cp ./shares/template.rdp ./shares/${user}.rdp`,
+				`ln -s /local/service ${userHome}/totem`
 			],				
 			hosted: false
 		},
 		notice = `
-Greetings from ${nick}-
+Greetings from ${nickref}-
 
 Your TOTEM development login ${user} has been created for ${client}.
 
 ${aws.admin}: Please create an AWS EC2 account ${user} for ${client} using the attached cert.
 
-To connect to ${nick} from Windows:
+To connect to ${nickref} from Windows:
 
 1. Establish a putty gateway using the following Local,Remote port map (set in putty | SSH | Tunnels):
 
@@ -4516,7 +4519,7 @@ To connect to ${nick} from Windows:
 
 		Pageant | Add Keys | your private ppk cert
 
-2. Start a ${nick} session using one of these methods:
+2. Start a ${nickref} session using one of these methods:
 
 	Putty | Session | Host Name = localhost:5001 
 	Remote Desktop Connect| Computer = localhost:5100 
@@ -4527,18 +4530,22 @@ To connect to ${nick} from Windows:
 			res( function () { return aws.remotein; } );
 	
 		else
+		if ( createCert = FLEX.createCert )
 			createCert(user, pass, function () {
-				Trace(`CREATE CERT FOR ${client}`, sql);
+				var 
+					prep = aws.sudos.join(";"),
+					prepenv = sudoJoin + aws.sudos.join("; "+sudoJoin);
 
-				CP.exec( aws.sudos.join(";"), function (err,out) {
+				Trace(`CREATE CERT FOR ${client} PREP ${prep}`, sql);
+
+				CP.exec( prepenv, function (err,out) {
 					if (err)  {
 						res( FLEX.errors.failedLogin );
 						sendMail({
 							to: aws.admin,
 							cc: aws.ps,
-							body: err + `
-This is an automatted request from ${nick}.  
-The project scientist ${aws.ps} requires "sudo adduser" on ${aws.machine}`
+							subject: `${nick} login failed`,
+							body: err + `This is an automatted request from ${nick}.  Please provide ${aws.ps} "sudo" for ${prep} on ${aws.machine}`
 						});
 					}
 
@@ -4548,14 +4555,27 @@ The project scientist ${aws.ps} requires "sudo adduser" on ${aws.machine}`
 						sendMail({
 							to: client,
 							cc: [aws.ps,aws.admin].join(";"),
+							subject: `${nick} login established`,
 							body: notice
 						});
 					};
 				});
 			});
 	
+		else	
+			res( FLEX.errors.failedLogin );
+	
 	else
 		res( FLEX.errors.badLogin );
+}
+
+function userid(client) {
+	var 
+		parts = client.split("@"),
+		parts = (parts[0]+".x.x").split("."),
+		user = parts[0].charAt(0)+parts[1].charAt(0)+parts[2];
+	
+	return user.substr(0,8).toLowerCase();
 }
 
 // UNCLASSIFIED
