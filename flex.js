@@ -86,7 +86,9 @@ var
 			protectedQueue: new Error("action not allowed on this job queues"),
 			noCase: new Error("plugin case not found"),
 			badAgent: new Error("agent failed"),
-			badDS: new Error("dataset could not be modified")
+			badDS: new Error("dataset could not be modified"),
+			badLogin: new Error("invaid login name/password"),
+			failedLogin: new Error("login failed - admin notified")
 		},
 		
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
@@ -615,11 +617,7 @@ var
 						sendMail({
 							to: site.pocs.admin,
 							subject: site.title + " started", 
-							html: "Just FYI",
-							alternatives: [{
-								contentType: 'text/html; charset="ISO-59-1"',
-								contents: ""
-							}]
+							body: "Just FYI"
 						});
 				}
 			}			
@@ -871,11 +869,7 @@ FLEX.execute.email = function Xexecute(req,res) {
 		sendMail({
 			to:  rec.To,
 			subject: rec.Subject,
-			html: rec.Body,
-			alternatives: [{
-				contentType: 'text/html; charset="ISO-59-1"',
-				contents: ""
-			}]
+			body: rec.Body
 		}, sql);
 	});
 	
@@ -1517,11 +1511,7 @@ FLEX.select.likeus = function Xselect(req, res) {
 		sendMail({
 			to:  FLEX.site.pocs.admin,
 			subject: req.client + " likes " + FLEX.site.title + " !!",
-			html: "Just saying",
-			alternatives: [{
-				contentType: 'text/html; charset="ISO-59-1"',
-				contents: ""
-			}]
+			body: "Just saying"
 		}, sql);
 
 	var user = {
@@ -3235,11 +3225,9 @@ FLEX.execute.swaps = function Xexecute(req, res) {
 			sendMail({
 				to:  site.POC,
 				subject: "SWAP "+package,
-				html: "Please find attached SWAP.  Delivery of  "+swap.Product+" is conditional on NGA/OCIO acceptance of this deviation request. ",
-				alternatives: [{
-					contentType: 'text/html; charset="ISO-59-1"',
-					contents: ""
-				}]
+				body: `
+Please find attached SWAP.  
+Delivery of  "+swap.Product+" is conditional on NGA/OCIO acceptance of this deviation request.`
 			}, sql);
 			
 		});
@@ -3855,7 +3843,11 @@ function sendMail(opts,sql) {
 	Trace(`MAIL ${opts.to} RE ${opts.subject}`, sql);
 
 	opts.from = "totem@noreply.gov";
-	
+	opts.alternatives = [{
+		contentType: 'text/html; charset="ISO-59-1"',
+		contents: ""
+	}];
+
 	if (opts.to) 
 		if (x = FLEX.mailer)
 			if (x = x.TX.TRAN) 
@@ -4473,6 +4465,97 @@ function endBulk() {
 	this.query("COMMIT");
 	this.query("SET GLOBAL sync_binlog=1");
 	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
+}
+
+FLEX.select.login = function(req,res) {
+	var 
+		sql = req.sql, 
+		query = req.query,
+		site = FLEX.site,
+		url = site.urls.worker,
+		nick = site.nick.tag("a",{href:url}),
+		client = req.client,
+		user = client.split("@"),
+		user = (client[0]+".x.x").split("."),
+		user = (user[0].charAt(0)+user[1].charAt(0)+user[2]).toLowerCase(),
+		group = req.group,
+		profile = req.profile,
+		pass = query.pass,
+		aws = {
+			machine: "tbd.tbd.tbd",
+			admin: "tbd@coe.ic.gov",
+			ps: "brian.d.james@coe.ic.gov",
+			remotein: `./shares/${user}.rdp`,
+			sudos: [
+				`sudo adduser ${user} -gid ${group}`,
+				`sudo id ${user}`,
+				`sudo cp ./certs/${user} /home/${user}/.ssh`,
+				`sudo cp ./shares/template.rdp ./shares/${user}.rdp`,
+				`sudo ln -s /local/service /home/${user}/totem`
+			],				
+			hosted: false
+		},
+		notice = `
+Greetings from ${nick}-
+
+Your TOTEM development login ${user} has been created for ${client}.
+
+${aws.admin}: Please create an AWS EC2 account ${user} for ${client} using the attached cert.
+
+To connect to ${nick} from Windows:
+
+1. Establish a putty gateway using the following Local,Remote port map (set in putty | SSH | Tunnels):
+
+		5001, ${url}:22
+		5100, ${url}:3389
+		5200, ${url}:8080
+		5910, ${url}:5910
+		5555, Dynamic
+
+	and, for convienience:
+
+		Pageant | Add Keys | your private ppk cert
+
+2. Start a ${nick} session using one of these methods:
+
+	Putty | Session | Host Name = localhost:5001 
+	Remote Desktop Connect| Computer = localhost:5100 
+	FF | Options | Network | Settings | Manual Proxy | Socks Host = localhost, Port = 5555, Socks = v5 ` ;
+	
+	if (pass && client != "guest")
+		if ( profile.User )
+			res( function () { return aws.remotein; } );
+	
+		else
+			createCert(user, pass, function () {
+				Trace(`CREATE CERT FOR ${client}`, sql);
+
+				CP.exec( aws.sudos.join(";"), function (err,out) {
+					if (err)  {
+						res( FLEX.errors.failedLogin );
+						sendMail({
+							to: aws.admin,
+							cc: aws.ps,
+							body: err + `
+This is an automatted request from ${nick}.  
+The project scientist ${aws.ps} requires "sudo adduser" on ${aws.machine}`
+						});
+					}
+
+					else  {
+						res( function () { return aws.remotein; } );
+						sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
+						sendMail({
+							to: client,
+							cc: [aws.ps,aws.admin].join(";"),
+							body: notice
+						});
+					};
+				});
+			});
+	
+	else
+		res( FLEX.errors.badLogin );
 }
 
 // UNCLASSIFIED
