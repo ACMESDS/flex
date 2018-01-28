@@ -196,7 +196,7 @@ var
 		eachUsecase: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			FLEX.eachPlugin( sql, group, function (eng) {
 				if (eng)
-					FLEX.eachContext( sql, group+"."+table, where, function (ctx) {
+					FLEX.getContext( sql, group+"."+table, where, function (ctx) {
 						if (ctx) cb( eng, ctx );
 					});
 			});
@@ -246,7 +246,7 @@ var
 		},
 		*/
 		
-		eachContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
+		getContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
 			
 			function config(js, ctx) {
 				//Log("config", js);
@@ -259,30 +259,35 @@ var
 				//Log("ctx",ctx);
 			}
 			
-			sql.query("SELECT * FROM ?? WHERE least(?,1)", [ds,where])
-			.on("result", function (ctx) {
+			sql.first("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
 				
-				if ( ctx.Config ) config(ctx.Config, ctx);
+				if (ctx) {
+					if ( ctx.Config ) config(ctx.Config, ctx);
 
-				sql.jsonKeys( ds, [], function (keys) {  // parse json keys
-					keys.each(function (n,key) {
-						//Log(key, key.indexOf("Save") );
-						if ( key.indexOf("Save")<0 )
-							try { 
-								ctx[key] = JSON.parse( (ctx[key] || "null") ); 
-							}
+					sql.jsonKeys( ds, [], function (keys) {  // parse json keys
+						//Log("json keys", keys);
+						keys.each(function (n,key) {
+							//Log(key, key.indexOf("Save") );
+							if ( key.indexOf("Save")<0 )
+								try { 
+									ctx[key] = JSON.parse( ctx[key] || "null" ); 
+								}
 
-							catch (err) {
-								//ctx[key] = null;  // uncomment when db json enabled
-							}
+								catch (err) {
+									ctx[key] = null; 
+								}
+
+							else
+								ctx[key] = null;
+						});
 						
-						else
-							ctx[key] = null;
+						cb(ctx);
+						//Log("get ctx",ctx);						
 					});
-					
-					cb(ctx);
-				});
+				}
 
+				else
+					cb(ctx);			
 			});
 			
 			/*
@@ -339,10 +344,9 @@ var
 		*/
 			
 			//Log("run req",req);
-			FLEX.eachContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
+			FLEX.getContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
 				
-				//Log("plugin each", ctx);
-				
+				//Log("get ctx", ctx);				
 				if (ctx) {
 					Copy(ctx,req.query);
 					//Log("plugin req query", req.query);
@@ -982,6 +986,7 @@ FLEX.select.tasks = function Xselect(req,res) {
 	});
 }
 
+/*
 FLEX.delete.files = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 
@@ -1039,6 +1044,7 @@ FLEX.execute.files = function Xselect(req,res) {
 	});
 	
 }
+*/
 
 // Getters
 
@@ -1954,9 +1960,7 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 	if (uploader = FLEX.uploader)
 	uploader(files, area, function (file) {
 
-		//Log(file);
-		
-		Trace(`UPLOAD ${area}/${file.filename} FOR ${req.group}.${req.client}`, sql);
+		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${req.group}.${req.client}`, sql);
 		
 		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
 			   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
@@ -1973,6 +1977,7 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 					}, geoloc, req.client, geoloc
 				]);
 
+		if (false)
 		sql.query( // credit the client
 			"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
 				1000, file.size, {Client: req.client} 
