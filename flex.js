@@ -472,21 +472,22 @@ var
 
 				READ.config(sql);			
 				
-				if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
-					for (var name in FLEX.plugins) {
-						FLEX.execute[name] = runPlugin;
-						Trace("PUBLISH "+name, sql);
-						
-						if ( name != "plugins")
-							sql.query( 
-								"REPLACE INTO app.engines SET ?", {
-									Name: name,
-									Code: FLEX.plugins[name] + "",
-									State: "{}",  //JSON.stringify({Port:name}),
-									Type: "js",
-									Enabled: 1
-								});
-					}
+				if (CLUSTER.isMaster)
+					if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
+						for (var name in FLEX.plugins) {
+							FLEX.execute[name] = runPlugin;
+							Trace("PUBLISHING "+name, sql);
+
+							if ( name != "plugins")
+								sql.query( 
+									"REPLACE INTO app.engines SET ?", {
+										Name: name,
+										Code: FLEX.plugins[name] + "",
+										State: "{}",  //JSON.stringify({Port:name}),
+										Type: "js",
+										Enabled: 1
+									});
+						}
 
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
@@ -4598,12 +4599,13 @@ FLEX.select.proctor = function (req,res) {
 	
 	//Log(query.score, query.pass);
 	
-	sql.query("INSERT INTO app.quizes SET ? ON DUPLICATE KEY UPDATE ?", [{
+	sql.query("INSERT INTO app.quizes SET ? ON DUPLICATE KEY UPDATE Tries=Tries+1,?", [{
 		Client: req.client,
 		Lesson: query.lesson,
 		Score: query.score,
 		Pass: query.pass,
-		Taken: new Date()
+		Taken: new Date(),
+		Tries: 1
 	}, {
 		Score: query.score,
 		Pass: query.pass,
