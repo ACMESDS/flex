@@ -4596,6 +4596,8 @@ FLEX.select.proctor = function (req,res) {
 			: "please try again" 
 	) );
 	
+	//Log(query.score, query.pass);
+	
 	sql.query("INSERT INTO app.quizes SET ? ON DUPLICATE KEY UPDATE ?", [{
 		Client: req.client,
 		Lesson: query.lesson,
