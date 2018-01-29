@@ -4385,6 +4385,7 @@ FLEX.select.agent = function (req,res) {
 	
 }
 
+/*
 FLEX.select.quizes = function (req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -4438,8 +4439,9 @@ FLEX.execute.quizes = function (req, res) {
 	else
 		res("Mission lesson");
 }
+*/
 
-FLEX.select.follow = function (req,res) {
+FLEX.select.follow = function (req,res) {  // follow a link
 	var 
 		sql = req.sql, 
 		query = req.query;
@@ -4583,4 +4585,28 @@ function userid(client) {
 	return user.substr(0,8).toLowerCase();
 }
 
+FLEX.select.proctor = function (req,res) {
+	var 
+		sql = req.sql,
+		query = req.query;
+	
+	res( `Thanks ${req.client} - ` + (
+		(query.score>=query.pass)
+			? "you passed!"
+			: "please try again" 
+	) );
+	
+	sql.query("INSERT INTO app.quizes SET ? ON DUPLICATE KEY UPDATE ?", [{
+		Client: req.client,
+		Lesson: query.lesson,
+		Score: query.score,
+		Pass: query.pass,
+		Taken: new Date()
+	}, {
+		Score: query.score,
+		Pass: query.pass,
+		Taken: new Date()
+	}] );
+};
+		
 // UNCLASSIFIED
