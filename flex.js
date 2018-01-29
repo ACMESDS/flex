@@ -439,6 +439,18 @@ var
 		also published to app.engines (disabled and only if they dont already exist).  Engines 
 		are scanned to prime their corresponding dataset (if they dont already exist).
 		*/
+			function engineType(eng) {
+				if ( eng.constructor == String ) 
+					if ( eng.indexOf("function") >= 0 )
+						return "ma";
+					else
+					if ( eng.indexOf("def") >= 0 )
+						return "py";
+					else
+						return "?";
+				else
+					return "js";
+			}
 			
 			if (opts) Copy(opts,FLEX);
 			
@@ -479,15 +491,16 @@ var
 							Trace("PUBLISHING "+name, sql);
 
 							if ( name != "plugins")
-								sql.query( 
-									"REPLACE INTO app.engines SET ?", {
-										Name: name,
-										Code: FLEX.plugins[name] + "",
-										State: "{}",  //JSON.stringify({Port:name}),
-										Type: "js",
-										Enabled: 1
-									});
-						}
+								if ( plugin = FLEX.plugins[name] )
+									sql.query( 
+										"REPLACE INTO app.engines SET ?", {
+											Name: name,
+											Code: plugin + "",
+											State: "{}",  //JSON.stringify({Port:name}),
+											Type: engineType(plugin),
+											Enabled: 1
+										});
+							}
 
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
