@@ -496,9 +496,9 @@ var
 										"REPLACE INTO app.engines SET ?", {
 											Name: name,
 											Code: plugin + "",
-											State: "{}",  //JSON.stringify({Port:name}),
-											Type: engineType(plugin),
-											Enabled: 1
+											//State: "{}",  //JSON.stringify({Port:name}),
+											Type: engineType(plugin)
+											//Enabled: 1
 										});
 							}
 
