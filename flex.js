@@ -4601,21 +4601,25 @@ function userid(client) {
 
 FLEX.select.proctor = function (req,res) {
 	var 
+		site = FLEX.site,
 		sql = req.sql,
-		query = req.query;
-	
-	res( `Thanks ${req.client} - ` + (
-		(query.score>=query.pass)
-			? "you passed!"
-			: "please try again" 
-	) );
-	
-	//Log(query.score, query.pass);
-	
+		query = req.query,
+		client = req.client,
+		parts = query.lesson.split("."),
+		topic = parts[0],
+		mod = parseInt( parts[1] ) || 1,
+		set = parseInt( parts[2] ) || 1,
+		mods = query.modules || 1,
+		passed = query.score >= query.pass;
+
+	//Log(query.score, query.pass, [topic, set, mod, mods].join("."));
+		
 	sql.query("INSERT INTO app.quizes SET ? ON DUPLICATE KEY UPDATE Tries=Tries+1,?", [{
-		Client: req.client,
-		Lesson: query.lesson,
+		Client: client,
 		Score: query.score,
+		Topic: topic,
+		Module: mod,
+		Set: set,
 		Pass: query.pass,
 		Taken: new Date(),
 		Tries: 1
@@ -4623,7 +4627,42 @@ FLEX.select.proctor = function (req,res) {
 		Score: query.score,
 		Pass: query.pass,
 		Taken: new Date()
-	}] );
+	}], function (err) {
+		
+		sql.all(
+			"",
+			"SELECT count(ID) AS Count FROM app.quizes WHERE Score>Pass AND least(?) GROUP BY Module", 
+			{Client:client, Topic:topic}, 
+			function (recs) {
+				
+				var certified = recs.length >= mods;
+				
+				res( `Thank you ${client} - ` + (
+					certified 
+					? "you completed all modules - your certificate of completion will be emailed"
+					
+					: passed 
+						? `you passed set ${set} of module ${mod}-${mods}!`
+						: "please try again" 
+				));
+				
+				if ( certified ) {
+					sql.query(
+						"UPDATE app.quizes SET Certified=now() WHERE least(?)", 
+						{Client:client, Topic:topic} );
+					
+					sendMail({
+						to: client,
+						subject: `${site.nick} sends its congradulations`,
+						body: 
+							`you completed all ${topic} modules and may claim your `
+							+ "certificate".tag("a", {href:`/stores/cert_${topic}_${client}.pdf`})
+					});
+				}
+				
+		});
+	
+	});
 };
 		
 // UNCLASSIFIED
