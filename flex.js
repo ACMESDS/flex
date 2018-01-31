@@ -74,6 +74,11 @@ var
 		copy: Copy,
 		each: Each,
 		
+		fetchers: { // reserved for data fetchers
+			http: null,
+			wget: null
+		},
+		
 		// Job hawking  etc
 		timers: [],
 		sendMail: sendMail,
@@ -287,7 +292,7 @@ var
 				}
 
 				else
-					cb(ctx);			
+					cb( null );	
 			});
 			
 			/*
@@ -458,11 +463,13 @@ var
 			FLEX.thread( function (sql) {
 				
 				ENUM.extend(sql.constructor, [
+					/*
 					selectJob,
 					deleteJob,
 					updateJob,
 					insertJob,
 					executeJob,
+					*/
 					/*
 					selectData,
 					deleteData,
@@ -470,14 +477,11 @@ var
 					insertData,
 					executeData,
 					*/
-					hawkCatalog,
 					queryDS, 
+					/*
+					hawkCatalog,
 					flattenCatalog,
-					
-					beginBulk,
-					endBulk
-					
-					//hawkJobs
+					*/
 				]);
 
 				//sql.hawkJobs("flex", FLEX.site.masterURL);
@@ -493,13 +497,13 @@ var
 							if ( name != "plugins")
 								if ( plugin = FLEX.plugins[name] )
 									sql.query( 
-										"REPLACE INTO app.engines SET ?", {
+										"UPDATE app.engines SET ? WHERE ?", [{
 											Name: name,
 											Code: plugin + "",
-											//State: "{}",  //JSON.stringify({Port:name}),
 											Type: engineType(plugin)
+											//State: "{}",  //JSON.stringify({Port:name}),
 											//Enabled: 1
-										});
+										}, {Name:name}] );
 							}
 
 				if (false)
@@ -3880,90 +3884,7 @@ function sendMail(opts,sql) {
 				});
 }
 
-/**
- @method flattenCatalog
- Flatten entire database for searching the catalog
- * */
-function flattenCatalog(flags, catalog, limits, cb) {
-	
-	function flatten( sql, rtns, depth, order, catalog, limits, cb) {
-		var table = order[depth];
-		
-		if (table) {
-			var match = catalog[table];
-			var filter = cb.filter(match);
-			
-			var quality = " using "+ (filter ? filter : "open")  + " search limit " + limits.records;
-			
-			Trace("CATALOG "+table+quality+" RECS "+rtns.length, sql);
-		
-			var query = filter 
-					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + filter + " FROM ?? HAVING Score>? LIMIT 0,?"
-					: "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID FROM ?? LIMIT 0,?";
-					
-			var args = filter
-					? [table, limits.score, limits.records]
-					: [table, limits.records];
-
-			Trace( sql.query( query, args,  function (err,recs) {
-				
-				if (err) {
-					rtns.push( {
-						ID: rtns.length,
-						Ref: table,
-						Name: "error",
-						Dated: limits.stamp,
-						Searched: 0,
-						Link: (table + ".db").tag("a",{href: "/" + table + ".db"}),
-						Content: err+""
-					} );
-
-					flatten( sql, rtns, depth+1, order, catalog, limits, cb );
-				}
-				else 
-					sql.query("select found_rows()")
-					.on('result', function (stat) {
-						
-						recs.each( function (n,rec) {						
-							rtns.push( {
-								ID: rtns.length,
-								Ref: table,
-								Name: `${table}.${rec.ID}`,
-								Dated: limits.stamp,
-								Quality: recs.length + " of " + stat["found_rows()"] + quality,
-								Link: table.tag("a",{href: "/" + table + ".db?ID=" + rec.ID}),
-								Content: JSON.stringify( rec )
-							} );
-						});
-
-						flatten( sql, rtns, depth+1, order, catalog, limits, cb );
-					});
-			}) );	
-		}
-		else
-			cb.res(rtns);
-	}
-
-	/*
-	function escape(n,arg) { return "`"+arg+"`"; }
-	*/
-	
-	var sql = this,
-		rtns = [];
-		/*limits = {
-			records: 100,
-			stamp: new Date()
-			//pivots: flags._pivot || ""
-		};*/
-		
-	flatten( sql, rtns, 0, FLEX.listify(catalog), catalog, limits, {
-		res: cb, 
-
-		filter: function (search) {
-			return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
-	} });
-}
-
+/*
 function hawkCatalog(req,res) {
 	var sql = this,
 		flags = req.flags;
@@ -3989,7 +3910,6 @@ function hawkCatalog(req,res) {
 			res("See "+"jobs queue".tag("a",{href:"/jobs.view"}));  
 		});
 		
-	/*
 		sql.query("INSERT INTO queues SET ? ON DUPLICATE KEY UPDATE Count=Count+1", {
 			Made: new Date(),
 			Searching: find.replace(/ /g,""),
@@ -3997,294 +3917,10 @@ function hawkCatalog(req,res) {
 			Returned: recs.length,
 			Count: 1,
 			Client: req.client
-		});*/
+		});
 }
-
-//=========== Job queue interface
-/*
- * Job queue interface
- * 
- * select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
- * execute(client,job,cb): create detector-trainging job for client with callback to cb(job) when completed.
- * update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
- * delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
- * insert(job,cb): add job and route to callback cb(job) when executed.
- */
-
-FLEX.queues = {};
-	
-/*
-@method selectJob
-@param {Object} req job query
-@param {Function} cb callback(rec) when job departs
-*
-* Callsback cb(rec) for each queuing rec matching the where clause.
-* >>> Not used but needs work 
- */
-function selectJob(where, cb) { 
-
-	// route valid jobs matching sql-where clause to its assigned callback cb(req).
-	var sql = this;
-	
-	sql.query(
-		where
-		? `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE ${where} ORDER BY QoS,Priority`
-		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
-	)
-	.on("error", function (err) {
-		Log(err);
-	})
-	.on("result", function (rec) {
-		cb(rec);
-	});	
-}
-
-/*
-@method updateJob
-@param {Object} req job query
-@param {Function} cb callback(sql,job) when job departs
-*
-* Adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
-* >>> Not used but needs work 
 */
-function updateJob(req, cb) { 
 	
-	var sql = this;
-	
-	sql.selectJob(req, function (job) {
-		
-		cb(job.req, function (ack) {
-
-			if (req.qos)
-				sql.query("UPDATE queues SET ? WHERE ?", [{
-					QoS: req.qos,
-					Notes: ack}, {ID:job.ID}]);
-			else
-			if (req.inc)
-				sql.query("UPDATE queues SET ?,Priority=max(0,min(5,Priority+?)) WHERE ?", [{
-					Notes: ack}, req.inc, {ID:job.ID}]);
-			
-			if (req.qos) {  // move req to another qos queue
-				delete FLEX.queues[job.qos].batch[job.ID];
-				job.qos = req.qos;
-				FLEX.queues[qos].batch[job.ID] = job;
-			}
-			
-			if (req.pid)
-				CP.exec(`renice ${req.inc} -p ${job.pid}`);				
-				
-		});
-	});
-}
-		
-/*
-@method deleteJob
-@param {Object} req job query
-@param {Function} cb callback(sql,job) when job departs
-* >>> Not used but needs work
-*/
-function deleteJob(req, cb) { 
-	
-	var sql = this;
-	sql.selectJob(req, function (job) {
-		
-		cb(sql,job, function (ack) {
-			sql.query("UPDATE queues SET Departed=now(), Age=(now()-Arrived)/3600e3, Notes=concat(Notes,'stopped') WHERE ?", {
-				Task:job.task,
-				Client:job.client,
-				Class:job.class,
-				QoS:job.qos
-			});
-
-			delete FLEX.queues[job.qos].batch[job.priority];
-			
-			if (job.pid) CP.exec("kill "+job.pid); 	// kill a spawned req
-		});
-	});
-}
-
-function insertJob(job, cb) { 
-/*
-@method insertJob
-@param {Object} job arriving job
-@param {Function} cb callback(sql,job) when job departs
-
-Adds job to the specified (client,class,qos,task) queue.  A departing job will execute the supplied 
-callback cb(sql,job) on a new sql thread (or spawn a new process if job.cmd provided).  The job
-is regulated by its job.rate [s] (0 disables regulation). If the client's job.credit has been exhausted, the
-job is added to the queue, but not to the regulator.  Queues are periodically monitored to store 
-billing information.  When using insertJob within an async loop, the caller should pass a cloned copy
-of the job.
- */
-	function cpuavgutil() {				// compute average cpu utilization
-		var avgUtil = 0;
-		var cpus = OS.cpus();
-		
-		cpus.each(function (n,cpu) {
-			idle = cpu.times.idle;
-			busy = cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.user;
-			avgUtil += busy / (busy + idle);
-		});
-		return avgUtil / cpus.length;
-	}
-	
-	function regulate(job,cb) {		// regulate job (spawn if job.cmd provided)
-			
-		var queue = FLEX.queues[job.qos];	// get job's qos queue
-		
-		if (!queue)  // prime the queue if it does not yet exist
-			queue = FLEX.queues[job.qos] = new Object({
-				timer: 0,
-				batch: {},
-				rate: job.qos,
-				client: {}
-			});
-			
-		var client = queue.client[job.client];  // update client's bill
-		
-		if ( !client) client = queue.client[job.client] = new Object({bill:0});
-		
-		client.bill++;
-
-		var batch = queue.batch[job.priority]; 		// get job's priority batch
-		
-		if (!batch) 
-			batch = queue.batch[job.priority] = new Array();
-
-		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
-		
-		if ( !queue.timer ) 		// restart idle queue
-			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
-
-				var job = null;
-				for (var priority in queue.batch) {  // index thru all priority batches
-					var batch = queue.batch[priority];
-
-					job = batch.pop(); 			// last-in first-out
-
-					if (job) {  // there is a departing job 
-//Log("job depth="+batch.length+" job="+[job.name,job.qos]);
-
-						if (job.holding)  // in holding / stopped state so requeue it
-							batch.push(job);
-									   
-						else
-						if (job.cmd) {	// this is a spawned job so spawn and hold its pid
-							job.pid = CP.exec(
-									job.cmd, 
-									  {cwd: "./public/dets", env:process.env}, 
-									  function (err,stdout,stderr) {
-
-								job.err = err || stderr || stdout;
-
-								if (job.cb) job.cb( job );  // execute job's callback
-							});
-						}
-					
-						else  			// execute job's callback
-						if (job.cb) job.cb(job);
-
-						break;
-					}
-				}
-
-				if ( !job ) { 	// an empty queue goes idle
-					clearInterval(queue.timer);
-					queue.timer = null;
-				}
-
-			}, queue.rate*1e3, queue);
-	}
-
-	var 
-		sql = this;
-	
-	if (job.qos)  // regulated job
-		sql.query(  // insert job into queue or update job already in queue
-			"INSERT INTO app.queues SET ? ON DUPLICATE KEY UPDATE " +
-			"Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
-				// mysql unique keys should not be null
-				Client: job.client || "",
-				Class: job.class || "",
-				Task: job.task || "",
-				QoS: job.qos || 0,
-				// others 
-				State: 0,
-				Arrived	: new Date(),
-				Departed: null,
-				Marked: 0,
-				Name: job.name,
-				Age: 0,
-				Classif : "",
-				//Util: cpuavgutil(),
-				Priority: job.priority || 0,
-				Notes: job.notes,
-				Finished: 0,
-				Billed: 0,
-				Funded: job.credit ? 1 : 0,
-				Work: 1,
-				Done: 0
-			}, {
-				Notes: job.notes,
-				Task: job.task || ""
-			}
-		], function (err,info) {  // increment work backlog for this job
-
-			//Log([job,err,info]);
-			
-			if (err) 
-				return Log(err);
-			
-			job.ID = info.insertId || 0;
-			
-			if (job.credit)				// client still has credit so place it in the regulators
-				regulate( job , function (job) { // provide callback when job departs
-					FLEX.thread( function (sql) {  // callback on new sql thread
-						cb(sql,job);
-
-						sql.query( // reduce work backlog and update cpu utilization
-							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
-							// {Util: cpuavgutil()}, 
-							{ID: job.ID} //jobID 
-						]);
-	
-						sql.release();
-						/*
-						sql.query(  // mark job departed if no work remains
-							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
-							{ID:job.ID} //jobID
-						);
-						*/
-					});
-				});
-		});
-
-	else  { // unregulated so callback on existing sql thread
-		job.ID = 0;
-		cb(sql, job);
-	}
-}
-	
-function executeJob(req, exe) {
-
-	function flip(job) {  // flip job holding state
-		if ( queue = FLEX.queues[job.qos] ) 	// get job's qos queue
-			if ( batch = queue.batch[job.priority] )  // get job's priority batch
-				batch.each( function (n, test) {  // matched jobs placed into holding state
-					if ( test.task==job.task && test.client==job.client && test.class==job.class )
-						test.holding = !test.holding;
-				});
-	}
-	
-	var sql = req.sql, query = req.query;
-	
-	sql.query("UPDATE ??.queues SET Holding = NOT Holding WHERE ?", {ID: query.ID}, function (err) {
-		
-		if ( !err )
-			flip();
-	});
-}
-
 /*
 function selectData(req, ds, cb) {
 	this.query("SELECT Data FROM contexts WHERE least(?,1) LIMIT 0,1", {
@@ -4476,18 +4112,6 @@ function Trace(msg,sql) {
 	ENUM.trace("X>",msg,sql);
 }
 
-function beginBulk() {
-	this.query("START TRANSACTION");
-	this.query("SET GLOBAL sync_binlog=0");
-	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=0");
-}
-
-function endBulk() {
-	this.query("COMMIT");
-	this.query("SET GLOBAL sync_binlog=1");
-	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
-}
-
 FLEX.select.login = function(req,res) {
 	var 
 		sql = req.sql, 
@@ -4665,4 +4289,206 @@ FLEX.select.proctor = function (req,res) {
 	});
 };
 		
+FLEX.select.wms = function (req,res) {
+	
+	var 
+		sql = req.sql,
+		query = req.query,
+		fetcher = FLEX.fetchers.http,
+		src = "",
+		SRC = src.toUpperCase();
+	
+	switch (src) {
+		case "dglobe":
+		case "omar":
+		case "ess":
+		default:
+	}
+	
+	var url = src ? ENV[`WMS_${SRC}`].tag("?", query) : null;
+	
+	Trace("WMS " + (url||"spoof"));
+	res("ok");
+	
+	if (url) 
+		fetcher(url, function (rtn) {
+			Log("wms stat", rtn);
+		});
+};
+
+FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image catalog to induce image-spoofing in the chipper.
+	
+	var 
+		sql = req.sql,
+		query = req.query,
+		fetcher = FLEX.fetchers.wget,
+		site = FLEX.site,
+		src = "",
+		SRC = src.toUpperCase();
+	
+	switch (src) {
+		case "dglobe":
+		case "omar":
+		case "ess":
+		default:
+			query.geometryPolygon = JSON.stringify({rings: query.ring});  // ring being monitored
+			delete query.ring;
+	}
+
+	var url = src ? ENV[`WFS_${SRC}`].tag("?", query) : null;
+
+	Trace("WFS "+(url||"spoof"));
+
+	if (url)
+		fetcher( url, function (cat) {  // query catalog for desired data channel
+
+			if ( cat ) {
+				switch ( src ) {  // normalize cat response to ess
+					case "dglobe":
+					case "omar":
+					case "ess":
+						var
+							res = ( cat.GetRecordsResponse || {SearchResults: {}} ).SearchResults,
+							collects = res.DatasetSummary || [],
+							sets = [];
+
+						collects.each( function (n,collect) {  // pull image collects from each catalog entry
+
+							//Log(collect);
+							var 
+								image = collect["Image-Product"].Image,
+								sun = image["Image-Sun-Characteristic"] || {SunElevationDim: "0", SunAzimuth: "0"},
+								restrict = collect["Image-Restriction"] || {Classification: "?", ClassificationSystemId: "?", LimitedDistributionCode: ["?"]},
+								raster = image["Image-Raster-Object-Representation"],
+								region = collect["Image-Country-Coverage"] || {CountryCode: ["??"]},
+								atm = image["Image-Atmospheric-Characteristic"],
+								urls = {
+									wms: collect.WMSUrl,
+									wmts: collect.WMTSUrl,
+									jpip: collect.JPIPUrl
+								};
+
+							if (urls.wms)  // valid collects have a wms url
+								sets.push({
+									imported: new Date(image.ImportDate),
+									collected: new Date(image.QualityRating),
+									mission: image.MissionId,
+									sunEl: parseFloat(sun.SunElevationDim),
+									sunAz: parseFloat(sun.SunAzimuth),
+									layer: collect.CoverId,
+									clouds: atm.CloudCoverPercentageRate,
+									country: region.CountryCode[0],
+									classif: restrict.ClassificationCode + "//" + restrict.LimitedDistributionCode[0],
+									imageID: image.ImageId.replace(/ /g,""),
+											// "12NOV16220905063EA00000 270000EA530040"
+									mode: image.SensorCode,
+									bands: parseInt(image.BandCountQuantity),
+									gsd: parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
+									wms: 
+										urls.wms.replace(
+											"?REQUEST=GetCapabilities&VERSION=1.3.0",
+											"?request=GetMap&version=1.1.1") 
+
+										+ "".tag("?", {
+											width: aoi.lat.pixels,
+											height: aoi.lon.pixels,
+											srs: "epsg%3A4326",
+											format: "image/jpeg"
+										}).replace("?","&")
+								});
+
+						});
+					}
+
+				res( sets );
+			}
+
+			else
+				res( null );
+		});	
+	
+	else
+		res([{			
+			imported: new Date(),
+			collected: new Date(),
+			mission: "debug", //image.MissionId,
+			sunEl: 0, //parseFloat(sun.SunElevationDim),
+			sunAz: 0, //parseFloat(sun.SunAzimuth),
+			layer: "debug", //collect.CoverId,
+			clouds: 0, //atm.CloudCoverPercentageRate,
+			country: "XX", //region.CountryCode[0],
+			classif: "", //restrict.ClassificationCode + "//" + restrict.LimitedDistributionCode[0],
+			imageID: "debug",
+					// "12NOV16220905063EA00000 270000EA530040"
+			mode: "XX", //image.SensorCode,
+			bands: 0, //parseInt(image.BandCountQuantity),
+			gsd: 0, //parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
+			wms: site.urls.master+"/shares/spoof.jpg"			
+			/*{
+			GetRecordsResponse: {
+				SearchResults: {
+					DatasetSummary: [{
+						"Image-Product": {
+							Image: {
+								ImageId: "spoof",
+								"Image-Sun-Characteristic": {
+									SunElevationDim: "0", 
+									SunAzimuth: "0"
+								},
+								"Image-Raster-Object-Representation": [],
+								"Image-Atmospheric-Characteristic": []
+							},
+							"Image-Restriction": {
+								Classification: "?", 
+								ClassificationSystemId: "?", 
+								LimitedDistributionCode: ["?"]
+							},
+							"Image-Country-Coverage": {
+								CountryCode: ["??"]
+							}
+						},
+						WMSUrl: ENV.SRV_TOTEM+"/shares/spoof.jpg",
+						WMTSUrl: "",
+						JPIPUrl: ""
+					}]
+				}
+			}
+		} */
+		}]);
+
+};
+
+FLEX.select.matlab = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query;
+	
+	if ( query.flush )
+		ENGINE.matlab.flush(sql, query.flush);
+	
+	else
+	if ( query.save ) {
+		var
+			thread =  query.save,
+			parts = thread.split("_"),
+			id = parts.pop(),
+			plugin = "app." + parts.pop(),
+			results = ENGINE.matlab.path.save + thread + ".out";
+		
+		Log("SAVE MATLAB",query.save,plugin,id,results);
+
+		FS.readFile(results, "utf8", function (err,json) {
+
+			sql.query("UPDATE ?? SET ? WHERE ?", [plugin, {Save: json}, {ID: id}], function (err) {
+				Log("save",err);
+			});
+
+		});			
+	}
+	
+	res("flushed");
+		
+};
+
+
 // UNCLASSIFIED
