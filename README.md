@@ -1,12 +1,15 @@
 /**
-@class flex [![Forked from SourceForge](https://sourceforge.net)]
-# FLEX
+@class FLEX
+	[SourceForge](https://sourceforge.net) 
+	[github](https://github.com/acmesds/flex.git) 
+	[geointapps](https://git.geointapps.org/acmesds/flex)
+	[gitlab](https://gitlab.west.nga.ic.gov/acmesds/flex.git)
 
 FLEX provides a CRUDE interface to MYSQL datasets, job queues, file upload areas, emulated datasets,  
 engine plugins, dataset schema editor, email, new feeder, job agents, quizzes, and network services distributed 
 across a virtual machine cloud.  
 
-FLEX uses the [DSVAR database agnosticator](https://git.geointapps.org/acmesds/dsvar) 
+FLEX uses the [JSDB database agnosticator](https://git.geointapps.org/acmesds/jsdb) 
 for its MYSQL datasets, and provides the following emulated datasets:
 
 	baseline		local repo history, commit changes, sync with remote repo

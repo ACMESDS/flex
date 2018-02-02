@@ -12,7 +12,7 @@
 @requires os
 
 @requires enum
-@requires engine
+@requires atomic
 @requires jslab
 
 @requires pdffiller
@@ -39,7 +39,7 @@ var 									// 3rd party bindings
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
-	ENGINE = require("engine"), 		// tauif simulation engines
+	ATOM = require("atomic"), 		// tauif simulation engines
 	RAN = require("randpr"), 		// random process
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
@@ -167,7 +167,7 @@ var
 		
 		runEngine: function (req,res) {  // run engine and callback res(ctx || null) with updated context ctx
 			
-			ENGINE.select(req, function (ctx) {  // compile and step the engine
+			ATOM.select(req, function (ctx) {  // compile and step the engine
 				//Log("run eng", ctx);
 				
 				if (ctx)  
@@ -192,7 +192,7 @@ var
 		
 		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			sql.eachTable( group, function (table) { 
-				ENGINE.getEngine( sql, group, table, function (eng) {
+				ATOM.getEngine( sql, group, table, function (eng) {
 					if (eng) cb(eng);
 				});
 			});
@@ -1243,7 +1243,7 @@ FLEX.select.users = function Xselect(req, res) {
 }
 
 /*
-FLEX.select.ENGINES = function Xselect(req, res) {
+FLEX.select.ATOMS = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	sql.query("SELECT ID,engineinfo(Name,Type,Updated,Classif,length(Code),Period,Enabled,length(Special)) AS Name FROM engines WHERE least(?,1) ORDER BY Name",
@@ -1275,7 +1275,7 @@ FLEX.select.config = function Xselect(req, res) {
 			cpu: 
 				(OS.uptime()/3600/24).toFixed(2)+" days " 
 					+ OS.loadavg() + "% used at [1,2,3] min " 
-					+ OS.cpus()[0].model, // + " at " + ENGINE.temp() + "oC",
+					+ OS.cpus()[0].model, // + " at " + ATOM.temp() + "oC",
 			
 			platform: OS.type()+"/"+OS.platform()+"/"+OS.arch(),
 			
@@ -1434,7 +1434,7 @@ FLEX.select.health = function Xselect(req, res) {
 		var stats = {
 			disk_use: dfout.split("\n")[1],
 			cpu_up_DAYS: (OS.uptime()/3600/24).toFixed(2),
-			cpu_use: (OS.loadavg()[2]*100).toFixed(2) + "% @ ", //  + ENGINE.temp() + "oC",
+			cpu_use: (OS.loadavg()[2]*100).toFixed(2) + "% @ ", //  + ATOM.temp() + "oC",
 			memory_use: 
 				((OS.totalmem()-OS.freemem())*1e-9).toFixed(2) +" GB " 
 				+ (OS.freemem() / OS.totalmem()).toFixed(2) + " %"
@@ -1472,7 +1472,7 @@ FLEX.select.health = function Xselect(req, res) {
 			//cpus: JSON.stringify(OS.cpus()),
 			//routes: JSON.stringify(FLEX.routes),
 			//netif: JSON.stringify(OS.networkInterfaces()), 	//	do not provide in secure mode
-			//temp: ENGINE.temp()  // unavail on vms
+			//temp: ATOM.temp()  // unavail on vms
 		};
 	
 		nouts.each(function (n,nstat) {
@@ -2135,7 +2135,7 @@ FLEX.update.engines = function Update(req, res) {
 
 	sql.query("UPDATE engines SET ? WHERE ?", [body,query])
 	.on("end", function () {
-		ENGINE.free(req,res);
+		ATOM.free(req,res);
 	});
 }*/
 
@@ -2219,7 +2219,7 @@ FLEX.execute.engines = function Xexecute(req, res) {
 						req.query = (eng.Vars.query||"").parse({});
 						req.table = eng.Name;
 						req.type = eng.Engine;
-						ENGINE.select(req, res);
+						ATOM.select(req, res);
 				}
 			
 			else 							// prime new engine
@@ -4236,7 +4236,7 @@ FLEX.select.matlab = function (req,res) {
 		query = req.query;
 	
 	if ( query.flush )
-		ENGINE.matlab.flush(sql, query.flush);
+		ATOM.matlab.flush(sql, query.flush);
 	
 	else
 	if ( query.save ) {
@@ -4245,7 +4245,7 @@ FLEX.select.matlab = function (req,res) {
 			parts = thread.split("_"),
 			id = parts.pop(),
 			plugin = "app." + parts.pop(),
-			results = ENGINE.matlab.path.save + thread + ".out";
+			results = ATOM.matlab.path.save + thread + ".out";
 		
 		Log("SAVE MATLAB",query.save,plugin,id,results);
 
@@ -4261,6 +4261,5 @@ FLEX.select.matlab = function (req,res) {
 	res("flushed");
 		
 };
-
 
 // UNCLASSIFIED

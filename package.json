@@ -17,5 +17,7 @@
   "license": "ISC",
   "dependencies": {
   },
-  "devDependencies": {}
+  "devDependencies": {
+  "atomic": "^1.0.0"
+   }
 }
