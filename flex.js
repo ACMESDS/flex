@@ -4089,7 +4089,6 @@ FLEX.select.wms = function (req,res) {
 };
 
 FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image catalog to induce image-spoofing in the chipper.
-	
 	var 
 		sql = req.sql,
 		query = req.query,
