@@ -264,7 +264,7 @@ var
 				//Log("ctx",ctx);
 			}
 			
-			sql.first("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
+			sql.getFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
 				
 				if (ctx) {
 					if ( ctx.Config ) config(ctx.Config, ctx);
@@ -432,8 +432,10 @@ var
 
 				});
 
-			else  // in-source
+			else  { // in-source
+				Log("run eng");
 				FLEX.runEngine(req, res);
+			}
 		},
 		
 		config: function (opts) {
@@ -1010,7 +1012,7 @@ FLEX.delete.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.each("DELETEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
+	sql.getEach("DELETEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
 	}, function (file) {
@@ -1044,7 +1046,7 @@ FLEX.execute.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.each("EXEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
+	sql.getEach("EXEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
 	}, function (file) {
@@ -2378,7 +2380,7 @@ FLEX.execute.collects = function Xexecute(req, res) {
 	 * 
 	 * 	run execeute.collects with this alert
 	
-	sql.each("SELECT * FROM tests", [], function (test) {
+	sql.getEach("SELECT * FROM tests", [], function (test) {
 		if (test.PollURI)
 			requestService({ 		// poll standing order
 				url: test.PollURI,
@@ -2437,13 +2439,13 @@ FLEX.execute.collects = function Xexecute(req, res) {
 			});
 	});
 	
-	sql.each("SELECT GPCs FROM collects WHERE GPCs != ''", [], function (collect) {
+	sql.getEach("SELECT GPCs FROM collects WHERE GPCs != ''", [], function (collect) {
 		sql.query("UPDATE collects SET ?", {
 			RPCs: JSON.stringify( computeRPCs( JSON.parse(collect.GPCs) ) )
 		});
 	});	
 	
-	sql.each("SELECT * FROM collects WHERE not BVI", [], function (collect) {
+	sql.getEach("SELECT * FROM collects WHERE not BVI", [], function (collect) {
 	});
 }
 */
@@ -4025,7 +4027,7 @@ FLEX.select.proctor = function (req,res) {
 		Taken: new Date()
 	}], function (err) {
 		
-		sql.all(
+		sql.getAll(
 			"",
 			"SELECT count(ID) AS Count FROM app.quizes WHERE Score>Pass AND least(?) GROUP BY Module", 
 			{Client:client, Topic:topic}, 
