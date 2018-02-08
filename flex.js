@@ -10,6 +10,7 @@
 @requires fs
 @requires child-process
 @requires os
+@requires stream
 
 @requires enum
 @requires atomic
@@ -25,6 +26,7 @@
  
 var 									// nodejs bindings
 	VM = require('vm'), 				// V8 JS compiler
+	STREAM = require("stream"), 	// pipe-able streams
 	CLUSTER = require('cluster'),		// Support for multiple cores	
 	HTTP = require('http'),				// HTTP interface
 	CRYPTO = require('crypto'),			// Crypto interface
@@ -93,7 +95,8 @@ var
 			badAgent: new Error("agent failed"),
 			badDS: new Error("dataset could not be modified"),
 			badLogin: new Error("invaid login name/password"),
-			failedLogin: new Error("login failed - admin notified")
+			failedLogin: new Error("login failed - admin notified"),
+			noUploader: new Error("file uplaoder not available")
 		},
 		
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
@@ -1931,17 +1934,18 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		sql = req.sql, 
 		query = req.query, 
 		body = req.body,
+		client = req.client,
 		canvas = body.canvas || {objects:[]},
 		attach = [],
 		now = new Date(),
 		image = body.image,
 		area = req.table,
-		geoloc = query.location || "POINT(0 0)",
 		files = image ? [{
 			name: name, // + ( files.length ? "_"+files.length : ""), 
 			size: image.length/8, 
 			image: image
-		}] : body.files || [];
+		}] : body.files || [],
+		tags = Copy(query.tag || {}, {Location: query.location || "POINT(0 0)"});
 
 	/*
 	Log({
@@ -1952,8 +1956,6 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		l: geoloc
 	});*/
 					
-	res(SUBMITTED);
-	
 	canvas.objects.each(function (n,obj) {
 		
 		switch (obj.type) {
@@ -1977,59 +1979,81 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		}
 	});
 
-	if (uploader = FLEX.uploader)
-	uploader(files, area, function (file) {
-
-		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${req.group}.${req.client}`, sql);
+	if (uploader = FLEX.uploader) {
+		res(SUBMITTED);
 		
-		sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
-			   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
-			+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
-				req.group, {
-						Client: req.client,
-						Name: file.filename,
-						Area: area,
-						Added: new Date(),
-						Classif: query.classif || "",
-						Revs: 1,
-						Size: file.size,
-						Tag: query.tag || ""
-					}, geoloc, req.client, geoloc
-				]);
+		Each(files, function (n, file) {
+			
+			Log("uploading ", file);
+			var 
+				buf = new Buffer(file.data,"base64"),
+				srcStream = new STREAM.Readable({  // source stream for event ingest
+					objectMode: true,
+					read: function () {  // return null if there are no more events
+						this.push( buf );
+						buf = null;
+					}
+				});
+			
+			uploader( srcStream, client, area+"/"+file.filename, tags, function (fileID) {
 
-		if (false)
-		sql.query( // credit the client
-			"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
-				1000, file.size, {Client: req.client} 
-			]);
-		
-		if (file.image)
-			switch (area) {
-				case "proofs": 
-				
-					sql.query("REPLACE INTO proofs SET ?", {
-						top: 0,
-						left: 0,
-						width: file.Width,
-						height: file.Height,
-						label: tag,
-						made: now,
-						name: area+"."+name
-					});
+				Trace(`UPLOAD INTO ${area} FOR ${client}`, sql);
 
-					sql.query(
-						"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
-						[area+"."+name]
-					)
-					.on("result", function (det) {
-						sql.query("UPDATE detectors SET Dirty=Dirty+1");
-					});
+				if (false)
+				sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
+					   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
+					+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
+						req.group, {
+								Client: req.client,
+								Name: file.filename,
+								Area: area,
+								Added: new Date(),
+								Classif: query.classif || "",
+								Revs: 1,
+								Size: file.size,
+								Tag: query.tag || ""
+							}, geoloc, req.client, geoloc
+						]);
 
-					break;
-					
-			}
-	});
+				if (false)
+				sql.query( // credit the client
+					"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
+						1000, file.size, {Client: req.client} 
+					]);
 
+				if (false) //(file.image)
+					switch (area) {
+						case "proofs": 
+
+							sql.query("REPLACE INTO proofs SET ?", {
+								top: 0,
+								left: 0,
+								width: file.Width,
+								height: file.Height,
+								label: tag,
+								made: now,
+								name: area+"."+name
+							});
+
+							sql.query(
+								"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
+								[area+"."+name]
+							)
+							.on("result", function (det) {
+								sql.query("UPDATE detectors SET Dirty=Dirty+1");
+							});
+
+							break;
+
+					}
+			});
+		});
+	}
+	
+	else 
+		res( FLEX.errors.noUploader );
+	
+	Log("flex done uploading");
 }
 
 FLEX.execute.uploads = function Xexecute(req, res) {
