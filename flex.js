@@ -94,7 +94,7 @@ var
 			noCase: new Error("plugin case not found"),
 			badAgent: new Error("agent failed"),
 			badDS: new Error("dataset could not be modified"),
-			badLogin: new Error("invaid login name/password"),
+			badLogin: new Error("invalid login name/password"),
 			failedLogin: new Error("login failed - admin notified"),
 			noUploader: new Error("file uplaoder not available")
 		},
@@ -3924,10 +3924,10 @@ FLEX.select.login = function(req,res) {
 		profile = req.profile,
 		pass = query.pass,
 		userHome = `/local/users/${user}`,
-		sudoJoin = 'echo "ILEbooboo9999#2" | sudo -S ',
-		aws = {
-			machine: "tbd.tbd.tbd",
-			admin: "brian.d.james@coe.ic.gov",
+		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
+		isp = {
+			machine: "totem.west.ile.nga.ic.gov",
+			admin: "totemadmin@coe.ic.gov",
 			ps: "brian.d.james@coe.ic.gov",
 			remotein: `./shares/${user}.rdp`,
 			sudos: [
@@ -3946,7 +3946,7 @@ Greetings from ${nickref}-
 
 Your TOTEM development login ${user} has been created for ${client}.
 
-${aws.admin}: Please create an AWS EC2 account ${user} for ${client} using the attached cert.
+${isp.admin}: Please create an AWS EC2 account ${user} for ${client} using the attached cert.
 
 To connect to ${nickref} from Windows:
 
@@ -3969,15 +3969,19 @@ To connect to ${nickref} from Windows:
 	FF | Options | Network | Settings | Manual Proxy | Socks Host = localhost, Port = 5555, Socks = v5 ` ;
 	
 	if (pass && client != "guest")
-		if ( profile.User )
-			res( function () { return aws.remotein; } );
+		if ( profile.User )  // already have valid user id so just remote in
+			res( function () { return isp.remotein; } );
+	
+		else
+		if ( !ENV.ADMIN_PASS )
+			res( FLEX.errors.failedLogin );
 	
 		else
 		if ( createCert = FLEX.createCert )
-			createCert(user, pass, function () {
+			createCert(user, pass, function () {  // register new userid, certs, login account, and home path
 				var 
-					prep = aws.sudos.join(";"),
-					prepenv = sudoJoin + aws.sudos.join("; "+sudoJoin);
+					prep = isp.sudos.join(";"),
+					prepenv = sudoJoin + isp.sudos.join("; "+sudoJoin);
 
 				Trace(`CREATE CERT FOR ${client} PREP ${prep}`, sql);
 
@@ -3985,19 +3989,19 @@ To connect to ${nickref} from Windows:
 					if (err)  {
 						res( FLEX.errors.failedLogin );
 						sendMail({
-							to: aws.admin,
-							cc: aws.ps,
+							to: isp.admin,
+							cc: isp.ps,
 							subject: `${nick} login failed`,
-							body: err + `This is an automatted request from ${nick}.  Please provide ${aws.ps} "sudo" for ${prep} on ${aws.machine}`
+							body: err + `This is an automatted request from ${nick}.  Please provide ${isp.ps} "sudo" for ${prep} on ${isp.machine}`
 						});
 					}
 
 					else  {
-						res( function () { return aws.remotein; } );
+						res( function () { return isp.remotein; } );
 						sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
 						sendMail({
 							to: client,
-							cc: [aws.ps,aws.admin].join(";"),
+							cc: [isp.ps,isp.admin].join(";"),
 							subject: `${nick} login established`,
 							body: notice
 						});
@@ -4021,7 +4025,7 @@ function userid(client) {
 	return user.substr(0,8).toLowerCase();
 }
 
-FLEX.select.proctor = function (req,res) {
+FLEX.select.proctor = function (req,res) {  //< grade quiz results
 	var 
 		site = FLEX.site,
 		sql = req.sql,
