@@ -1979,79 +1979,73 @@ FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
 		}
 	});
 
-	if (uploader = FLEX.uploader) {
-		res(SUBMITTED);
-		
-		Each(files, function (n, file) {
-			
-			Log("uploading ", file);
-			var 
-				buf = new Buffer(file.data,"base64"),
-				srcStream = new STREAM.Readable({  // source stream for event ingest
-					objectMode: true,
-					read: function () {  // return null if there are no more events
-						this.push( buf );
-						buf = null;
-					}
-				});
-			
-			uploader( srcStream, client, area+"/"+file.filename, tags, function (fileID) {
+	res(SUBMITTED);
 
-				Trace(`UPLOAD INTO ${area} FOR ${client}`, sql);
+	Each(files, function (n, file) {
 
-				if (false)
-				sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
-					   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
-					+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
-						req.group, {
-								Client: req.client,
-								Name: file.filename,
-								Area: area,
-								Added: new Date(),
-								Classif: query.classif || "",
-								Revs: 1,
-								Size: file.size,
-								Tag: query.tag || ""
-							}, geoloc, req.client, geoloc
-						]);
+		var 
+			buf = new Buffer(file.data,"base64"),
+			srcStream = new STREAM.Readable({  // source stream for event ingest
+				objectMode: true,
+				read: function () {  // return null if there are no more events
+					this.push( buf );
+					buf = null;
+				}
+			});
 
-				if (false)
-				sql.query( // credit the client
-					"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
-						1000, file.size, {Client: req.client} 
+		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${client}`, sql);
+
+		FLEX.uploader( client, srcStream, area+"/"+file.filename, tags, function (fileID) {
+
+			if (false)
+			sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
+				   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
+				+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
+					req.group, {
+							Client: req.client,
+							Name: file.filename,
+							Area: area,
+							Added: new Date(),
+							Classif: query.classif || "",
+							Revs: 1,
+							Size: file.size,
+							Tag: query.tag || ""
+						}, geoloc, req.client, geoloc
 					]);
 
-				if (false) //(file.image)
-					switch (area) {
-						case "proofs": 
+			if (false)
+			sql.query( // credit the client
+				"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
+					1000, file.size, {Client: req.client} 
+				]);
 
-							sql.query("REPLACE INTO proofs SET ?", {
-								top: 0,
-								left: 0,
-								width: file.Width,
-								height: file.Height,
-								label: tag,
-								made: now,
-								name: area+"."+name
-							});
+			if (false) //(file.image)
+				switch (area) {
+					case "proofs": 
 
-							sql.query(
-								"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
-								[area+"."+name]
-							)
-							.on("result", function (det) {
-								sql.query("UPDATE detectors SET Dirty=Dirty+1");
-							});
+						sql.query("REPLACE INTO proofs SET ?", {
+							top: 0,
+							left: 0,
+							width: file.Width,
+							height: file.Height,
+							label: tag,
+							made: now,
+							name: area+"."+name
+						});
 
-							break;
+						sql.query(
+							"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
+							[area+"."+name]
+						)
+						.on("result", function (det) {
+							sql.query("UPDATE detectors SET Dirty=Dirty+1");
+						});
 
-					}
-			});
+						break;
+
+				}
 		});
-	}
-	
-	else 
-		res( FLEX.errors.noUploader );
+	});
 	
 	Log("flex done uploading");
 }
