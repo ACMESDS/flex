@@ -1682,7 +1682,7 @@ FLEX.select.history = function Xselect(req,res) {
 				
 			case "approve":
 				res( "Thank you for your review -" 
-						+ " revise your comments".hyper(`/roles.view?client=${req.client}`)
+						+ [" revise your comments"].linkify(`/roles.view?client=${req.client}`)
 						+ " as needed" );
 		
 				sql.query(
@@ -1734,9 +1734,9 @@ FLEX.select.history = function Xselect(req,res) {
 									cc: cc.join(";"),
 									subject: "review completed",
 									body: "for more information see " 
-										+ "moderator comments".hyper("/moderate.view") 
+										+ ["moderator comments"].linkify("/moderate.view") 
 										+ " and " 
-										+ "project status".hyper("/project.view")
+										+ ["project status"].linkify("/project.view")
 								}, sql);
 						});
 						});
