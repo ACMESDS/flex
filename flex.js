@@ -267,7 +267,7 @@ var
 				//Log("ctx",ctx);
 			}
 			
-			sql.getFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
+			sql.forFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
 				
 				if (ctx) {
 					if ( ctx.Config ) config(ctx.Config, ctx);
@@ -1015,7 +1015,7 @@ FLEX.delete.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.getEach("DELETEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
+	sql.forEach("DELETEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
 	}, function (file) {
@@ -1049,7 +1049,7 @@ FLEX.execute.files = function Xselect(req,res) {
 
 	res( SUBMITTED );
 	
-	sql.getEach("EXEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
+	sql.forEach("EXEFILE", "SELECT * FROM app.files WHERE least(?,1)", {
 		ID:query.ID,
 		Client: req.client
 	}, function (file) {
@@ -2398,7 +2398,7 @@ FLEX.execute.collects = function Xexecute(req, res) {
 	 * 
 	 * 	run execeute.collects with this alert
 	
-	sql.getEach("SELECT * FROM tests", [], function (test) {
+	sql.forEach("SELECT * FROM tests", [], function (test) {
 		if (test.PollURI)
 			requestService({ 		// poll standing order
 				url: test.PollURI,
@@ -2457,13 +2457,13 @@ FLEX.execute.collects = function Xexecute(req, res) {
 			});
 	});
 	
-	sql.getEach("SELECT GPCs FROM collects WHERE GPCs != ''", [], function (collect) {
+	sql.forEach("SELECT GPCs FROM collects WHERE GPCs != ''", [], function (collect) {
 		sql.query("UPDATE collects SET ?", {
 			RPCs: JSON.stringify( computeRPCs( JSON.parse(collect.GPCs) ) )
 		});
 	});	
 	
-	sql.getEach("SELECT * FROM collects WHERE not BVI", [], function (collect) {
+	sql.forEach("SELECT * FROM collects WHERE not BVI", [], function (collect) {
 	});
 }
 */
@@ -4049,7 +4049,7 @@ FLEX.select.proctor = function (req,res) {  //< grade quiz results
 		Taken: new Date()
 	}], function (err) {
 		
-		sql.getAll(
+		sql.forAll(
 			"",
 			"SELECT count(ID) AS Count FROM app.quizes WHERE Score>Pass AND least(?) GROUP BY Module", 
 			{Client:client, Topic:topic}, 
@@ -4069,7 +4069,7 @@ FLEX.select.proctor = function (req,res) {  //< grade quiz results
 				if ( certified ) {
 					sql.query(
 						"UPDATE app.quizes SET Certified=now() WHERE least(?)", 
-						{Client:client, Topic:topic} );
+						{Client:client, Topic:topic} ).end();
 					
 					sendMail({
 						to: client,
