@@ -502,13 +502,13 @@ var
 							if ( name != "plugins")
 								if ( plugin = FLEX.plugins[name] )
 									sql.query( 
-										"UPDATE app.engines SET ? WHERE ?", [{
+										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
 											Name: name,
 											Code: plugin + "",
-											Type: engineType(plugin)
+											Type: engineType(plugin),
+											Enabled: 1
 											//State: "{}",  //JSON.stringify({Port:name}),
-											//Enabled: 1
-										}, {Name:name}] );
+										}, plugin+"" ] );
 							}
 
 				if (false)
