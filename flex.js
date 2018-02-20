@@ -52,7 +52,6 @@ var 						// globals
 
 var 											// totem bindings
 	READ = require("reader"),
-	JSLAB = require("jslab"),
 	ENUM = require("enum").extend({
 		Array: [
 			function escape() {
@@ -276,14 +275,14 @@ var
 						//Log("json keys", keys);
 						keys.each(function (n,key) {
 							//Log(key, key.indexOf("Save") );
-							if ( key.indexOf("Save")<0 )
-								try { 
-									ctx[key] = JSON.parse( ctx[key] || "null" ); 
-								}
+							//if ( key.indexOf("Save")<0 )
+							try { 
+								ctx[key] = JSON.parse( ctx[key] || "null" ); 
+							}
 
-								catch (err) {
-									ctx[key] = null; 
-								}
+							catch (err) {
+								ctx[key] = null; 
+							}
 
 							else
 								ctx[key] = null;
@@ -376,7 +375,7 @@ var
 
 		},
 		
-		plugins: JSLAB.plugins,
+		plugins: {},
 		
 		viaAgent: function( req, res ) {  //< out-source a plugin callback res(ctx || null)
 		/**
