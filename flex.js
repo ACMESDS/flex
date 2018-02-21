@@ -3874,7 +3874,6 @@ FLEX.select.login = function(req,res) {
 		user = userid(client),
 		group = req.group,
 		profile = req.profile,
-		pass = query.pass,
 		userHome = `/local/users/${user}`,
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
 		isp = {
@@ -3883,7 +3882,7 @@ FLEX.select.login = function(req,res) {
 			ps: "brian.d.james@coe.ic.gov",
 			remotein: `./shares/${user}.rdp`,
 			sudos: [
-				`adduser ${user} -M --gid ${group} -p ${pass}`,
+				`adduser ${user} -M --gid ${group} -p ${ENV.LOGIN_PASS}`,
 				`usermod -d ${userHome} ${user}`,
 				`id ${user}`,
 				`mkdir -p ${userHome}/.ssh`,
@@ -3920,52 +3919,53 @@ To connect to ${nickref} from Windows:
 	Remote Desktop Connect| Computer = localhost:5100 
 	FF | Options | Network | Settings | Manual Proxy | Socks Host = localhost, Port = 5555, Socks = v5 ` ;
 	
-	if (pass && client != "guest")
-		if ( profile.User )  // already have valid user id so just remote in
-			res( function () { return isp.remotein; } );
-	
-		else
-		if ( !ENV.ADMIN_PASS )
-			res( FLEX.errors.failedLogin );
-	
-		else
-		if ( createCert = FLEX.createCert )
-			createCert(user, pass, function () {  // register new userid, certs, login account, and home path
-				var 
-					prep = isp.sudos.join(";"),
-					prepenv = sudoJoin + isp.sudos.join("; "+sudoJoin);
-
-				Trace(`CREATE CERT FOR ${client} PREP ${prep}`, sql);
-
-				CP.exec( prepenv, function (err,out) {
-					if (err)  {
-						res( FLEX.errors.failedLogin );
-						sendMail({
-							to: isp.admin,
-							cc: isp.ps,
-							subject: `${nick} login failed`,
-							body: err + `This is an automatted request from ${nick}.  Please provide ${isp.ps} "sudo" for ${prep} on ${isp.machine}`
-						});
-					}
-
-					else  {
-						res( function () { return isp.remotein; } );
-						sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
-						sendMail({
-							to: client,
-							cc: [isp.ps,isp.admin].join(";"),
-							subject: `${nick} login established`,
-							body: notice
-						});
-					};
-				});
-			});
-	
-		else	
-			res( FLEX.errors.failedLogin );
+	if (client == "guest")
+		res( FLEX.errors.badLogin );
 	
 	else
-		res( FLEX.errors.badLogin );
+	if ( !ENV.PASS )
+		res( FLEX.errors.failedLogin );
+	
+	else
+	if ( profile.User )  // already have valid user id so just remote in
+		res( function () { return isp.remotein; } );
+	
+	else
+	if ( createCert = FLEX.createCert )
+		createCert(user, pass, function () {  // register new userid, certs, login account, and home path
+			var 
+				prep = isp.sudos.join(";"),
+				prepenv = sudoJoin + isp.sudos.join("; "+sudoJoin);
+
+			Trace(`CREATE LOGIN FOR ${client} PREP ${prep}`, sql);
+
+			CP.exec( prepenv, function (err,out) {
+				if (err)  {
+					res( FLEX.errors.failedLogin );
+					sendMail({
+						to: isp.admin,
+						cc: isp.ps,
+						subject: `${nick} login failed`,
+						body: err + `This is an automatted request from ${nick}.  Please provide ${isp.ps} "sudo" for ${prep} on ${isp.machine}`
+					});
+				}
+
+				else  {
+					res( function () { return isp.remotein; } );
+					sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
+					sendMail({
+						to: client,
+						cc: [isp.ps,isp.admin].join(";"),
+						subject: `${nick} login established`,
+						body: notice
+					});
+				};
+			});
+		});
+	
+	else	
+		res( FLEX.errors.failedLogin );
+	
 }
 
 function userid(client) {
