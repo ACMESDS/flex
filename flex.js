@@ -274,8 +274,6 @@ var
 					sql.jsonKeys( ds, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
 						keys.each(function (n,key) {
-							//Log(key, key.indexOf("Save") );
-							//if ( key.indexOf("Save")<0 )
 							try { 
 								ctx[key] = JSON.parse( ctx[key] || "null" ); 
 							}
@@ -284,8 +282,6 @@ var
 								ctx[key] = null; 
 							}
 
-							else
-								ctx[key] = null;
 						});
 						
 						cb(ctx);
@@ -297,43 +293,6 @@ var
 					cb( null );	
 			});
 			
-			/*
-			var 
-				id = ctx.id || ctx.ID,
-				name = ctx.name || ctx.Name,
-				dsquery = id ? {ID: id} : name ? {Name: name} : null;
-			
-			if (dsquery)  // get context from dataset
-				sql.query( "SELECT * FROM ?? WHERE ? LIMIT 0,1", 	[ds, dsquery], function ( err, ctxs ) {						
-					if (err) 
-						cb( null );
-						
-					else 
-					if ( isEmpty = ctxs.each() )
-						cb( null );
-					
-					else {
-						Copy( ctxs[0], ctx );
-						
-						sql.jsonKeys( ds, function (keys) {  // parse json keys
-							keys.each(function (n,key) {
-								if ( key.indexOf("Save")<0 )
-									try { 
-										ctx[key] = JSON.parse( ctx[key] ); 
-									}
-
-									catch (err) {
-										ctx[key] = null;
-									}
-							});
-						});
-						cb( ctxs[0] );
-					}
-				});
-			
-			else
-				cb( ctx );
-			*/
 		},
 		
 		runPlugin: function runPlugin(req, res) {  //< callback res(ctx || null) with results in ctx
