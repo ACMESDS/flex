@@ -101,6 +101,7 @@ var
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
 		},
 		
+		/*
 		listify: function (hash, idxkey, valkey) {
 			var list = [];
 			var n = 0;
@@ -116,12 +117,17 @@ var
 					list.push(idx);
 					
 			return list;
-		},
+		}, */
 
 		diag: { // configured for system health info
 		},
 		
 		paths: {
+			plugins: {
+				js: "./public/js",
+				py: "./public/py",
+				ma: "./public/matlab"
+			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
 			host: ""
@@ -334,8 +340,6 @@ var
 
 		},
 		
-		plugins: {},
-		
 		viaAgent: function( req, res ) {  //< out-source a plugin callback res(ctx || null)
 		/**
 		@method viaAgent
@@ -393,10 +397,8 @@ var
 
 				});
 
-			else  { // in-source
-				Log("run eng");
+			else   // in-source
 				FLEX.runEngine(req, res);
-			}
 		},
 		
 		config: function (opts) {
@@ -452,22 +454,67 @@ var
 				READ.config(sql);			
 				
 				if (CLUSTER.isMaster)
-					if (runPlugin = FLEX.runPlugin)  // add builtin plugins to FLEX.execute
-						for (var name in FLEX.plugins) {
-							FLEX.execute[name] = runPlugin;
-							Trace("PUBLISHING "+name, sql);
+					if (runPlugin = FLEX.runPlugin)   // add builtin plugins to FLEX.execute
+						sql.getTables("app", function (usecase) {
+							Each( FLEX.paths.plugins, function (type, path) {
+								FLEX.indexer( path, function (files) {
+									files.forEach( function (file) {
+										if ( file.endsWith(".js") ) 
+											try {
+												var 
+													name = file.replace(".js",""),
+													modpath = process.cwd() + "/" + path + "/" + name,
+													mod = require(modpath);
 
-							if ( name != "plugins")
-								if ( plugin = FLEX.plugins[name] )
-									sql.query( 
-										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-											Name: name,
-											Code: plugin + "",
-											Type: engineType(plugin),
-											Enabled: 1
-											//State: "{}",  //JSON.stringify({Port:name}),
-										}, plugin+"" ] );
-							}
+												Trace("PUBLISHING "+name);
+
+												FLEX.execute[name] = runPlugin;
+
+												if ( !usecase[name] ) {
+													usecase[name] = "app";
+													
+													[
+														"USE app",
+														`CREATE TABLE ${name} (ID float unique auto_increment, Name varchar(32))`
+													].forEach( function (gen) {
+														sql.query(gen);
+													});
+													
+													Each( mod.usecase, function (key,type) {
+														sql.query( `ALTER TABLE ${name} ADD ${key} ${type}` );
+													});
+												}
+											
+												if (mod.view) 
+													sql.query(
+														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+															Name: name,
+															Code: mod.view,
+															Type: "jade",
+															Enabled: 1
+														},
+														mod.view
+													]);
+												
+												sql.query( 
+													"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+														Name: name,
+														Code: mod.engine+"",
+														Type: type,
+														Enabled: 1
+														//State: "{}",  //JSON.stringify({Port:name}),
+													}, mod.engine+"" 
+												]);
+
+											}
+
+											catch (err) {
+												Log("IGNORING ", modpath);
+											}
+									});
+								});
+							});
+						});
 
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
@@ -1077,7 +1124,9 @@ FLEX.select.activity = function Xselect(req, res) {
 				Copy( act, rec );
 			});
 			
-			res( FLEX.listify(recs, "ID") );
+			res( recs.listify( function (rec) { 
+				return rec.ID; 
+			}) );
 	});
 	});
 }
