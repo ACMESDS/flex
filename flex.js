@@ -459,6 +459,22 @@ var
 							Each( FLEX.paths.plugins, function (type, path) {
 								FLEX.indexer( path, function (files) {
 									files.forEach( function (file) {
+										
+										function allocateUsecases() {
+											if ( !usecase[name] ) {
+												usecase[name] = "app";
+
+												sql.query( 
+													`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32))` , 
+													[], function () {
+
+													Each( mod.usecase, function (key,type) {
+														sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
+													});
+												});
+											}
+										}
+											
 										if ( file.endsWith(".js") ) 
 											try {
 												var 
@@ -470,21 +486,15 @@ var
 
 												FLEX.execute[name] = runPlugin;
 
-												if ( !usecase[name] ) {
-													usecase[name] = "app";
-													
-													[
-														"USE app",
-														`CREATE TABLE ${name} (ID float unique auto_increment, Name varchar(32))`
-													].forEach( function (gen) {
-														sql.query(gen);
+												if ( mod.clear )
+													sql.query("DROP TABLE app.??", name, function () {
+														delete usecase[name];
+														allocateUsecases();
 													});
-													
-													Each( mod.usecase, function (key,type) {
-														sql.query( `ALTER TABLE ${name} ADD ${key} ${type}` );
-													});
-												}
-											
+												
+												else
+													allocateUsecases();
+												
 												if (mod.view) 
 													sql.query(
 														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -496,15 +506,16 @@ var
 														mod.view
 													]);
 												
-												sql.query( 
-													"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-														Name: name,
-														Code: mod.engine+"",
-														Type: type,
-														Enabled: 1
-														//State: "{}",  //JSON.stringify({Port:name}),
-													}, mod.engine+"" 
-												]);
+												if (mod.engine)
+													sql.query( 
+														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+															Name: name,
+															Code: mod.engine+"",
+															Type: type,
+															Enabled: 1
+															//State: "{}",  //JSON.stringify({Port:name}),
+														}, mod.engine+"" 
+													]);
 
 											}
 
