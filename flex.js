@@ -75,10 +75,7 @@ var
 		copy: Copy,
 		each: Each,
 		
-		fetchers: { // reserved for data fetchers
-			http: null,
-			wget: null
-		},
+		fetcher: null,  // reserved for data fetchers
 		
 		// Job hawking  etc
 		timers: [],
@@ -3780,7 +3777,7 @@ function queryDS(req, res) {
 			table:	(FLEX.dbRoutes[req.table] || req.group)+"."+req.table,
 			where:	flags.where || query,
 			res:	res,
-			order:	flags.sort,
+			order:	(flags.sort||"").parseJSON(null),
 			having: flags.having,
 			group: 	flags.group || flags.tree,
 			score:	flags.score,
@@ -4108,7 +4105,7 @@ FLEX.select.wms = function (req,res) {
 	var 
 		sql = req.sql,
 		query = req.query,
-		fetcher = FLEX.fetchers.http,
+		fetcher = FLEX.fetcher,
 		src = "",
 		SRC = src.toUpperCase();
 	
@@ -4125,7 +4122,7 @@ FLEX.select.wms = function (req,res) {
 	res("ok");
 	
 	if (url) 
-		fetcher(url, function (rtn) {
+		fetcher(url, null ,function (rtn) {
 			Log("wms stat", rtn);
 		});
 };
@@ -4134,7 +4131,7 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 	var 
 		sql = req.sql,
 		query = req.query,
-		fetcher = FLEX.fetchers.wget,
+		fetcher = FLEX.fetcher,
 		site = FLEX.site,
 		src = "",
 		SRC = src.toUpperCase();
@@ -4153,7 +4150,7 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 	Trace("WFS "+(url||"spoof"));
 
 	if (url)
-		fetcher( url, function (cat) {  // query catalog for desired data channel
+		fetcher( url, null, function (cat) {  // query catalog for desired data channel
 
 			if ( cat ) {
 				switch ( src ) {  // normalize cat response to ess
