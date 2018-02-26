@@ -305,8 +305,8 @@ var
 		or (if Q.id or Q.name specified) dataset X parameters derived from the matched  
 		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
 		method then responds on res(results).   If Q.Save is present, the engine's results are
-		also saved to the plugins dataset.  If Q.Job is present, then responds with res(Q.Job), 
-		thus allowing the caller to place the request in its job queues.  Otherwise, if Q.Job 
+		also saved to the plugins dataset.  If Q.Pipe is present, then responds with res(Q.Pipe), 
+		thus allowing the caller to place the request in its job queues.  Otherwise, if Q.Pipe 
 		vacant, then responds with res(results).  If a Q.agent is present, then the plugin is 
 		out-sourced to the requested agent, which is periodically polled for its results, then
 		responds with res(results).  Related comments in FLEX.config.
@@ -320,7 +320,7 @@ var
 					Copy(ctx,req.query);
 					//Log("plugin req query", req.query);
 					
-					if ( ctx.Job )  // let host chipping-regulating service run this engine
+					if ( ctx.Pipe )  // let host chipping-regulating service run this engine
 						res( ctx );
 
 					else
@@ -3928,7 +3928,7 @@ FLEX.select.login = function(req,res) {
 		nick = site.nick,
 		nickref = nick.tag("a",{href:url}),
 		client = req.client,
-		user = userid(client),
+		user = userID(client),
 		group = req.group,
 		profile = req.profile,
 		userHome = `/local/users/${user}`,
@@ -3989,7 +3989,7 @@ To connect to ${nickref} from Windows:
 	
 	else
 	if ( createCert = FLEX.createCert )
-		createCert(user, pass, function () {  // register new userid, certs, login account, and home path
+		createCert(user, pass, function () {  // register new userID, certs, login account, and home path
 			var 
 				prep = isp.sudos.join(";"),
 				prepenv = sudoJoin + isp.sudos.join("; "+sudoJoin);
@@ -4025,7 +4025,7 @@ To connect to ${nickref} from Windows:
 	
 }
 
-function userid(client) {
+function userID(client) {
 	var 
 		parts = client.split("@"),
 		parts = (parts[0]+".x.x").split("."),
@@ -4141,14 +4141,15 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 		case "omar":
 		case "ess":
 		default:
-			query.geometryPolygon = JSON.stringify({rings: query.ring});  // ring being monitored
+			query.geometryPolygon = JSON.stringify({rings: JSON.parse(query.ring)});  // ring being monitored
 			delete query.ring;
 	}
 
 	var url = src ? ENV[`WFS_${SRC}`].tag("?", query) : null;
 
 	Trace("WFS "+(url||"spoof"));
-
+	Log(query);
+	
 	if (url)
 		fetcher( url, null, function (cat) {  // query catalog for desired data channel
 
