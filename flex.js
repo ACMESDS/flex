@@ -1358,7 +1358,7 @@ FLEX.select.admin = function Xselect(req, res) {
 		res(err || recs);
 	});
 }
-	
+
 /*
 FLEX.select.queues = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
@@ -4098,7 +4098,7 @@ FLEX.select.proctor = function (req,res) {  //< grade quiz results
 		});
 	
 	});
-};
+}
 		
 FLEX.select.wms = function (req,res) {
 	
@@ -4125,7 +4125,7 @@ FLEX.select.wms = function (req,res) {
 		fetcher(url, null ,function (rtn) {
 			Log("wms stat", rtn);
 		});
-};
+}
 
 FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image catalog to induce image-spoofing in the chipper.
 	var 
@@ -4267,7 +4267,7 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 		} */
 		}]);
 
-};
+}
 
 FLEX.select.matlab = function (req,res) {
 	var
@@ -4299,6 +4299,6 @@ FLEX.select.matlab = function (req,res) {
 	
 	res("flushed");
 		
-};
+}
 
 // UNCLASSIFIED
