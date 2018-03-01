@@ -123,7 +123,8 @@ var
 			plugins: {
 				js: "./public/js",
 				py: "./public/py",
-				ma: "./public/matlab"
+				m: "./public/matlab",
+				jade: ".public/jade"
 			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
@@ -1181,33 +1182,38 @@ FLEX.select.links = function Xselect(req, res) {
 			if (stats.isDirectory()) 
 				if (file.charAt(0) == ".") 
 					FLEX.indexer( path+file, function (subs) {
-						subs.each(function (n,sub) {
+						subs.each(function (n,name) {
 							links.push({
 								ID: id++,
-								Name: (file + " &rrarr; "+sub).tag("a",{
-									href: `${name}.view`
+								Name: (name + " &rrarr; "+name).tag("a",{
+									href: "/" + name + ".view"
 								})
 							});
-							taken[sub] = 1;
+							taken[name] = 1;
 						});
 					});
 				
 				else 
-					links.push({
-						ID: id++,
-						Name: ("&diams; "+file).tag("a",{
-							href: file + ".home.view"
-						})
+				if (false)
+					FLEX.indexer( path+file, function (subs) {
+						subs.each(function (n,sub) {
+							var name = sub.replace(".jade","");
+							links.push({
+								ID: id++,
+								Name: ("&diams; "+name).tag("a",{
+									href: "/" + file + "/" + sub
+								})
+							});
+						});
 					});
 			
 			else {
-				var name = file.replace(".view","");
-				
+				var name = file.replace(".jade","");
 				if ( !taken[name] )
 					links.push({
 						ID: id++,
 						Name: name.tag("a", {
-							href: `${name}.view`
+							href: "/" + name + ".view"
 							/*(FLEX.statefulViews[name] ? FLEX.WORKER : "") + area + file*/
 						})
 					});
