@@ -77,6 +77,88 @@ var
 		
 		fetcher: null,  // reserved for data fetchers
 		
+		publish: function (sql, type, file,path) {
+			try {			
+				var 
+					name = file.replace(".js",""),
+					modpath = process.cwd() + "/" + path + "/" + name,
+					mod = require(modpath);
+
+				Trace("PUBLISHING "+name);
+
+				FLEX.execute[name] = runPlugin;
+
+				if ( mod.clear )
+					sql.query("DROP TABLE app.??", name);
+
+				sql.query( 
+					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32))` , 
+					[], function (err) {
+
+					if ( keys = mod.usecase )
+						Each( keys, function (key,type) {
+							sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
+						});
+
+					if ( keys = mod.modify )
+						Each( keys, function (key,type) {
+							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+						});
+				});
+
+				if (mod.view) 
+					sql.query(
+						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+							Name: name,
+							Code: mod.view,
+							Type: "jade",
+							Enabled: 1
+						},
+						mod.view
+					]);
+
+				if (mod.engine)
+					sql.query( 
+						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+							Name: name,
+							Code: mod.engine+"",
+							Type: type,
+							Enabled: 1
+							//State: "{}",  //JSON.stringify({Port:name}),
+						}, mod.engine+"" 
+					]);
+				
+				if ( smop = mod.smop) 
+					sql.query("SELECT ID,Code FROM app.engines WHERE least(?)",{Name:smop,Type:"m"})
+					.on("results", function (eng) {
+						var 
+							msrc = path+"/"+name+".m",
+							pytar = path+"/"+name+".py";
+						
+						FS.writeFile( msrc, eng.Code, "utf8", function (err) {
+							CP.execFile("python", ["./smop/smop/main.py", "smop", msrc], function (err) {
+								if (!err) 
+									FS.readFile( pytar, "utf8", function (err,code) {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: name,
+													Code: pycode,
+													Type: type,
+													Enabled: 1
+												}, pycode 
+											]);
+									});									
+							});
+						});
+					});
+			}
+
+			catch (err) {
+				Log("IGNORING ", modpath);
+			}
+		},
+		
 		// Job hawking  etc
 		timers: [],
 		sendMail: sendMail,
@@ -453,74 +535,11 @@ var
 				
 				if (CLUSTER.isMaster)
 					if (runPlugin = FLEX.runPlugin)   // add builtin plugins to FLEX.execute
-						sql.getTables("app", function (usecase) {
-							Each( FLEX.paths.plugins, function (type, path) {
-								FLEX.indexer( path, function (files) {
-									files.forEach( function (file) {
-										
-										function allocateUsecases() {
-											if ( !usecase[name] ) {
-												usecase[name] = "app";
-
-												sql.query( 
-													`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32))` , 
-													[], function () {
-
-													Each( mod.usecase, function (key,type) {
-														sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
-													});
-												});
-											}
-										}
-											
-										if ( file.endsWith(".js") ) 
-											try {
-												var 
-													name = file.replace(".js",""),
-													modpath = process.cwd() + "/" + path + "/" + name,
-													mod = require(modpath);
-
-												Trace("PUBLISHING "+name);
-
-												FLEX.execute[name] = runPlugin;
-
-												if ( mod.clear )
-													sql.query("DROP TABLE app.??", name, function () {
-														delete usecase[name];
-														allocateUsecases();
-													});
-												
-												else
-													allocateUsecases();
-												
-												if (mod.view) 
-													sql.query(
-														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-															Name: name,
-															Code: mod.view,
-															Type: "jade",
-															Enabled: 1
-														},
-														mod.view
-													]);
-												
-												if (mod.engine)
-													sql.query( 
-														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-															Name: name,
-															Code: mod.engine+"",
-															Type: type,
-															Enabled: 1
-															//State: "{}",  //JSON.stringify({Port:name}),
-														}, mod.engine+"" 
-													]);
-
-											}
-
-											catch (err) {
-												Log("IGNORING ", modpath);
-											}
-									});
+						Each( FLEX.paths.plugins, function (type, path) {
+							FLEX.indexer( path, function (files) {
+								files.forEach( function (file) {
+									if ( file.endsWith(".js") ) 
+										FLEX.publish(sql, type, file, path);
 								});
 							});
 						});
