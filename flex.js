@@ -4338,7 +4338,7 @@ FLEX.select.help = function (req,res) {
 		case "pmo":
 		case "asp":
 		case "isp":
-		case "swap:
+		case "swap":
 	}
 	
 }
