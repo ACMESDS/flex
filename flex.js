@@ -4326,4 +4326,21 @@ FLEX.select.matlab = function (req,res) {
 		
 }
 
+FLEX.select.help = function (req,res) {
+	var 
+		sql = req.sql,
+		query = req.query,
+		from = query.from,
+		site = FLEX.site;
+	
+	res("email submitted");
+	switch (from) {
+		case "pmo":
+		case "asp":
+		case "isp":
+		case "swap:
+	}
+	
+}
+
 // UNCLASSIFIED
