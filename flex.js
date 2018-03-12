@@ -72,8 +72,8 @@ var 											// totem bindings
 var
 	FLEX = module.exports = {
 		
-		copy: Copy,
-		each: Each,
+		//copy: Copy,
+		//each: Each,
 		
 		fetcher: null,  // reserved for data fetchers
 		
@@ -159,11 +159,12 @@ var
 			}
 		},
 		
-		// Job hawking  etc
-		timers: [],
+		//timers: [],
 		sendMail: sendMail,
 		
 		errors: {
+			noBody: new Error("no body keys"),
+			noID: new Error("missing record ID"),
 			badbaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
@@ -241,11 +242,11 @@ var
 		},
 		
 		// CRUDE interface
-		select: {ds: queryDS}, 
-		delete: {ds: queryDS}, 
-		update: {ds: queryDS}, 
-		insert: {ds: queryDS}, 
-		execute: {ds: queryDS}, 
+		select: {ds: selectDS}, 
+		delete: {ds: deleteDS}, 
+		update: {ds: updateDS}, 
+		insert: {ds: insertDS}, 
+		execute: {}, 
 	
 		fetcher: null, 					// http data fetcher
 		uploader: null,		 			// file uploader
@@ -505,32 +506,7 @@ var
 			if (opts) Copy(opts,FLEX);
 			
 			if (FLEX.thread)
-			FLEX.thread( function (sql) {
-				
-				ENUM.extend(sql.constructor, [
-					/*
-					selectJob,
-					deleteJob,
-					updateJob,
-					insertJob,
-					executeJob,
-					*/
-					/*
-					selectData,
-					deleteData,
-					updateData,
-					insertData,
-					executeData,
-					*/
-					queryDS, 
-					/*
-					hawkCatalog,
-					flattenCatalog,
-					*/
-				]);
-
-				//sql.hawkJobs("flex", FLEX.site.masterURL);
-
+			FLEX.thread( function (sql) {				
 				READ.config(sql);			
 				
 				if (CLUSTER.isMaster)
@@ -3788,42 +3764,158 @@ function executeData(req, cb) {
 
 //============  Database CRUDE interface
 
+function selectDS(req,res) {
+	var 
+		sql = req.sql,							// sql connection
+		flags = req.flags,
+		query = req.query;
+	
+	sql.run( Copy( flags, {
+		crud: req.action,
+		from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+		where: query,
+		client: req.client
+	}), null, function (err,recs) {
+
+		res( err || recs );
+
+	});
+}
+
+function insertDS(req, res) {
+		
+	var 
+		sql = req.sql,							// sql connection
+		flags = req.flags,
+		body = req.body,
+		query = req.query;
+
+	if ( isEmpty(body) )
+		res( FLEX.errors.noBody );
+	
+	else
+		sql.run( Copy( flags, {
+			crud: req.action,
+			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			set: body,
+			client: req.client
+		}), FLEX.emitter, function (err,info) {
+
+			//Log(info);
+			res( err || info );
+
+		});
+	
+}
+
+function deleteDS(req, res) {
+		
+	var 
+		sql = req.sql,							// sql connection
+		flags = req.flags,
+		query = req.query;
+
+	if ( query.ID )
+		sql.run( Copy( flags, {
+			crud: req.action,
+			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			where: query,
+			client: req.client
+		}), FLEX.emitter, function (err,info) {
+
+			//Log(info);
+			res( err || info );
+
+		});
+	
+	else
+		res( FLEX.errors.noID );
+	
+}
+
+function updateDS(req, res) {
+	var 
+		sql = req.sql,							// sql connection
+		flags = req.flags,
+		body = req.body,
+		ds = req.table,
+		query = req.query;
+
+	//Log(req.action, query, body);
+	
+	if ( isEmpty(body) )
+		res( FLEX.errors.noBody );
+	
+	else
+	if ( query.ID )
+		sql.run( Copy( flags, {
+			crud: req.action,
+			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			where: query,
+			set: body,
+			client: req.client
+		}), FLEX.emitter, function (err,info) {
+
+			//Log(info);
+			res( err || info );
+
+			if (true) {  // update change journal if enabled
+				sql.hawk({Dataset:ds, Field:""});  // journal entry for the record itself
+				if (false)   // journal entry for each record key being changed
+					for (var key in body) { 		
+						sql.hawk({Dataset:ds, Field:key});
+						sql.hawk({Dataset:"", Field:key});
+					}
+			}
+			
+		});
+	
+	else
+		res( FLEX.errors.noID );
+	
+}
+
+/*
 function queryDS(req, res) {
 		
 	var 
 		sql = req.sql,							// sql connection
 		flags = req.flags,
 		query = req.query,
-		body = Copy(query,req.body);
+		body = Copy(query,req.body),
+		emit = FLEX.emitter;
 
 	delete body.ID;
 
+	Log(req.action, query, body);
+	
 	sql.context({ds: {
-			table:	(FLEX.dbRoutes[req.table] || req.group)+"."+req.table,
-			where:	flags.where || query,
-			res:	res,
-			order:	(flags.sort||"").parseJSON(null),
-			having: flags.having,
-			group: 	flags.group || flags.tree,
-			score:	flags.score,
-			limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-			index: 	{
-				has:flags.has, 
-				nlp:flags.nlp, 
-				bin:flags.bin, 
-				qex:flags.qex, 
-				browse:flags.browse, 
-				pivot:flags.pivot, 
-				select: flags.index ? flags.index.split(",") : "*"
-			},
-			data:	body,
-			client: req.client
-		}}, function (ctx) {
+		table:	(FLEX.dbRoutes[req.table] || req.group)+"."+req.table,
+		where:	flags.where || query,
+		res:	res,
+		order:	(flags.sort||"").parseJSON(null),
+		having: flags.having,
+		group: 	flags.group || flags.tree,
+		score:	flags.score,
+		limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
+		index: 	{
+			has:flags.has, 
+			nlp:flags.nlp, 
+			bin:flags.bin, 
+			qex:flags.qex, 
+			browse:flags.browse, 
+			pivot:flags.pivot, 
+			select: flags.index ? flags.index.split(",") : "*"
+		},
+		data:	body,
+		client: req.client
+	}}, function (ctx) {
 			
 		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
 		
 	});
 }
+*/
 
 //============ misc 
 
@@ -4341,6 +4433,11 @@ FLEX.select.help = function (req,res) {
 		case "swap":
 	}
 	
+}
+
+function isEmpty(opts) {
+	for ( var key in opts ) return false;
+	return true;
 }
 
 // UNCLASSIFIED
