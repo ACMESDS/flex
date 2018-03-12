@@ -490,6 +490,7 @@ var
 		also published to app.engines (disabled and only if they dont already exist).  Engines 
 		are scanned to prime their corresponding dataset (if they dont already exist).
 		*/
+			/*
 			function engineType(eng) {
 				if ( eng.constructor == String ) 
 					if ( eng.indexOf("function") >= 0 )
@@ -501,7 +502,7 @@ var
 						return "?";
 				else
 					return "js";
-			}
+			}  */
 			
 			if (opts) Copy(opts,FLEX);
 			
@@ -580,6 +581,8 @@ var
 					email.TX = {};
 					email.RX = {};
 					
+					Log("emailset", site.emailhost, "pocs", site.pocs);
+					
 					var parts = (site.emailhost||"").split(":");
 					email.TX.HOST = parts[0];
 					email.TX.PORT = parseInt(parts[1]);
@@ -606,8 +609,16 @@ var
 							});
 
 					}
+					
 					else
-						email.TX = {};
+						email.TX.TRAN = {
+							sendMail: function (opts, sql) {
+								Log(opts);
+								CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
+									//Trace("MAIL "+ (err || opts.to) );
+								});
+							}
+						};
 
 					if (email.RX.PORT)
 						email.RX.TRAN = new IMAP({
@@ -619,33 +630,35 @@ var
 							  //debug: function (err) { console.warn(ME+">"+err); } ,
 							  connTimeout: 10000
 							});
+					
 					else
 						email.RX = {};
 
 					if (email.RX.TRAN)					// Establish server's email inbox			
-						openIMAP(function(err, mailbox) {
-						  if (err) killIMAP(err);
-						  email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+						openIMAP( function(err, mailbox) {
 							if (err) killIMAP(err);
-							email.RX.TRAN.fetch(results,
-							  { headers: ['from', 'to', 'subject', 'date'],
-								cb: function(fetch) {
-								  fetch.on('message', function(msg) {
-									console.info(ME+'Saw message no. ' + msg.seqno);
-									msg.on('headers', function(hdrs) {
-									  console.info(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
-									});
-									msg.on('end', function() {
-									  console.info(ME+'Finished message no. ' + msg.seqno);
-									});
-								  });
-								}
-							  }, function(err) {
-								if (err) throw err;
-								console.info(ME+'Done fetching all messages!');
-								email.RX.TRAN.logout();
-							  }
-							);
+						  	email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+
+								if (err) killIMAP(err);
+							
+								email.RX.TRAN.fetch(results, { 
+									headers: ['from', 'to', 'subject', 'date'],
+									cb: function(fetch) {
+										fetch.on('message', function(msg) {
+											Log(ME+'Saw message no. ' + msg.seqno);
+											msg.on('headers', function(hdrs) {
+												Log(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
+											});
+											msg.on('end', function() {
+												Log(ME+'Finished message no. ' + msg.seqno);
+											});
+										});
+									}
+								  }, function(err) {
+									if (err) throw err;
+									Log(ME+'Done fetching all messages!');
+									email.RX.TRAN.logout();
+								});
 						  });
 						});
 
@@ -1519,13 +1532,13 @@ FLEX.select.health = function Xselect(req, res) {
 }
 
 FLEX.select.likeus = function Xselect(req, res) {
-	var sql = req.sql, log = req.log, query = req.query;
+	var sql = req.sql, log = req.log, query = req.query, pocs = FLEX.site.pocs;
 
-	//TRACE(FLEX.site.pocs);
+	Log(pocs);
 	
-	if ( FLEX.site.pocs.admin )
+	if ( pocs.admin )
 		sendMail({
-			to:  FLEX.site.pocs.admin,
+			to:  pocs.admin,
 			subject: req.client + " likes " + FLEX.site.title + " !!",
 			body: "Just saying"
 		}, sql);
@@ -3681,7 +3694,7 @@ function openIMAP(cb) {
 	});
 }
 
-function sendMail(opts,sql) {
+function sendMail(opts, sql) {
 	
 	Trace(`MAIL ${opts.to} RE ${opts.subject}`, sql);
 
@@ -3692,14 +3705,8 @@ function sendMail(opts,sql) {
 	}];
 
 	if (opts.to) 
-		if (x = FLEX.mailer)
-			if (x = x.TX.TRAN) 
-				x.sendMail(opts,function (err) {
-					//Trace("MAIL "+ (err || opts.to) );
-				});
-		
-			else
-				CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
+		if ( sendMail = FLEX.mailer.TX.TRAN.sendMail )
+				sendMail(opts, function (err) {
 					//Trace("MAIL "+ (err || opts.to) );
 				});
 }
