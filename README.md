@@ -5,35 +5,57 @@
 	[geointapps](https://git.geointapps.org/acmesds/flex)
 	[gitlab](https://gitlab.west.nga.ic.gov/acmesds/flex.git)
 
-FLEX provides a CRUDE interface to MYSQL datasets, job queues, file upload areas, emulated datasets,  
-engine plugins, dataset schema editor, email, new feeder, job agents, quizzes, and network services distributed 
-across a virtual machine cloud.  
+FLEX provides a CRUDE interface to support [nosql-agnosictic distributed database](https://git.geointapps.org/acmesds/jsdb), 
+job queueing and job agents, file uploading, dataset emulation, engine plugins, dataset schema editor, email, new feeder, 
+quizzes via CRUDE emulated datasets:
 
-FLEX uses the [JSDB database agnosticator](https://git.geointapps.org/acmesds/jsdb) 
-for its MYSQL datasets, and provides the following emulated datasets:
+	CRUDE keyedits edit plug keys
+	CRUE uploads	get/upload file(s) into one-time file upload area
+	CRUE stores	get/upload file(s) into monitored file store area
+	RE baseline local repo history, commit changes, sync with remote repo
+	RE email list / autoflush (send/get) SMTP email
+	RE catalog	read/flatten the master catalog
+	RE news			
+	RE issues		
+	RE detectors
+	RE baseline
+	RE tasks list/autoupdate tasks
+	R likeus provide client addition credit to run jobs
+	R history	allows moderators to approve requirement changes etc
+	R plugins list avaliable plugins
+	R activity
+	R views
+	R summary
+	R users
+	R config
+	R datasets
+	R admin
+	R cliques
+	R health
+	R likeus
+	R tips
+	R history
+	R AlgorithmService Hydra job agent
+	R parms		 
+	R roles			
+	R lookups				
+	R searches
+	R swaps		 	
+	E milestones 		
+	E sessions	
+	E catalog flatten catalog
 
-	baseline		local repo history, commit changes, sync with remote repo
-	uploads	get/upload file(s) into one-time file upload area
-	stores	get/upload file(s) into monitored file store area
-	email		send/get SMTP email
-	feed		send/get RSS feeds
-	engine 	run simulation engine 
-	catalog	read/flatten the master catalog
- 	json		edit a json formatted string
- 	job		get, add, stop, and update a job placed in qos-priority queues
-	sql		crude engines to sql datasets
-	likeus 	provide client some credit
-	history	moderator history
-	plugins	list of plugins
-	tasks	list of tasks
+Legacy emulated datasets:
 
-FLEX also adds a CRUDE-execute interface to the following datasets:
- 
- 		parms		 	roles			lookups				searches
- 		swaps		 	news			milestones 		sessions	
-		collects	 	events		 		issues		detectors
- 		aspreqts	 	ispreqts		hawks
- 		
+	collects	 	
+	events		 		
+	json edit a json formatted string 
+ 	aspreqts	 	
+	ispreqts		
+	hawks
+	engine run simulation engine 
+
+
 To use, simply require FLEX and add interfaces for the virtual table X:
 
 	var FLEX = require("sql").config({   // CRUDE interface

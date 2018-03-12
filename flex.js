@@ -846,7 +846,7 @@ FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 	
 }
 
-FLEX.select.git = function Xselect(req, res) {
+FLEX.select.baseline = function Xselect(req, res) {
 
 	var gitlogs = 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog';
 	
@@ -966,35 +966,6 @@ FLEX.execute.catalog = function Xexecute(req, res) {
 			sql.query("INSERT INTO catalog SET ?",rec);
 		});
 
-	});
-	
-}
-
-FLEX.select.plugins = function Xselect(req,res) {
-	var sql = req.sql, query = req.query;
-	var plugins = [];
-	
-	sql.query("SELECT Name FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
-		
-		if ( err )
-			res( plugins );
-		
-		else
-			engs.each(function (n,eng) {
-
-				sql.query("SHOW TABLES FROM ?? WHERE ?", [
-					req.group, {tables_in_app: eng.Name}
-				], function (err,recs) {
-
-					if ( !err && recs.length) 
-						plugins.push( {
-							ID: plugins.length,
-							Name: eng.Name.tag("a",{href:"/"+eng.Name+".run"}) 
-						});
-
-					if (n == engs.length-1) res( plugins );
-				});
-			});
 	});
 	
 }
@@ -1778,15 +1749,45 @@ FLEX.select.history = function Xselect(req,res) {
 
 }
 
-// Digital globe interface
+FLEX.select.plugins = function Xselect(req,res) {
+	var sql = req.sql, query = req.query;
+	var plugins = [];
+	
+	sql.query("SELECT Name FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
+		
+		if ( err )
+			res( plugins );
+		
+		else
+			engs.each(function (n,eng) {
 
-FLEX.select.DigitalGlobe = function Xselect(req, res) {  
-	var sql = req.sql, log = req.log, query = req.query;
+				sql.query("SHOW TABLES FROM ?? WHERE ?", [
+					req.group, {tables_in_app: eng.Name}
+				], function (err,recs) {
+
+					if ( !err && recs.length) 
+						plugins.push( {
+							ID: plugins.length,
+							Name: eng.Name.tag("a",{href:"/"+eng.Name+".run"}) 
+						});
+
+					if (n == engs.length-1) res( plugins );
+				});
+			});
+	});
+	
 }
 
-// Hydra interface
+/*
+FLEX.select.DigitalGlobe = function Xselect(req, res) {  
+// Digital globe interface
+
+	var sql = req.sql, log = req.log, query = req.query;
+} */
 
 FLEX.select.AlgorithmService = function Xselect(req, res) { 
+// Hydra interface
+
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	var args =  {		// Hydra parameters
@@ -1831,18 +1832,23 @@ FLEX.select.AlgorithmService = function Xselect(req, res) {
 
 }
 
-// Reserved for NCL and ESS service alerts
+/*
 FLEX.select.NCL = function Xselect(req, res) { 
+// Reserved for NCL and ESS service alerts
 	var sql = req.sql, log = req.log, query = req.query;
 }
 
 FLEX.select.ESS = function Xselect(req, res) { 
+// Reserved for NCL and ESS service alerts
 	var sql = req.sql, log = req.log, query = req.query;
 }
+*/
 
 // Uploads/Stores file interface
 
-FLEX.select.uploads = FLEX.select.stores = function Xselect(req, res) {
+FLEX.select.uploads = 
+FLEX.select.stores = 
+function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query,  body = req.body;
 	var now = new Date();			
 	var rtns = [], area = req.table;
@@ -1943,8 +1949,11 @@ FLEX.select.uploads = FLEX.select.stores = function Xselect(req, res) {
 	}
 }
 
-FLEX.update.stores = FLEX.insert.stores =
-FLEX.update.uploads = FLEX.insert.uploads = function Xupdate(req, res) {
+FLEX.update.stores = 
+FLEX.update.uploads = 
+FLEX.update.uploads = 
+FLEX.insert.uploads = 
+function Xupdate(req, res) {
 	
 	var 
 		sql = req.sql, 
@@ -2104,6 +2113,101 @@ FLEX.execute.uploads = function Xexecute(req, res) {
 			});
 			
 	});
+}
+
+// CRUDE interfaces
+// PLUGIN usecase editors
+
+FLEX.delete.keyedit = function Xdelete(req, res) { 
+	var sql = req.sql, query = req.query;
+	
+	Log(["delkey",req.group, query]);
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? DROP ??", 
+			[req.group, query.ds, query.ID],
+			function (err) {
+				res( {data: {}, success:true, msg:"ok"}  );
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+		
+}
+
+FLEX.insert.keyedit = function Xinsert(req, res) { 
+	var sql = req.sql, body = req.body, query = req.query;
+	
+	Log(["addkey",req.group, query, body]);
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? ADD ?? "+body.Type,
+			[req.group, query.ds, body.Key],
+			function (err) {
+				res( {data: {insertID: body.Key}, success:true, msg:"ok"} );
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+}
+
+FLEX.update.keyedit = function Xupdate(req, res) { 
+	var sql = req.sql, body = req.body, query = req.query, body = req.body;
+	
+	Log(["updkey",req.group, query, body]);
+	try {
+		sql.query(
+			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
+			[req.group, query.ds, query.ID, query.ID],
+			function (err) {
+				res( {data: {}, success:true, msg:"ok"}  );
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+	
+}
+
+FLEX.select.keyedit = function Xselect(req, res) { 
+	var sql = req.sql, query = req.query;
+	
+	Log(["getkey",req.group, query]);
+	
+	try {
+		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
+			if (err) return res(err);
+
+			var recs = [{
+				ID: "XXX", Ds: query.ds, Key: "new", Type: "int(11)", 
+				Samples:0, Dist:"gaus", Parms:"[0,1]" 
+			}];
+			
+			parms.each ( function (n,parm) {
+				if ( parm.Field != "ID" )
+					recs.push( {
+							ID: parm.Field, Ds: query.ds, Key: parm.Field, Type: parm.Type, 
+							Samples:0, Dist:"gaus", Parms:"[0,1]" } );
+			});
+			res(recs);
+		});
+	}
+	
+	catch (err) {
+		res( FLEX.errors.badDS );
+	}
+}
+
+FLEX.execute.keyedit = function Xexecute(req, res) { 
+	var sql = req.sql, log = req.log, query = req.query;
+	
+	Log(["exekey",req.group, query]);
+	res("monted");
 }
 
 // Execute interfaces
@@ -2845,105 +2949,13 @@ FLEX.execute.events = function Xexecute(req, res) {
 	}
 }
 
-FLEX.execute.issues = 
-FLEX.execute.aspreqts = 
-FLEX.execute.ispreqts = function Xexecute(req, res) {
+//FLEX.execute.aspreqts = 
+//FLEX.execute.ispreqts = 
+FLEX.execute.issues = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
 	res(SUBMITTED);
 	statRepo(sql);	
-}
-
-FLEX.delete.keyedit = function Xdelete(req, res) { 
-	var sql = req.sql, query = req.query;
-	
-	Log(["delkey",req.group, query]);
-	try {
-		sql.query(
-			"ALTER TABLE ??.?? DROP ??", 
-			[req.group, query.ds, query.ID],
-			function (err) {
-				res( {data: {}, success:true, msg:"ok"}  );
-		});
-	}
-	
-	catch (err) {
-		res( FLEX.errors.badDS );
-	}
-		
-}
-
-FLEX.insert.keyedit = function Xinsert(req, res) { 
-	var sql = req.sql, body = req.body, query = req.query;
-	
-	Log(["addkey",req.group, query, body]);
-	try {
-		sql.query(
-			"ALTER TABLE ??.?? ADD ?? "+body.Type,
-			[req.group, query.ds, body.Key],
-			function (err) {
-				res( {data: {insertID: body.Key}, success:true, msg:"ok"} );
-		});
-	}
-	
-	catch (err) {
-		res( FLEX.errors.badDS );
-	}
-}
-
-FLEX.update.keyedit = function Xupdate(req, res) { 
-	var sql = req.sql, body = req.body, query = req.query, body = req.body;
-	
-	Log(["updkey",req.group, query, body]);
-	try {
-		sql.query(
-			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
-			[req.group, query.ds, query.ID, query.ID],
-			function (err) {
-				res( {data: {}, success:true, msg:"ok"}  );
-		});
-	}
-	
-	catch (err) {
-		res( FLEX.errors.badDS );
-	}
-	
-}
-
-FLEX.select.keyedit = function Xselect(req, res) { 
-	var sql = req.sql, query = req.query;
-	
-	Log(["getkey",req.group, query]);
-	
-	try {
-		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
-			if (err) return res(err);
-
-			var recs = [{
-				ID: "XXX", Ds: query.ds, Key: "new", Type: "int(11)", 
-				Samples:0, Dist:"gaus", Parms:"[0,1]" 
-			}];
-			
-			parms.each ( function (n,parm) {
-				if ( parm.Field != "ID" )
-					recs.push( {
-							ID: parm.Field, Ds: query.ds, Key: parm.Field, Type: parm.Type, 
-							Samples:0, Dist:"gaus", Parms:"[0,1]" } );
-			});
-			res(recs);
-		});
-	}
-	
-	catch (err) {
-		res( FLEX.errors.badDS );
-	}
-}
-
-FLEX.execute.keyedit = function Xexecute(req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
-	
-	Log(["exekey",req.group, query]);
-	res("monted");
 }
 
 /*
