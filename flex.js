@@ -75,6 +75,11 @@ var
 		//copy: Copy,
 		//each: Each,
 		
+		mailer : {						// Email parameters
+			TRACE 	: true,	
+			SOURCE: "tbd"
+		},
+		
 		fetcher: null,  // reserved for data fetchers
 		
 		publish: function (sql, type, file,path) {
@@ -535,12 +540,9 @@ var
 			});
 			
 			var
-				site = FLEX.site,
-				email = FLEX.mailer;
+				site = FLEX.site;
 				
 			if (CLUSTER.isMaster) {
-				
-				// setup news feeder
 				
 				NEWSFEED = new FEED({					// Establish news feeder
 					title:          site.nick,
@@ -577,11 +579,11 @@ var
 					}, FLEX.likeus.PING*(3600*24*1000) );
 					*/
 				
-				if (email) {
+				if (email = FLEX.mailer) {
 					email.TX = {};
 					email.RX = {};
 					
-					Log("emailset", site.emailhost, "pocs", site.pocs);
+					//Log("emailset", site.emailhost, "pocs", site.pocs);
 					
 					var parts = (site.emailhost||"").split(":");
 					email.TX.HOST = parts[0];
@@ -608,13 +610,15 @@ var
 								port: email.TX.PORT
 							});
 
+						Log("email trans", email.TX.TRAN);
 					}
 					
 					else
 						email.TX.TRAN = {
-							sendMail: function (opts, sql) {
+							sendMail: function (opts, cb) {
 								Log(opts);
 								CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
+									cb( err );
 									//Trace("MAIL "+ (err || opts.to) );
 								});
 							}
@@ -662,12 +666,6 @@ var
 						  });
 						});
 
-					if (email.ONSTART) 
-						sendMail({
-							to: site.pocs.admin,
-							subject: site.title + " started", 
-							body: "Just FYI"
-						});
 				}
 			}			
 		}
@@ -3705,8 +3703,8 @@ function sendMail(opts, sql) {
 	}];
 
 	if (opts.to) 
-		if ( sendMail = FLEX.mailer.TX.TRAN.sendMail )
-				sendMail(opts, function (err) {
+		if ( send = FLEX.mailer.TX.TRAN.sendMail )
+				send(opts, function (err) {
 					//Trace("MAIL "+ (err || opts.to) );
 				});
 }
