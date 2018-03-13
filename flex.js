@@ -77,7 +77,9 @@ var
 		
 		mailer : {						// Email parameters
 			TRACE 	: true,	
-			SOURCE: "tbd"
+			SOURCE: "tbd",
+			TX: {},
+			RX: {}
 		},
 		
 		fetcher: null,  // reserved for data fetchers
@@ -508,8 +510,50 @@ var
 				else
 					return "js";
 			}  */
-			
 			if (opts) Copy(opts,FLEX);
+			
+			var
+				site = FLEX.site;
+							
+			if (email = FLEX.mailer.TX) {
+				//Log("emailset", site.emailhost, "pocs", site.pocs);
+
+				var parts = (site.emailhost||"").split(":");
+				email.HOST = parts[0];
+				email.PORT = parseInt(parts[1]);
+
+				var parts = (site.emailuser||"").split(":");
+				email.USER = parts[0];
+				email.PASS = parts[1];
+
+				if (email.PORT) {  		// Establish server's email transport
+					Trace(`MAILHOST ${email.HOST} ON port-${email.PORT}`);
+
+					email.TRAN = email.USER
+						? MAIL.createTransport({ //"SMTP",{
+							host: email.HOST,
+							port: email.PORT,
+							auth: {
+								user: email.USER,
+								pass: email.PASS
+							}
+						})
+						: MAIL.createTransport({ //"SMTP",{
+							host: email.HOST,
+							port: email.PORT
+						});
+				}
+
+				else
+					email.TRAN = {
+						sendMail: function (opts, cb) {
+							Log(opts);
+							CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
+								cb( err );
+								//Trace("MAIL "+ (err || opts.to) );
+							});
+						}
+					};
 			
 			if (FLEX.thread)
 			FLEX.thread( function (sql) {				
@@ -539,9 +583,6 @@ var
 				sql.release();
 			});
 			
-			var
-				site = FLEX.site;
-				
 			if (CLUSTER.isMaster) {
 				
 				NEWSFEED = new FEED({					// Establish news feeder
@@ -579,73 +620,29 @@ var
 					}, FLEX.likeus.PING*(3600*24*1000) );
 					*/
 				
-				if (email = FLEX.mailer) {
-					email.TX = {};
-					email.RX = {};
-					
-					//Log("emailset", site.emailhost, "pocs", site.pocs);
-					
-					var parts = (site.emailhost||"").split(":");
-					email.TX.HOST = parts[0];
-					email.TX.PORT = parseInt(parts[1]);
-
-					var parts = (site.emailuser||"").split(":");
-					email.USER = parts[0];
-					email.PASS = parts[1];
-
-					if (email.TX.PORT) {  		// Establish server's email transport
-						Trace(`MAILHOST ${email.TX.HOST} ON port-${email.TX.PORT}`);
-
-						email.TX.TRAN = email.USER
-							? MAIL.createTransport({ //"SMTP",{
-								host: email.TX.HOST,
-								port: email.TX.PORT,
-								auth: {
-									user: email.USER,
-									pass: email.PASS
-								}
-							})
-							: MAIL.createTransport({ //"SMTP",{
-								host: email.TX.HOST,
-								port: email.TX.PORT
-							});
-
-						Log("email trans", email.TX.TRAN);
-					}
-					
-					else
-						email.TX.TRAN = {
-							sendMail: function (opts, cb) {
-								Log(opts);
-								CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
-									cb( err );
-									//Trace("MAIL "+ (err || opts.to) );
-								});
-							}
-						};
-
-					if (email.RX.PORT)
-						email.RX.TRAN = new IMAP({
+				if (email = FLEX.mailer.RX)
+					if (email.PORT)
+						email.TRAN = new IMAP({
 							  user: email.USER,
 							  password: email.PASS,
-							  host: email.RX.HOST,
-							  port: email.RX.PORT,
+							  host: email.HOST,
+							  port: email.PORT,
 							  secure: true,
 							  //debug: function (err) { console.warn(ME+">"+err); } ,
 							  connTimeout: 10000
 							});
 					
 					else
-						email.RX = {};
+						email = {};
 
-					if (email.RX.TRAN)					// Establish server's email inbox			
+					if (email.TRAN)					// Establish server's email inbox			
 						openIMAP( function(err, mailbox) {
 							if (err) killIMAP(err);
-						  	email.RX.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+						  	email.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
 
 								if (err) killIMAP(err);
 							
-								email.RX.TRAN.fetch(results, { 
+								email.TRAN.fetch(results, { 
 									headers: ['from', 'to', 'subject', 'date'],
 									cb: function(fetch) {
 										fetch.on('message', function(msg) {
@@ -661,11 +658,10 @@ var
 								  }, function(err) {
 									if (err) throw err;
 									Log(ME+'Done fetching all messages!');
-									email.RX.TRAN.logout();
+									email.TRAN.logout();
 								});
 						  });
 						});
-
 				}
 			}			
 		}
@@ -3703,10 +3699,10 @@ function sendMail(opts, sql) {
 	}];
 
 	if (opts.to) 
-		if ( send = FLEX.mailer.TX.TRAN.sendMail )
-				send(opts, function (err) {
-					//Trace("MAIL "+ (err || opts.to) );
-				});
+		if ( email = send = FLEX.mailer.TX.TRAN )
+			email.sendMail(opts, function (err) {
+				//Trace("MAIL "+ (err || opts.to) );
+			});
 }
 
 /*
