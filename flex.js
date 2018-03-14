@@ -1,6 +1,12 @@
 ﻿// UNCLASSIFIED
 
 /*
+TODO
++ Update FLEX.select.help to gen email and add user to class action remedy
++ Few places need calls to FLEX.errors
+*/
+
+/*
 @class flex
 @requires vm
 @requires http
