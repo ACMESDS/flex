@@ -3789,6 +3789,11 @@ function selectDS(req,res) {
 		flags = req.flags,
 		query = req.query;
 	
+	if ( filters = flags.filters )
+		filters.forEach( function (filter) {
+			query[filter.property] = filter.value;
+		});
+
 	sql.run( Copy( flags, {
 		crud: req.action,
 		from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
