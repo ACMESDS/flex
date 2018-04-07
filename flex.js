@@ -88,8 +88,6 @@ var
 			RX: {}
 		},
 		
-		fetcher: null,  // reserved for data fetchers
-		
 		publish: function (sql, type, file,path) {
 			try {			
 				var 
@@ -261,12 +259,12 @@ var
 		insert: {ds: insertDS}, 
 		execute: {}, 
 	
-		fetcher: null, 					// http data fetcher
-		uploader: null,		 			// file uploader
-		emitter: null,		 			// Emitter to sync clients
-		thread: null, 					// FLEX connection threader
-		skinner : null, 				// Jade renderer
-		
+		fetcher: () => {Trace("data fetcher not configured");},  //< data fetcher
+		uploader: () => {Trace("file uploader not configured");},  //< file uploader
+		emitter: () => {Trace("client emitter not configured");},  //< client syncer
+		thread: () => {Trace("sql thread not configured");},  //< sql threader
+		skinner: () => {Trace("site skinner not configured");},  //< site skinner
+
 		runEngine: function (req,res) {  // run engine and callback res(ctx || null) with updated context ctx
 			
 			ATOM.select(req, function (ctx) {  // compile and step the engine
@@ -4057,7 +4055,7 @@ FLEX.select.follow = function (req,res) {  // follow a link
 }
 
 function Trace(msg,sql) {
-	ENUM.trace("X>",msg,sql);
+	ENUM.trace("F>",msg,sql);
 }
 
 FLEX.select.login = function(req,res) {
