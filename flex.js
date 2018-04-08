@@ -1,9 +1,8 @@
 ﻿// UNCLASSIFIED
 
 /*
-TODO
+To do:
 + Update FLEX.select.help to gen email and add user to class action remedy
-+ Few places need calls to FLEX.errors
 */
 
 /*
@@ -20,7 +19,6 @@ TODO
 
 @requires enum
 @requires atomic
-@requires jslab
 
 @requires pdffiller
 @requires nodemailer
@@ -493,7 +491,7 @@ var
 				FLEX.runEngine(req, res);
 		},
 		
-		config: function (opts) {
+		config: function (opts, cb) {
 		/**
 		@method config
 		Configure module with spcified options.   Add the FLEX.runPlugin method to the
@@ -514,7 +512,7 @@ var
 				else
 					return "js";
 			}  */
-			if (opts) Copy(opts,FLEX);
+			if (opts) Copy(opts,FLEX,".");
 			
 			var
 				site = FLEX.site;
@@ -667,7 +665,9 @@ var
 						  });
 						});
 				}
-			}			
+			}
+			
+			if (cb) cb(null);
 		}
 
 };

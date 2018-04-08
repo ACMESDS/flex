@@ -5,9 +5,9 @@
 	[geointapps](https://git.geointapps.org/acmesds/flex)
 	[gitlab](https://gitlab.west.nga.ic.gov/acmesds/flex.git)
 
-FLEX provides a CRUDE interface to support [nosql-agnosictic distributed database](https://git.geointapps.org/acmesds/jsdb), 
-job queueing and job agents, file uploading, dataset emulation, engine plugins, dataset schema editor, email, new feeder, 
-quizzes via CRUDE emulated datasets:
+FLEX provides job queueing, job agents, file uploading, dataset emulation, 
+engine plugins, dataset schema editor, email, new feeder, and client quizzing 
+support to [DEBE](/api.view) via CRUDE interfaces to the following virtual datasets:
 
 	CRUDE keyedits edit plug keys
 	CRUE uploads	get/upload file(s) into one-time file upload area
@@ -55,25 +55,39 @@ Legacy emulated datasets:
 	hawks
 	engine run simulation engine 
 
+## Using
 
-To use, simply require FLEX and add interfaces for the virtual table X:
+Each configuration follow the 
+[ENUM deep copy() conventions](https://github.com/acmesds/enum):
 
-	var FLEX = require("sql").config({   // CRUDE interface
-		select: { X: function (req,res), ... },
-		delete: { X: function (req,res), ... },
-		update: { X: function (req,res), ... },
-		insert: { X: function (req,res), ... },
-		execute: { X: function (req,res), ... }
+	var FLEX = require("flex").config({
+		key: value, 						// set key
+		"key.key": value, 					// indexed set
+		"key.key.": value					// indexed append
+	}, function (err) {
+		console.log( err ? "something evil is lurking" : "look mom - Im running!");
 	});
-	
-There is nothing to configure if the default MySQL-Cluster support suffices. 
 
-## Installation
+where its [key:value options](/shares/prm/debe/index.html) override the defaults.
 
-Download the latest version with
+## Installing
 
-	git clone https://git.geointapps.org/acmesds/flex
-	
+Clone from one of the repos into your PROJECT/flex, then:
+
+	cd PROJECT/flex
+	ln -s PROJECT/totem/test.js test.js 			# unit testing
+	ln -s PROJECT/totem/maint.sh maint.sh 		# test startup and maint scripts
+
+Dependencies:
+* [ENUM basic enumerators](https://github.com/acmesds/enum)
+* [ATOMIC cloud compute](https://github.com/acmesds/atomic) 
+* openv.X and app.X datasets as required by virtual tables
+
+## Contributing
+
+See our [issues](/issues.view), [milestones](/milestones.view), [s/w requirements](/swreqts.view),
+and [h/w requirements](/hwreqts.view).
+
 ## License
 
 [MIT](LICENSE)
