@@ -1258,11 +1258,58 @@ FLEX.select.ATOMS = function Xselect(req, res) {
 */
 
 FLEX.select.config = function Xselect(req, res) {
-	var sql = req.sql;
+	var 
+		sql = req.sql,
+		ID = 0,
+		info = [];
 	
-	CP.exec("df -h", function (err,dfout,dferr) {
-	CP.exec("netstat -tn", function (err,nsout,nserr) {
+	CP.exec("df -h /dev/mapper/centos-root", function (err,dfout,dferr) {
+	CP.exec("netstat -tns", function (err,nsout,nserr) {
 	CP.exec("npm list", function (err,swconfig) {
+		swconfig.split("\n").forEach( (sw) => {
+			info.push({ID: ID++, Type: "sw", Config: sw, Classif: "(U)"});
+		});
+		
+		var type="";
+		nsout.split("\n").forEach( (ns) => {
+			if (ns.endsWith(":"))
+				type = ns;
+			else
+				info.push({ID: ID++, Type: type, Config: ns, Classif: "(U)"});
+		});
+			
+		info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config:
+			"up " + (OS.uptime()/3600/24).toFixed(2)+" days"});
+
+		info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config:
+			"%util " + OS.loadavg() + "% used at [1,2,3]" });
+		
+		info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config:
+			"cpus " + OS.cpus()[0].model });
+			
+		info.push({ID: ID++, Type: "os", Classif: "(U)", Config:
+			OS.type() });
+		
+		info.push({ID: ID++, Type: "os", Classif: "(U)", Config:
+			OS.platform() });
+
+		info.push({ID: ID++, Type: "os", Classif: "(U)", Config:
+			OS.arch() });
+
+		info.push({ID: ID++, Type: "os", Classif: "(U)", Config: 			
+			OS.hostname() });	
+			
+		info.push({ID: ID++, Type: "disk", Classif: "(U)", Config: 
+			dfout});
+		
+		info.push({ID: ID++, Type: "ram", Classif: "(U)", Config:
+			((OS.totalmem()-OS.freemem())*1e-9).toFixed(2) + " GB " });
+
+		info.push({ID: ID++, Type: "ram", Classif: "(U)", Config:
+			(OS.freemem() / OS.totalmem()).toFixed(2) + " % used" });
+		
+		res(info);
+		/*
 		res({	
 			sw: escape(swconfig)
 					.replace(/\%u2502/g,"")
@@ -1291,7 +1338,8 @@ FLEX.select.config = function Xselect(req, res) {
 			//routes: JSON.stringify(FLEX.routes),
 			//netif: JSON.stringify(OS.networkInterfaces()), 	//	do not provide in secure mode
 			//temp: TEMPIF.value()  // unavail on vms
-		});
+		});  */
+		
 	});
 	});
 	});
