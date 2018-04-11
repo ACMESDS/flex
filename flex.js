@@ -499,19 +499,6 @@ var
 		also published to app.engines (disabled and only if they dont already exist).  Engines 
 		are scanned to prime their corresponding dataset (if they dont already exist).
 		*/
-			/*
-			function engineType(eng) {
-				if ( eng.constructor == String ) 
-					if ( eng.indexOf("function") >= 0 )
-						return "ma";
-					else
-					if ( eng.indexOf("def") >= 0 )
-						return "py";
-					else
-						return "?";
-				else
-					return "js";
-			}  */
 			if (opts) Copy(opts,FLEX,".");
 			
 			var
