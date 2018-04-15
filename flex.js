@@ -55,7 +55,9 @@ var 						// globals
 	SUBMITTED = "submitted";
 
 var 											// totem bindings
-	READ = require("reader"),
+	READ = require("reader");
+
+/*
 	ENUM = require("enum").extend({
 		Array: [
 			function escape() {
@@ -71,7 +73,8 @@ var 											// totem bindings
 	}),
 	Copy = ENUM.copy,
 	Each = ENUM.each,
-	Log = console.log;
+	Log = console.log;*/
+const { Copy,Each,Log } = require("enum");
 
 var
 	FLEX = module.exports = {
@@ -4089,10 +4092,6 @@ FLEX.select.follow = function (req,res) {  // follow a link
 	
 }
 
-function Trace(msg,sql) {
-	ENUM.trace("F>",msg,sql);
-}
-
 FLEX.select.login = function(req,res) {
 	var 
 		sql = req.sql, 
@@ -4495,6 +4494,10 @@ FLEX.select.help = function (req,res) {
 function isEmpty(opts) {
 	for ( var key in opts ) return false;
 	return true;
+}
+
+function Trace(msg,sql) {
+	msg.trace("F>",sql);
 }
 
 // UNCLASSIFIED
