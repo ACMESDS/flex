@@ -129,6 +129,7 @@ var
 						mod.view
 					]);
 
+				/*
 				if (mod.ranif) {
 					mod.engine = `
  function ${name}(ctx,res) {  
@@ -178,6 +179,7 @@ var
 }`;
 					Log(mod.engine);
 				}
+*/
 				
 				if (mod.engine)
 					sql.query( 
