@@ -28,7 +28,7 @@ To do:
 @requires feed-read
 */
  
-var 									// nodejs bindings
+var 	// nodejs bindings
 	VM = require('vm'), 				// V8 JS compiler
 	STREAM = require("stream"), 	// pipe-able streams
 	CLUSTER = require('cluster'),		// Support for multiple cores	
@@ -40,7 +40,7 @@ var 									// nodejs bindings
 	CP = require('child_process'), 		// Child process threads
 	OS = require('os');					// OS utilitites
 
-var 									// 3rd party bindings
+var 		// 3rd party bindings
 	//PDF = require('pdffiller'), 		// pdf form processing
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
@@ -50,37 +50,17 @@ var 									// 3rd party bindings
 	FEED = require('feed');				// RSS / ATOM news feeder
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
-var 						// globals
+var 	// globals
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted";
 
-var 											// totem bindings
+var 	// totem bindings
 	READ = require("reader");
 
-/*
-	ENUM = require("enum").extend({
-		Array: [
-			function escape() {
-				var q = "`";
-				
-				if (this)
-					return (q+this.join(`${q},${q}`)+q).split(",").join(",");
-					
-				else
-					return "";
-			}
-		]
-	}),
-	Copy = ENUM.copy,
-	Each = ENUM.each,
-	Log = console.log;*/
 const { Copy,Each,Log } = require("enum");
 
 var
 	FLEX = module.exports = {
-		
-		//copy: Copy,
-		//each: Each,
 		
 		mailer : {						// Email parameters
 			TRACE 	: true,	
