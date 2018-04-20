@@ -109,6 +109,58 @@ var
 						mod.view
 					]);
 
+				/*
+				if (mod.ranif) {
+					mod.engine = `
+ function ${name}(ctx,res) {  
+	${mod.ranif+""}
+	const { sqrt, floor, random, cos, sin, abs, PI, log, exp} = Math;
+
+	var 
+		ran = new RAN({ // configure a random process generator
+			learn: function (cb) {  // event getter callsback cb(evs) or cb(null,onEnd) at end
+				var ran = this;
+
+				STEP(ctx, function (evs, sink) {  // respond on res(recorded ran evs)
+					if (evs) 
+						cb(evs);
+
+					else 
+						cb(null, function () {
+							${mod.ranif.name}( ran, ctx, function (stats) {
+								ran.end(stats, sink);
+							});
+						});					
+				});
+			},  
+
+			N: ctx._File.Actors,  // ensemble size
+			sym: ctx.Symbols,  // state symbols
+			steps: ctx.Steps || ctx._File.Steps, // process steps
+			batch: ctx.Batch || 0,  // steps to next supervised learning event 
+			K: ctx._File.States,	// number of states 
+			trP: {}, // trans probs
+			filter: function (str, ev) {  // filter output events
+				switch ( ev.at ) {
+					case "config":
+					case "end":
+					case "batch":
+					case "done":
+						str.push(ev);
+				}
+			}  
+		});
+
+	ran.pipe( function (evs) { // sync pipe
+		ctx.Save = evs;
+		res( ctx );
+	}); 
+
+}`;
+					Log(mod.engine);
+				}
+*/
+				
 				if (mod.engine)
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
