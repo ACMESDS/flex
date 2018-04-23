@@ -94,7 +94,7 @@ var
 
 					if ( keys = mod.modify )
 						Each( keys, function (key,type) {
-							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}`);
 						});
 				});
 
@@ -199,7 +199,7 @@ var
 			}
 
 			catch (err) {
-				Log("IGNORING ", modpath);
+				Log("IGNORING ", name, err);
 			}
 		},
 		
