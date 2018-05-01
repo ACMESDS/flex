@@ -84,7 +84,7 @@ var
 					sql.query("DROP TABLE app.??", name);
 
 				sql.query( 
-					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32))` , 
+					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
 					[], function (err) {
 
 					if ( keys = mod.usecase )
@@ -323,14 +323,16 @@ var
 			});
 		},
 		
+		/*
 		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			sql.eachTable( group, function (table) { 
 				ATOM.getEngine( sql, group, table, function (eng) {
 					if (eng) cb(eng);
 				});
 			});
-		},
+		},*/
 		
+		/*
 		eachUsecase: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
 			FLEX.eachPlugin( sql, group, function (eng) {
 				if (eng)
@@ -338,7 +340,7 @@ var
 						if (ctx) cb( eng, ctx );
 					});
 			});
-		},
+		},*/
 		
 		/*
 		taskPlugins: function ( sql, group, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
