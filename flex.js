@@ -161,41 +161,64 @@ var
 				}
 */
 				
-				if (mod.engine)
+				if ( code = mod.engine || mod.code )
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
 							Name: name,
-							Code: mod.engine+"",
+							Code: code+"",
 							Type: type,
 							Enabled: 1
 							//State: "{}",  //JSON.stringify({Port:name}),
-						}, mod.engine+"" 
+						}, code+"" 
 					]);
 				
-				if ( smop = mod.smop) 
-					sql.query("SELECT ID,Code FROM app.engines WHERE least(?)",{Name:smop,Type:"m"})
-					.on("results", function (eng) {
-						var 
-							msrc = path+"/"+name+".m",
-							pytar = path+"/"+name+".py";
-						
-						FS.writeFile( msrc, eng.Code, "utf8", function (err) {
-							CP.execFile("python", ["./smop/smop/main.py", "smop", msrc], function (err) {
-								if (!err) 
-									FS.readFile( pytar, "utf8", function (err,code) {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: name,
-													Code: pycode,
-													Type: type,
-													Enabled: 1
-												}, pycode 
-											]);
-									});									
-							});
+				if ( smop = mod.smop ) {
+					var 
+						msrc = path+"/"+smop+".m",
+						pytar = "./"+smop+".py";
+
+					FS.writeFile( msrc, code, "utf8", function (err) {
+						CP.execFile("python", ["matlobtopython.py", "smop", msrc], function (err) {
+							if (!err) 
+								FS.readFile( pytar, "utf8", function (err,pycode) {
+									if (!err)
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+												Name: name,
+												Code: pycode,
+												Type: type,
+												Enabled: 1
+											}, pycode 
+										]);
+								});									
+						});
+					});					
+				}
+				/*
+				sql.query("SELECT ID,Code FROM app.engines WHERE least(?)",{Name:smop,Type:"m"})
+				.on("results", function (eng) {
+					var 
+						msrc = path+"/"+name+".m",
+						pytar = path+"/"+name+".py";
+
+					FS.writeFile( msrc, eng.Code, "utf8", function (err) {
+						CP.execFile("python", ["./smop/smop/main.py", "smop", msrc], function (err) {
+							if (!err) 
+								FS.readFile( pytar, "utf8", function (err,code) {
+									if (!err)
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+												Name: name,
+												Code: pycode,
+												Type: type,
+												Enabled: 1
+											}, pycode 
+										]);
+								});									
 						});
 					});
+				});
+				*/
 			}
 
 			catch (err) {
@@ -250,7 +273,8 @@ var
 			plugins: {
 				js: "./public/js",
 				py: "./public/py",
-				m: "./public/matlab",
+				m: "./public/m",
+				me: "./public/me",
 				jade: ".public/jade"
 			},
 			newsread: "http://craphound.com:80/?feed=rss2",
