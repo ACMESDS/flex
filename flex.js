@@ -87,17 +87,33 @@ var
 					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
 					[], function (err) {
 
-					if ( keys = mod.usecase )
+					var docs = mod.docs || {};
+						
+					if ( keys = mod.usecase || mod.keys || mod.adds )
 						Each( keys, function (key,type) {
-							sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
+							if ( doc = docs[key] )
+								doc.renderBlog({now:new Date()}, "", function (html) {
+									sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
+								});
+							
+							else
+								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
 						});
 
-					if ( keys = mod.modify )
+					if ( keys = mod.modify || mod.mods )
 						Each( keys, function (key,type) {
-							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}`);
+							if ( doc = docs[key] )
+								doc.renderBlog({now:new Date()}, "", function (html) {
+									sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
+								});
+							
+							else								
+								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
 						});
+						
 				});
 
+				/*
 				if (mod.view) 
 					sql.query(
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -108,58 +124,7 @@ var
 						},
 						mod.view
 					]);
-
-				/*
-				if (mod.ranif) {
-					mod.engine = `
- function ${name}(ctx,res) {  
-	${mod.ranif+""}
-	const { sqrt, floor, random, cos, sin, abs, PI, log, exp} = Math;
-
-	var 
-		ran = new RAN({ // configure a random process generator
-			learn: function (cb) {  // event getter callsback cb(evs) or cb(null,onEnd) at end
-				var ran = this;
-
-				STEP(ctx, function (evs, sink) {  // respond on res(recorded ran evs)
-					if (evs) 
-						cb(evs);
-
-					else 
-						cb(null, function () {
-							${mod.ranif.name}( ran, ctx, function (stats) {
-								ran.end(stats, sink);
-							});
-						});					
-				});
-			},  
-
-			N: ctx._File.Actors,  // ensemble size
-			sym: ctx.Symbols,  // state symbols
-			steps: ctx.Steps || ctx._File.Steps, // process steps
-			batch: ctx.Batch || 0,  // steps to next supervised learning event 
-			K: ctx._File.States,	// number of states 
-			trP: {}, // trans probs
-			filter: function (str, ev) {  // filter output events
-				switch ( ev.at ) {
-					case "config":
-					case "end":
-					case "batch":
-					case "done":
-						str.push(ev);
-				}
-			}  
-		});
-
-	ran.pipe( function (evs) { // sync pipe
-		ctx.Save = evs;
-		res( ctx );
-	}); 
-
-}`;
-					Log(mod.engine);
-				}
-*/
+				*/
 				
 				if ( code = mod.engine || mod.code )
 					sql.query( 
@@ -175,10 +140,10 @@ var
 				if ( smop = mod.smop ) {
 					var 
 						msrc = path+"/"+smop+".m",
-						pytar = "./"+smop+".py";
+						pytar = path+"/"+smop+".py";
 
 					FS.writeFile( msrc, code, "utf8", function (err) {
-						CP.execFile("python", ["matlobtopython.py", "smop", msrc], function (err) {
+						CP.execFile("python", ["matlobtopython.py", "smop", msrc, "-o", pytar], function (err) {
 							if (!err) 
 								FS.readFile( pytar, "utf8", function (err,pycode) {
 									if (!err)
@@ -194,31 +159,6 @@ var
 						});
 					});					
 				}
-				/*
-				sql.query("SELECT ID,Code FROM app.engines WHERE least(?)",{Name:smop,Type:"m"})
-				.on("results", function (eng) {
-					var 
-						msrc = path+"/"+name+".m",
-						pytar = path+"/"+name+".py";
-
-					FS.writeFile( msrc, eng.Code, "utf8", function (err) {
-						CP.execFile("python", ["./smop/smop/main.py", "smop", msrc], function (err) {
-							if (!err) 
-								FS.readFile( pytar, "utf8", function (err,code) {
-									if (!err)
-										sql.query( 
-											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-												Name: name,
-												Code: pycode,
-												Type: type,
-												Enabled: 1
-											}, pycode 
-										]);
-								});									
-						});
-					});
-				});
-				*/
 			}
 
 			catch (err) {
