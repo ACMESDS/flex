@@ -87,7 +87,20 @@ var
 					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
 					[], function (err) {
 
-					var docs = mod.docs || {};
+					var docs = Copy(mod.docs || {}, {
+						Export: "switch writes engine results into a file [api](/api.view)",
+						Ingest: "switch ingests engine results into the database",
+						Share: "switch returns engine results to the status area",
+						Pipe: "json regulates chips and events to the engine",
+						Description: "blog markdown documents a usecase ",
+						Config: "js-script defines a usecase context  ",
+						Save: "json aggregates engine results not captured in other Save_KEYs  ",
+						Entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
+						Exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
+						Batch: "value overrides the supervisor's batch size  (0 disabled)  ",
+						Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
+						Steps: "value overrides the supervisor's observation interval (0 defaults) "
+					});
 						
 					if ( keys = mod.usecase || mod.keys || mod.adds )
 						Each( keys, function (key,type) {
@@ -206,6 +219,9 @@ var
 			return list;
 		}, */
 
+		site: { // reserved for site context
+		},
+		
 		diag: { // configured for system health info
 		},
 		
