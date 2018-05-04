@@ -116,7 +116,7 @@ var
 					if ( keys = mod.modify || mod.mods )
 						Each( keys, function (key,type) {
 							if ( doc = docs[key] )
-								doc.renderBlog({now:new Date()}, "", sql, function (html) {
+								doc.renderBlog({now:new Date()}, "", function (html) {
 									sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
 								});
 							
