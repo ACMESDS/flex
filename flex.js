@@ -69,7 +69,7 @@ var
 			RX: {}
 		},
 		
-		publish: function (sql, type, file,path) {
+		publish: function (sql, type, file,path) {  // publish plugins defined by type/plugin.js files
 			try {			
 				var 
 					name = file.replace(".js",""),
@@ -126,19 +126,6 @@ var
 						
 				});
 
-				/*
-				if (mod.view) 
-					sql.query(
-						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-							Name: name,
-							Code: mod.view,
-							Type: "jade",
-							Enabled: 1
-						},
-						mod.view
-					]);
-				*/
-				
 				if ( code = mod.engine || mod.code )
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -179,7 +166,6 @@ var
 			}
 		},
 		
-		//timers: [],
 		sendMail: sendMail,
 		
 		errors: {
@@ -201,24 +187,6 @@ var
 		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
 		},
 		
-		/*
-		listify: function (hash, idxkey, valkey) {
-			var list = [];
-			var n = 0;
-			
-			if (idxkey)
-				for (var idx in hash) {
-					rec = hash[idx];
-					rec[idxkey] = n++;
-					list.push( rec );
-				}	
-			else
-				for (var idx in hash) 
-					list.push(idx);
-					
-			return list;
-		}, */
-
 		site: { // reserved for site context
 		},
 		
@@ -238,12 +206,6 @@ var
 			host: ""
 		},
 			
-		/*
-		billingCycle: 0,  // job billing cycle [ms] ( 0 disables)
-		diagCycle: 0, // self diagnostic cycle [ms] (0 disables)
-		hawkingCycle: 0, // job hawking cycle [ms] (0 disables)
-		*/
-		
 		flatten: { 		// catalog flattening 
 			catalog: {  // default tables to flatten and their fulltext keys
 				files: "Tag,Area,Name",
@@ -262,7 +224,7 @@ var
 			}
 		},
 		
-		dbRoutes: {  //< default table -> db.table translators
+		reroute: {  //< default table -> db.table translators
 		},
 		
 		// CRUDE interface
@@ -278,8 +240,9 @@ var
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
 		skinner: () => {Trace("site skinner not configured");},  //< site skinner
 
+		/*
 		runEngine: function (req,res) {  // run engine and callback res(ctx || null) with updated context ctx
-			
+
 			ATOM.select(req, function (ctx) {  // compile and step the engine
 				//Log("run eng", ctx);
 				
@@ -300,8 +263,8 @@ var
 					else
 						res( null );
 				}
-			});
-		},
+			}); 
+		}, */
 		
 		/*
 		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
@@ -438,7 +401,8 @@ var
 						viaAgent(req, res);
 
 					else  // in-source the plugin and save returned results
-						FLEX.runEngine(req, res);
+						//FLEX.runEngine(req, res);
+						ATOM.select(req, res);
 				}
 					
 				else
@@ -505,16 +469,15 @@ var
 				});
 
 			else   // in-source
-				FLEX.runEngine(req, res);
+				//FLEX.runEngine(req, res);
+				ATOM.select(req, res);
 		},
 		
 		config: function (opts, cb) {
 		/**
 		@method config
-		Configure module with spcified options.   Add the FLEX.runPlugin method to the
-		FLEX.execute interface for every plugin in the FLEX.plugins.  These plugins are
-		also published to app.engines (disabled and only if they dont already exist).  Engines 
-		are scanned to prime their corresponding dataset (if they dont already exist).
+		Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
+		email sender and news feeder.   
 		*/
 			if (opts) Copy(opts,FLEX,".");
 			
@@ -566,7 +529,7 @@ var
 				READ.config(sql);			
 				
 				if (CLUSTER.isMaster)
-					if (runPlugin = FLEX.runPlugin)   // add builtin plugins to FLEX.execute
+					if (runPlugin = FLEX.runPlugin)   // publish plugins under TYPE/FILE.js 
 						Each( FLEX.paths.plugins, function (type, path) {
 							FLEX.indexer( path, function (files) {
 								files.forEach( function (file) {
@@ -3846,7 +3809,7 @@ function selectDS(req,res) {
 
 	sql.run( Copy( flags, {
 		crud: req.action,
-		from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+		from: FLEX.reroute[req.table] || (req.group + "." + req.table),
 		where: query,
 		client: req.client
 	}), null, function (err,recs) {
@@ -3870,7 +3833,7 @@ function insertDS(req, res) {
 	else
 		sql.run( Copy( flags, {
 			crud: req.action,
-			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
 			set: body,
 			client: req.client
 		}), FLEX.emitter, function (err,info) {
@@ -3892,7 +3855,7 @@ function deleteDS(req, res) {
 	if ( query.ID )
 		sql.run( Copy( flags, {
 			crud: req.action,
-			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
 			where: query,
 			client: req.client
 		}), FLEX.emitter, function (err,info) {
@@ -3924,7 +3887,7 @@ function updateDS(req, res) {
 	if ( query.ID )
 		sql.run( Copy( flags, {
 			crud: req.action,
-			from: (FLEX.dbRoutes[req.table] || req.group) + "." + req.table,
+			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
 			where: query,
 			set: body,
 			client: req.client
@@ -3964,7 +3927,7 @@ function queryDS(req, res) {
 	Log(req.action, query, body);
 	
 	sql.context({ds: {
-		table:	(FLEX.dbRoutes[req.table] || req.group)+"."+req.table,
+		table:	FLEX.reroute[req.table] || (req.group + "." + req.table),
 		where:	flags.where || query,
 		res:	res,
 		order:	(flags.sort||"").parseJSON(null),
