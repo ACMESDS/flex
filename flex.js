@@ -91,15 +91,38 @@ var
 						Export: "switch writes engine results into a file [api](/api.view)",
 						Ingest: "switch ingests engine results into the database",
 						Share: "switch returns engine results to the status area",
-						Pipe: "json regulates chips and events to the engine",
-						Description: "blog markdown documents a usecase ",
+						Pipe: `
+json regulates chips and events to the engine:
+
+	file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
+	group: "KEY,..." || ""  
+	where: { KEY: VALUE, ...} || {}  
+	order: "KEY,..." || "t"  
+	limit: VALUE || 1000  
+	task: "NAME" || ""  
+	aoi: "NAME" || [ [lat,lon], ... ] || []
+
+`,
+						Description: `
+blog markdown documents a usecase:
+
+	[ VIEW ; WIDTH ; HEIGHT ]( DS ? PARM ; PARM ; ... )  
+	[ LINK ]( URL )   
+	[ FONT ]( TEXT )  
+	!$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
+	#{ KEY } || \#{ KEY }( SHORTCUT ) || \!{ EXPR }  || ^{ KEY as TeX matrix  }  
+	#tag
+
+`,
+						
 						Config: "js-script defines a usecase context  ",
 						Save: "json aggregates engine results not captured in other Save_KEYs  ",
 						Entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
 						Exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
 						Batch: "value overrides the supervisor's batch size  (0 disabled)  ",
 						Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
-						Steps: "value overrides the supervisor's observation interval (0 defaults) "
+						Steps: "value overrides the supervisor's observation interval (0 defaults) ",
+						
 					});
 						
 					if ( keys = mod.usecase || mod.keys || mod.adds )
@@ -3800,7 +3823,8 @@ function selectDS(req,res) {
 	var 
 		sql = req.sql,							// sql connection
 		flags = req.flags,
-		query = req.query;
+		query = req.query,
+		index = req.index;
 	
 	if ( filters = flags.filters )
 		filters.forEach( function (filter) {
@@ -3811,6 +3835,8 @@ function selectDS(req,res) {
 		crud: req.action,
 		from: FLEX.reroute[req.table] || (req.group + "." + req.table),
 		where: query,
+		index: index,
+		having: {},
 		client: req.client
 	}), null, function (err,recs) {
 
@@ -3827,21 +3853,17 @@ function insertDS(req, res) {
 		body = req.body,
 		query = req.query;
 
-	if ( isEmpty(body) )
-		res( FLEX.errors.noBody );
-	
-	else
-		sql.run( Copy( flags, {
-			crud: req.action,
-			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
-			set: body,
-			client: req.client
-		}), FLEX.emitter, function (err,info) {
+	sql.run( Copy( flags, {
+		crud: req.action,
+		from: FLEX.reroute[req.table] || (req.group + "." + req.table),
+		set: body,
+		client: req.client
+	}), FLEX.emitter, function (err,info) {
 
-			//Log(info);
-			res( err || info );
+		//Log(info);
+		res( err || info );
 
-		});
+	});
 	
 }
 
