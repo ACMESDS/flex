@@ -106,11 +106,12 @@ json regulates chips and events to the engine:
 						Description: `
 blog markdown documents a usecase:
 
-	[ VIEW ; WIDTH ; HEIGHT ]( DS ? PARM ; PARM ; ... )  
-	[ LINK ]( URL )   
+	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
+	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
+	[ TEXT ]( LINK )  
 	[ FONT ]( TEXT )  
 	!$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
-	#{ KEY } || \#{ KEY }( SHORTCUT ) || \!{ EXPR }  || ^{ KEY as TeX matrix  }  
+	#{ KEY } || #{ KEY }( SHORTCUT ) || !{ EXPR }  || ^{ KEY as TeX matrix  }  
 	#tag
 
 `,
