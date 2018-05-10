@@ -1,11 +1,6 @@
 ﻿// UNCLASSIFIED
 
 /*
-To do:
-+ Update FLEX.select.help to gen email and add user to class action remedy
-*/
-
-/*
 @class flex
 @requires vm
 @requires http
@@ -110,6 +105,7 @@ blog markdown documents a usecase:
 		publish: function (sql, type, file,path) {  // publish plugins defined by type/plugin.js files
 			try {			
 				var 
+					resetAll = false,
 					name = file.replace(".js",""),
 					modpath = process.cwd() + "/" + path + "/" + name,
 					mod = require(modpath);
@@ -127,6 +123,18 @@ blog markdown documents a usecase:
 
 					var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
 						
+					if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) )
+						Each( keys, function (key,type) {
+							if ( doc = docs[key] )
+								doc.renderBlog({now:new Date()}, "", function (html) {
+									sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
+								});
+							
+							else								
+								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+						});
+
+					else
 					if ( keys = mod.usecase || mod.keys || mod.adds )
 						Each( keys, function (key,type) {
 							if ( doc = docs[key] )
@@ -136,17 +144,6 @@ blog markdown documents a usecase:
 							
 							else
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
-						});
-
-					if ( keys = mod.modify || mod.mods )
-						Each( keys, function (key,type) {
-							if ( doc = docs[key] )
-								doc.renderBlog({now:new Date()}, "", function (html) {
-									sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
-								});
-							
-							else								
-								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
 						});
 						
 				});
