@@ -69,6 +69,44 @@ var
 			RX: {}
 		},
 		
+		defDocs: {
+			Export: "switch writes engine results into a file [api](/api.view)",
+			Ingest: "switch ingests engine results into the database",
+			Share: "switch returns engine results to the status area",
+			Pipe: `
+json regulates chips and events to the engine:
+
+file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
+group: "KEY,..." || ""  
+where: { KEY: VALUE, ...} || {}  
+order: "KEY,..." || "t"  
+limit: VALUE || 1000  
+task: "NAME" || ""  
+aoi: "NAME" || [ [lat,lon], ... ] || []
+
+`,
+			Description: `
+blog markdown documents a usecase:
+
+[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
+[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
+[ TEXT ]( LINK )  
+[ FONT ]( TEXT )  
+!$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
+#{ KEY } || #{ KEY }( SHORTCUT ) || !{ EXPR }  || ^{ KEY as TeX matrix  }  
+#TAG
+
+`,
+
+			Config: "js-script defines a usecase context  ",
+			Save: "json aggregates engine results not captured in other Save_KEYs  ",
+			Entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
+			Exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
+			Batch: "value overrides the supervisor's batch size  (0 disabled)  ",
+			Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
+			Steps: "value overrides the supervisor's observation interval (0 defaults) "
+		},
+		
 		publish: function (sql, type, file,path) {  // publish plugins defined by type/plugin.js files
 			try {			
 				var 
@@ -87,44 +125,7 @@ var
 					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
 					[], function (err) {
 
-					var docs = Copy(mod.docs || {}, {
-						Export: "switch writes engine results into a file [api](/api.view)",
-						Ingest: "switch ingests engine results into the database",
-						Share: "switch returns engine results to the status area",
-						Pipe: `
-json regulates chips and events to the engine:
-
-	file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
-	group: "KEY,..." || ""  
-	where: { KEY: VALUE, ...} || {}  
-	order: "KEY,..." || "t"  
-	limit: VALUE || 1000  
-	task: "NAME" || ""  
-	aoi: "NAME" || [ [lat,lon], ... ] || []
-
-`,
-						Description: `
-blog markdown documents a usecase:
-
-	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
-	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
-	[ TEXT ]( LINK )  
-	[ FONT ]( TEXT )  
-	!$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
-	#{ KEY } || #{ KEY }( SHORTCUT ) || !{ EXPR }  || ^{ KEY as TeX matrix  }  
-	#tag
-
-`,
-						
-						Config: "js-script defines a usecase context  ",
-						Save: "json aggregates engine results not captured in other Save_KEYs  ",
-						Entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
-						Exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
-						Batch: "value overrides the supervisor's batch size  (0 disabled)  ",
-						Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
-						Steps: "value overrides the supervisor's observation interval (0 defaults) ",
-						
-					});
+					var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
 						
 					if ( keys = mod.usecase || mod.keys || mod.adds )
 						Each( keys, function (key,type) {
@@ -161,7 +162,7 @@ blog markdown documents a usecase:
 						}, code+"" 
 					]);
 				
-				if ( smop = mod.smop ) {
+				if ( smop = mod.smop ) {  // matlab to python convertor
 					var 
 						msrc = path+"/"+smop+".m",
 						pytar = path+"/"+smop+".py";
