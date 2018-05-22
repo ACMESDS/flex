@@ -4494,6 +4494,25 @@ function isEmpty(opts) {
 	return true;
 }
 
+FLEX.select.filestats = function (req,res) {
+	var 
+		sql = req.sql,
+		query = req.query;
+	
+	var q = sql.query(
+		"SELECT stats.*,voxels.Point AS Location, voxels.Radius AS Radius, "
+		+"app.link(files.Name,concat('/files.view',char(63),'name=',files.Name)) AS Source "
+		+"FROM app.stats "
+		+"LEFT JOIN app.files ON files.ID = stats.fileID "
+		+"LEFT JOIN app.voxels ON voxels.ID = stats.voxelID",
+		[], function (err,recs) {
+			
+		Log(err);
+		res( err || recs );
+	});
+	Log(q.sql);	
+}
+
 function Trace(msg,sql) {
 	msg.trace("F>",sql);
 }
