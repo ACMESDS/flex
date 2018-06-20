@@ -3977,46 +3977,6 @@ function queryDS(req, res) {
 
 //============ misc 
 
-FLEX.select.agent = function (req,res) {
-	var
-		sql = req.sql,
-		query = req.query,
-		push = query.push,
-		pull = query.pull;
-	
-	if (push) 
-		CRYPTO.randomBytes(64, function (err, jobid) {
-
-			try {
-				var args = JSON.parse(query.args);
-			}
-			catch (parserr) {
-				err = parserr;
-			}
-			
-			if (err) 
-				res( "" );
-
-			else
-				res( jobid.toString("hex") );
-
-		});
-	
-	else
-	if (pull) {
-		var jobid = query.jobid;
-		
-		if (jobid) 
-			res( {result: 123} );
-		
-		else
-			res( "Missing jobid" );
-	}
-	else
-		res( "Missing push/pull" );
-	
-}
-
 /*
 FLEX.select.quizes = function (req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
@@ -4436,28 +4396,6 @@ FLEX.select.matlab = function (req,res) {
 		sql = req.sql,
 		query = req.query;
 	
-	if ( query.flush )
-		ATOM.matlab.flush(sql, query.flush);
-	
-	else
-	if ( query.save ) {
-		var
-			thread =  query.save,
-			parts = thread.split("_"),
-			id = parts.pop(),
-			plugin = "app." + parts.pop(),
-			results = ATOM.matlab.path.save + thread + ".out";
-		
-		Log("SAVE MATLAB",query.save,plugin,id,results);
-
-		FS.readFile(results, "utf8", function (err,json) {
-
-			sql.query("UPDATE ?? SET ? WHERE ?", [plugin, {Save: json}, {ID: id}], function (err) {
-				Log("save",err);
-			});
-
-		});	
-	}
 	
 	res("flushed");
 		
