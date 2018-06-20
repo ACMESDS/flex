@@ -351,7 +351,7 @@ blog markdown documents a usecase:
 		},
 		*/
 		
-		getContext: function ( sql, ds, where, cb ) {  //< callback cb(ctx) with primed context or null
+		getContext: function ( sql, host, where, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 			
 			function config(js, ctx) {
 				//Log("config", js);
@@ -364,12 +364,13 @@ blog markdown documents a usecase:
 				//Log("ctx",ctx);
 			}
 			
-			sql.forFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [ds,where], function (ctx) {
+			sql.forFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [host,where], function (ctx) {
 				
 				if (ctx) {
+					ctx.Host = host;
 					if ( ctx.Config ) config(ctx.Config, ctx);
 
-					sql.jsonKeys( ds, [], function (keys) {  // parse json keys
+					sql.jsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
 						keys.each(function (n,key) {
 							try { 
@@ -393,7 +394,7 @@ blog markdown documents a usecase:
 			
 		},
 		
-		runPlugin: function runPlugin(req, res) {  //< callback res(ctx || null) with results in ctx
+		runPlugin: function runPlugin(req, res) {  //< callback res(ctx) with resulting ctx or cb(null) if error
 		/**
 		@method runPlugin
 		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
@@ -433,7 +434,7 @@ blog markdown documents a usecase:
 
 		},
 		
-		viaAgent: function( req, res ) {  //< out-source a plugin callback res(ctx || null)
+		viaAgent: function( req, res ) {  //< out-source a plugin with callback res(ctx) or res(null) if errror
 		/**
 		@method viaAgent
 		Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
