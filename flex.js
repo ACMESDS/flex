@@ -4261,26 +4261,28 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 		query = req.query,
 		fetcher = FLEX.fetcher,
 		site = FLEX.site,
-		src = query.src || "";
+		ring = query.ring || [],
+		src = (query.src || "").toUpperCase();
 	
-	switch (src.toUpperCase()) {
-		case "dglobe":
-		case "omar":
-		case "ess":
+	switch (src) {
+		case "DGLOBE":
+		case "OMAR":
+		case "ESS":
 		default:
 			//query.geometryPolygon = JSON.stringify({rings: JSON.parse(query.ring)});  // ring being monitored
-			query.geometryPolygon = JSON.stringify({rings: query.ring || []});  // ring being monitored
-			delete query.ring;
+			query.geometryPolygon = JSON.stringify({rings: ring});  // ring being monitored
 	}
 
-	if ( url = ENV[`WFS_${SRC}`] )
+	delete query.ring;
+	
+	if ( url = ENV[`WFS_${src}`] )
 		fetcher( url.tag("?", query), null, function (cat) {  // query catalog for desired data channel
 
 			if ( cat ) {
 				switch ( src ) {  // normalize cat response to ess
-					case "dglobe":
-					case "omar":
-					case "ess":
+					case "DGLOBE":
+					case "OMAR":
+					case "ESS":
 						var
 							res = ( cat.GetRecordsResponse || {SearchResults: {}} ).SearchResults,
 							collects = res.DatasetSummary || [],
