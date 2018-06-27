@@ -88,7 +88,7 @@ blog markdown documents a usecase:
 [ TEXT ]( LINK )  
 [ FONT ]( TEXT )  
 !$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
-#{ KEY } || #{ KEY }( SHORTCUT ) || !{ EXPR }  || \${ KEY as TeX matrix  }  
+#{ KEY } || #{ KEY }( SHORTCUT ) || ={ KEY } || !{ EXPR }  || \${ KEY as TeX matrix  }  
 #TAG
 
 `,
