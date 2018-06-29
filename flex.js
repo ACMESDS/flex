@@ -372,6 +372,8 @@ blog markdown documents a usecase:
 
 					sql.jsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
+						keys.parseJSON(ctx);
+						/*
 						keys.each(function (n,key) {
 							try { 
 								ctx[key] = JSON.parse( ctx[key] || "null" ); 
@@ -381,7 +383,7 @@ blog markdown documents a usecase:
 								ctx[key] = null; 
 							}
 
-						});
+						}); */
 						
 						cb(ctx);
 						//Log("get ctx",ctx);						
