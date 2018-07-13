@@ -46,6 +46,7 @@ var 		// 3rd party bindings
 	//READ = require('feed-read'); 		// RSS / ATOM news reader
 
 var 	// globals
+	TRACE = "X>",
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted";
 
@@ -4628,7 +4629,7 @@ Totem(req,res) endpoint to return all sys endpoints
 }
 
 function Trace(msg,sql) {
-	msg.trace("F>",sql);
+	TRACE.trace(msg,sql);
 }
 
 // UNCLASSIFIED
