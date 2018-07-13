@@ -1103,7 +1103,7 @@ FLEX.select.activity = function Xselect(req, res) {
 				Copy( act, rec );
 			});
 			
-			res( recs.listify( function (rec) { 
+			res( recs.sample( function (rec) { 
 				return rec.ID; 
 			}) );
 	});
