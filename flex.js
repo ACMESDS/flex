@@ -2085,8 +2085,8 @@ function Xupdate(req, res) {
 							Added: new Date(),
 							Classif: query.classif || "",
 							Revs: 1,
-							Size: file.size,
-							Tag: query.tag || ""
+							Ingest_Size: file.size,
+							Ingest_Tag: query.tag || ""
 						}, geoloc, req.client, geoloc
 					]);
 
