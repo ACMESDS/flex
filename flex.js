@@ -192,9 +192,10 @@ blog markdown documents a usecase:
 		sendMail: sendMail,
 		
 		errors: {
+			badRequest: new Error("bad/missing request parameter(s)"),
 			noBody: new Error("no body keys"),
 			noID: new Error("missing record ID"),
-			badbaseline: new Error("baseline could not reset change journal"),
+			badBaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
 			missingEngine: new Error("missing engine query"),
@@ -793,93 +794,138 @@ FLEX.update.sql = function Update(req, res) {
 
 FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 
-	var	sql = req.sql, 
+	var	
+		sql = req.sql, 
 		query = req.query,
-		user = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
-		ex = {
-			group: `mysqldump ${user} ${req.group} >admins/db/${req.group}.sql`,
-			openv: `mysqldump ${user} openv >admins/db/openv.sql`,
-			clear: `mysql ${user} -e "drop database baseline"`,
-			prime: `mysql ${user} -e "create database baseline"`,
-			rebase: `mysql ${user} baseline<admins/db/openv.sql`,
-			commit: `git commit -am "${req.client} baseline"`
-		};
+		task = query.task || "";
 	
-	sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
-		if (err)
-			res( FLEX.errors.badbaseline );
-		
-		else
-			res( 
-				(query.noarchive ? "Bypass database commit" : "Database commited. ") +
-				(recs[0].Changes || 0)+" changes since last baseline.  Service restarted.  " +
-				"Return "+"here".link("/home.view")
-			);
+	switch (task) {
+		case "totem":
+			sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
+				if (err)
+					res( FLEX.errors.badbaseline );
 
-		sql.query("DELETE FROM openv.journal");
-	});
+				else
+					res( 
+						(query.noarchive ? "Bypass database commit" : "Database commited. ") +
+						(recs[0].Changes || 0)+" changes since last baseline.  Service restarted.  " +
+						"Return "+"here".link("/home.view")
+					);
+
+				sql.query("DELETE FROM openv.journal");
+			});
+			break;
+			
+		case "sepp":
+			res("processing baseline request");
+			break;
+			
+		default:
+			res(FLEX.errors.badRequest);
+	}
 	
-	if (!query.noarchive)
-	CP.exec(ex.group, function (err,log) {
-	Trace("BASELINE GROUP "+(err||"OK"), sql);
+	switch (task) {
+		case "totem":
+			
+			var
+				login = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
+				ex = {
+					group: `mysqldump ${login} ${req.group} >admins/db/${req.group}.sql`,
+					openv: `mysqldump ${login} openv >admins/db/openv.sql`,
+					clear: `mysql ${login} -e "drop database baseline"`,
+					prime: `mysql ${login} -e "create database baseline"`,
+					rebase: `mysql ${login} baseline<admins/db/openv.sql`,
+					commit: `git commit -am "${req.client} baseline"`
+				};
+			
+			if (!query.noarchive)
+			CP.exec(ex.group, function (err,log) {
+			Trace("BASELINE GROUP "+(err||"OK"), sql);
 
-	CP.exec(ex.openv, function (err,log) {
-	Trace("BASELINE OPENV "+(err||"OK"), sql);
+			CP.exec(ex.openv, function (err,log) {
+			Trace("BASELINE OPENV "+(err||"OK"), sql);
 
-	CP.exec(ex.clear, function (err,log) {
-	Trace("BASELINE CLEAR "+(err||"OK"), sql);
+			CP.exec(ex.clear, function (err,log) {
+			Trace("BASELINE CLEAR "+(err||"OK"), sql);
 
-	CP.exec(ex.prime, function (err,log) {
-	Trace("BASELINE PRIME "+(err||"OK"), sql);
+			CP.exec(ex.prime, function (err,log) {
+			Trace("BASELINE PRIME "+(err||"OK"), sql);
 
-	CP.exec(ex.rebase, function (err,log) {
-	Trace("BASELINE REBASE "+(err||"OK"), sql);
+			CP.exec(ex.rebase, function (err,log) {
+			Trace("BASELINE REBASE "+(err||"OK"), sql);
 
-	CP.exec(ex.commit, function (err,log) {
-	Trace("BASELINE COMMIT "+(err||"OK"), sql);
+			CP.exec(ex.commit, function (err,log) {
+			Trace("BASELINE COMMIT "+(err||"OK"), sql);
 
-		if (!query.noexit) process.exit();				
-		
-	});
-	});
-	});
-	});
-	});
-	});
-	
+				if (!query.noexit) process.exit();				
+
+			});
+			});
+			});
+			});
+			});
+			});
+			break;
+			
+		case "sepp":
+			
+			var 
+				ex = {
+				};
+			
+			CP.exec(ex.
+	}
 }
 
 FLEX.select.baseline = function Xselect(req, res) {
 
-	var gitlogs = 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog';
+	var 
+		query = req.query,
+		sql = req.sql,
+		task = query.task || "",
+		ex = {
+			gitlogs: 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog'
+		};
 	
-	CP.exec(gitlogs, function (err,log) {
-			
-		if (err)
-			res(err);
-		else
-			FS.readFile("gitlog", "utf-8", function (err,logs) {
-				var recs = [], id=0;
-				
-				logs.split("\n").each( function (n,log) {
-					
-					var	parts = log.split("||");
-					
-					recs.push({	
-						ID: id++,
-						hash: parts[0], 
-						author: parts[1],
-						email: parts[2],
-						made: new Date(parts[3]),
-						cm: parts[4]
+	switch (task) {
+		case "totem": 
+			CP.exec(ex.gitlogs, function (err,log) {
+
+				if (err)
+					res(err);
+				else
+					FS.readFile("gitlog", "utf-8", function (err,logs) {
+						var recs = [], id=0;
+
+						logs.split("\n").each( function (n,log) {
+
+							var	parts = log.split("||");
+
+							recs.push({	
+								ID: id++,
+								hash: parts[0], 
+								author: parts[1],
+								email: parts[2],
+								made: new Date(parts[3]),
+								cm: parts[4]
+							});
+
+						});
+
+						res(recs);
+
 					});
-					
-				});
-				
-				res(recs);
-				
 			});
-	});
+			break;
+			
+		case "sepp":
+			sql.query("SELECT * FROM app.seppfm", function (err, recs) {
+				res( err || recs );
+			});
+			
+		default:
+			res(FLEX.errors.badRequest);
+	}
 						
 }
 
