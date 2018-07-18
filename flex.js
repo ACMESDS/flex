@@ -871,6 +871,7 @@ FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 			
 			var 
 				ex = {
+					commit: "cd ${ENV.
 				};
 			
 			CP.exec(ex.
