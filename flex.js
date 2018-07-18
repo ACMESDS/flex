@@ -222,7 +222,7 @@ blog markdown documents a usecase:
 				py: "./public/py",
 				m: "./public/m",
 				me: "./public/me",
-				jade: ".public/jade"
+				jade: "./public/jade"
 			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
@@ -387,7 +387,6 @@ blog markdown documents a usecase:
 						}); */
 						
 						cb(ctx);
-						//Log("get ctx",ctx);						
 					});
 				}
 
@@ -4626,6 +4625,10 @@ Totem(req,res) endpoint to return all sys endpoints
 		+ "/alert.sys broadcast alert &msg to all clients<br>"
 		+ "/stop.sys stops server with client alert &msg<br>"
 	);
+}
+
+FLEX.execute.gitreadme = function(req,res) {
+	res("git commiting and push");
 }
 
 function Trace(msg,sql) {
