@@ -871,10 +871,17 @@ FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 			
 			var 
 				ex = {
-					commit: "cd ${ENV.
+					commit: `cd ${ENV.SEPP}; git commit -am "totem rebaseline"`,
+					push: `cd ${ENV.SEPP}; git push origin master"`
 				};
 			
-			CP.exec(ex.
+			CP.exec(ex.commit, function (err,log) {
+			Trace("BASELINE SEPP COMMIT "+(err||"OK"), sql);
+			CP.exec(ex.push, function (err,log) {
+			Trace("BASELINE SEPP PUSH "+(err||"OK"), sql);
+			});
+			});
+			break;
 	}
 }
 
