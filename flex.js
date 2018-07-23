@@ -190,21 +190,18 @@ blog markdown documents a usecase:
 		},
 		
 		publisher: function ( sql, path, pub ) { //< publish plugins under path
-			CP.exec(`cd ${path}; sh publish.sh ${pub.Published} ${pub.Client}`, function (err) {
-				Trace("publish prep: "+err);
+			Log("pubsetup", path, pub);
+			CP.exec(`cd ${path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
+				Trace("pubprep: "+err);
 				
-				CP.exec(`cd ${path}; git commit -am "baseline"; git push origin master`, function (err) {
-					Trace("publish push: "+err);
-				});
-			});
-
-			FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
-				FLEX.indexer( path+"/"+type, function (files) {	// get FILEs to publish
-					files.forEach( function (file) {
-						if ( file.endsWith(".js") ) 
-							FLEX.publish(sql, type, file, path+"/"+type);
+				FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
+					FLEX.indexer( path+"/"+type, function (files) {	// get FILEs to publish
+						files.forEach( function (file) {
+							if ( file.endsWith(".js") ) 
+								FLEX.publish(sql, type, file, path+"/"+type);
+						});
 					});
-				});
+				});				
 			});
 		},
 		
@@ -4658,11 +4655,14 @@ FLEX.execute.publish = function (req,res) {
 	var
 		sql = req.sql,
 		query = req.query,
+		folder = "%" + (query.folder || ""),
 		published = new Date();
 	
+	res("publishing");
+	
 	sql.query(
-		"SELECT * FROM app.publish WHERE ? AND Path LIKE '%?' ", 
-		[{client:req.client}, query.folder || ""])
+		"SELECT * FROM app.publish WHERE ? AND Path LIKE ? ", 
+		[{client:req.client}, folder])
 	.on("result", function (pub) {
 		FLEX.publisher( sql, pub.Path, Copy( pub, {
 			Published:published
@@ -4675,7 +4675,7 @@ FLEX.execute.publish = function (req,res) {
 		sql.query("UPDATE app.publish SET ?", {
 			Ver: ver,
 			Published: published
-		});
+		}, (err) => Log("pubupdate", err) );
 	});
 }
 
