@@ -103,7 +103,7 @@ blog markdown documents a usecase:
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
 		
-		publish: function (sql, type, file,path) {  // publish plugins defined by type/plugin.js files
+		publish: function (sql, type, file,path) {  // publish a plugin file of type
 			try {			
 				var 
 					resetAll = false,
@@ -113,7 +113,7 @@ blog markdown documents a usecase:
 
 				Trace("PUBLISHING "+name);
 
-				FLEX.execute[name] = runPlugin;
+				// FLEX.execute[name] = runPlugin;
 
 				if ( mod.clear )
 					sql.query("DROP TABLE app.??", name);
@@ -189,6 +189,25 @@ blog markdown documents a usecase:
 			}
 		},
 		
+		publisher: function ( sql, path, pub ) { //< publish plugins under path
+			CP.exec(`cd ${path}; sh publish.sh ${pub.Published} ${pub.Client}`, function (err) {
+				Trace("publish prep: "+err);
+				
+				CP.exec(`cd ${path}; git commit -am "baseline"; git push origin master`, function (err) {
+					Trace("publish push: "+err);
+				});
+			});
+
+			FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
+				FLEX.indexer( path+"/"+type, function (files) {	// get FILEs to publish
+					files.forEach( function (file) {
+						if ( file.endsWith(".js") ) 
+							FLEX.publish(sql, type, file, path+"/"+type);
+					});
+				});
+			});
+		},
+		
 		sendMail: sendMail,
 		
 		errors: {
@@ -218,13 +237,8 @@ blog markdown documents a usecase:
 		},
 		
 		paths: {
-			plugins: {
-				js: "./public/js",
-				py: "./public/py",
-				m: "./public/m",
-				me: "./public/me",
-				jade: "./public/jade"
-			},
+			publish: "./public",
+			plugins: ["js", "py", "m", "me", "jade"],
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
 			host: ""
@@ -554,16 +568,13 @@ blog markdown documents a usecase:
 			FLEX.thread( function (sql) {				
 				READ.config(sql);			
 				
-				if (CLUSTER.isMaster)
-					if (runPlugin = FLEX.runPlugin)   // publish plugins under TYPE/FILE.js 
-						Each( FLEX.paths.plugins, function (type, path) {
-							FLEX.indexer( path, function (files) {
-								files.forEach( function (file) {
-									if ( file.endsWith(".js") ) 
-										FLEX.publish(sql, type, file, path);
-								});
-							});
-						});
+				if (CLUSTER.isMaster)   
+					FLEX.publisher( sql, FLEX.paths.publish, {
+						Published: new Date(),
+						Client: "totem",
+						Ver: "0.0.0",
+						Path: ""
+					});
 
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
@@ -796,93 +807,60 @@ FLEX.execute.baseline = function Xexecute(req,res) {  // baseline changes
 
 	var	
 		sql = req.sql, 
-		query = req.query,
-		task = query.task || "";
+		query = req.query;
 	
-	switch (task) {
-		case "totem":
-			sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
-				if (err)
-					res( FLEX.errors.badbaseline );
+	sql.query("SELECT sum(Updates) AS Changes FROM openv.journal", function (err,recs) {
+		if (err)
+			res( FLEX.errors.badbaseline );
 
-				else
-					res( 
-						(query.noarchive ? "Bypass database commit" : "Database commited. ") +
-						(recs[0].Changes || 0)+" changes since last baseline.  Service restarted.  " +
-						"Return "+"here".link("/home.view")
-					);
+		else
+			res( 
+				(query.noarchive ? "Bypass database commit" : "Database commited. ") +
+				(recs[0].Changes || 0)+" changes since last baseline.  Service restarted.  " +
+				"Return "+"here".link("/home.view")
+			);
 
-				sql.query("DELETE FROM openv.journal");
-			});
-			break;
-			
-		case "sepp":
-			res("processing baseline request");
-			break;
-			
-		default:
-			res(FLEX.errors.badRequest);
-	}
+		sql.query("DELETE FROM openv.journal");
+	});
 	
-	switch (task) {
-		case "totem":
-			
-			var
-				login = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
-				ex = {
-					group: `mysqldump ${login} ${req.group} >admins/db/${req.group}.sql`,
-					openv: `mysqldump ${login} openv >admins/db/openv.sql`,
-					clear: `mysql ${login} -e "drop database baseline"`,
-					prime: `mysql ${login} -e "create database baseline"`,
-					rebase: `mysql ${login} baseline<admins/db/openv.sql`,
-					commit: `git commit -am "${req.client} baseline"`
-				};
-			
-			if (!query.noarchive)
-			CP.exec(ex.group, function (err,log) {
-			Trace("BASELINE GROUP "+(err||"OK"), sql);
+	var
+		login = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
+		ex = {
+			group: `mysqldump ${login} ${req.group} >admins/db/${req.group}.sql`,
+			openv: `mysqldump ${login} openv >admins/db/openv.sql`,
+			clear: `mysql ${login} -e "drop database baseline"`,
+			prime: `mysql ${login} -e "create database baseline"`,
+			rebase: `mysql ${login} baseline<admins/db/openv.sql`,
+			commit: `git commit -am "${req.client} baseline"`
+		};
 
-			CP.exec(ex.openv, function (err,log) {
-			Trace("BASELINE OPENV "+(err||"OK"), sql);
+	if (!query.noarchive)
+	CP.exec(ex.group, function (err,log) {
+	Trace("BASELINE GROUP "+(err||"OK"), sql);
 
-			CP.exec(ex.clear, function (err,log) {
-			Trace("BASELINE CLEAR "+(err||"OK"), sql);
+	CP.exec(ex.openv, function (err,log) {
+	Trace("BASELINE OPENV "+(err||"OK"), sql);
 
-			CP.exec(ex.prime, function (err,log) {
-			Trace("BASELINE PRIME "+(err||"OK"), sql);
+	CP.exec(ex.clear, function (err,log) {
+	Trace("BASELINE CLEAR "+(err||"OK"), sql);
 
-			CP.exec(ex.rebase, function (err,log) {
-			Trace("BASELINE REBASE "+(err||"OK"), sql);
+	CP.exec(ex.prime, function (err,log) {
+	Trace("BASELINE PRIME "+(err||"OK"), sql);
 
-			CP.exec(ex.commit, function (err,log) {
-			Trace("BASELINE COMMIT "+(err||"OK"), sql);
+	CP.exec(ex.rebase, function (err,log) {
+	Trace("BASELINE REBASE "+(err||"OK"), sql);
 
-				if (!query.noexit) process.exit();				
+	CP.exec(ex.commit, function (err,log) {
+	Trace("BASELINE COMMIT "+(err||"OK"), sql);
 
-			});
-			});
-			});
-			});
-			});
-			});
-			break;
-			
-		case "sepp":
-			
-			var 
-				ex = {
-					commit: `cd ${ENV.SEPP}; git commit -am "totem rebaseline"`,
-					push: `cd ${ENV.SEPP}; git push origin master"`
-				};
-			
-			CP.exec(ex.commit, function (err,log) {
-			Trace("BASELINE SEPP COMMIT "+(err||"OK"), sql);
-			CP.exec(ex.push, function (err,log) {
-			Trace("BASELINE SEPP PUSH "+(err||"OK"), sql);
-			});
-			});
-			break;
-	}
+		if (!query.noexit) process.exit();				
+
+	});
+	});
+	});
+	});
+	});
+	});
 }
 
 FLEX.select.baseline = function Xselect(req, res) {
@@ -890,51 +868,38 @@ FLEX.select.baseline = function Xselect(req, res) {
 	var 
 		query = req.query,
 		sql = req.sql,
-		task = query.task || "",
 		ex = {
 			gitlogs: 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog'
 		};
 	
-	switch (task) {
-		case "totem": 
-			CP.exec(ex.gitlogs, function (err,log) {
+	CP.exec(ex.gitlogs, function (err,log) {
 
-				if (err)
-					res(err);
-				else
-					FS.readFile("gitlog", "utf-8", function (err,logs) {
-						var recs = [], id=0;
+		if (err)
+			res(err);
+		else
+			FS.readFile("gitlog", "utf-8", function (err,logs) {
+				var recs = [], id=0;
 
-						logs.split("\n").each( function (n,log) {
+				logs.split("\n").each( function (n,log) {
 
-							var	parts = log.split("||");
+					var	parts = log.split("||");
 
-							recs.push({	
-								ID: id++,
-								hash: parts[0], 
-								author: parts[1],
-								email: parts[2],
-								made: new Date(parts[3]),
-								cm: parts[4]
-							});
-
-						});
-
-						res(recs);
-
+					recs.push({	
+						ID: id++,
+						hash: parts[0], 
+						author: parts[1],
+						email: parts[2],
+						made: new Date(parts[3]),
+						cm: parts[4]
 					});
+
+				});
+
+				res(recs);
+
 			});
-			break;
-			
-		case "sepp":
-			sql.query("SELECT * FROM app.seppfm", function (err, recs) {
-				res( err || recs );
-			});
-			
-		default:
-			res(FLEX.errors.badRequest);
-	}
-						
+	});
+
 }
 
 /**
@@ -4687,6 +4652,31 @@ FLEX.execute.gitreadme = function(req,res) {
 
 function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
+}
+
+FLEX.execute.publish = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query,
+		published = new Date();
+	
+	sql.query(
+		"SELECT * FROM app.publish WHERE ? AND Path LIKE '%?' ", 
+		[{client:req.client}, query.folder || ""])
+	.on("result", function (pub) {
+		FLEX.publisher( sql, pub.Path, Copy( pub, {
+			Published:published
+		}) );
+		
+		var 
+			parts = pub.Ver.split("."),
+			ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
+		
+		sql.query("UPDATE app.publish SET ?", {
+			Ver: ver,
+			Published: published
+		});
+	});
 }
 
 // UNCLASSIFIED
