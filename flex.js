@@ -189,16 +189,16 @@ blog markdown documents a usecase:
 			}
 		},
 		
-		publisher: function ( sql, path, pub ) { //< publish plugins under path
-			Log("pubsetup", path, pub);
-			CP.exec(`cd ${path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
-				Trace("pubprep: "+err);
+		publisher: function ( sql, pub ) { //< publish plugins under path
+			Log("pubsetup", pub);
+			CP.exec(`cd ${pub.Path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
+				Trace("pubrun: "+err);
 				
 				FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
-					FLEX.indexer( path+"/"+type, function (files) {	// get FILEs to publish
+					FLEX.indexer( pub.Path+"/"+type, function (files) {	// get FILEs to publish
 						files.forEach( function (file) {
 							if ( file.endsWith(".js") ) 
-								FLEX.publish(sql, type, file, path+"/"+type);
+								FLEX.publish(sql, type, file, pub.Path+"/"+type);
 						});
 					});
 				});				
@@ -566,9 +566,10 @@ blog markdown documents a usecase:
 				READ.config(sql);			
 				
 				if (CLUSTER.isMaster)   
-					FLEX.publisher( sql, FLEX.paths.publish, {
+					FLEX.publisher( sql, {
+						Path: FLEX.paths.publish, 
 						Published: new Date(),
-						Client: "totem",
+						By: "totem",
 						Ver: "0.0.0",
 						Path: ""
 					});
@@ -4654,28 +4655,24 @@ function Trace(msg,sql) {
 FLEX.execute.publish = function (req,res) {
 	var
 		sql = req.sql,
+		client = req.client,
 		query = req.query,
-		folder = "%" + (query.folder || ""),
-		published = new Date();
+		product = query.product;
 	
-	res("publishing");
+	res( product ? "publishing" : "missing &product" );
 	
-	sql.query(
-		"SELECT * FROM app.publish WHERE ? AND Path LIKE ? ", 
-		[{client:req.client}, folder])
+	sql.query( "SELECT * FROM app.publish WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product})
 	.on("result", function (pub) {
-		FLEX.publisher( sql, pub.Path, Copy( pub, {
-			Published:published
-		}) );
-		
 		var 
-			parts = pub.Ver.split("."),
-			ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
+			parts = pub.Ver.split(".");
 		
-		sql.query("UPDATE app.publish SET ?", {
-			Ver: ver,
-			Published: published
-		}, (err) => Log("pubupdate", err) );
+		pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
+		pub.Published = new Date();
+		pub.By = client;
+		
+		FLEX.publisher( sql, pub );
+		
+		sql.query( "INSERT INTO app.publish SET ?", pub );
 	});
 }
 
