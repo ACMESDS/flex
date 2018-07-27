@@ -4669,6 +4669,7 @@ FLEX.execute.publish = function (req,res) {
 		pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
 		pub.Published = new Date();
 		pub.By = client;
+		delete pub.ID;
 		
 		FLEX.publisher( sql, pub );
 		
