@@ -4683,8 +4683,10 @@ FLEX.select.status = function (req,res) {
 		sql = req.sql,
 		query = req.query,
 		from = query.from,
-		to = query.to,
-		compress = query.compress;
+		to = query.to || from,
+		compress = query.compress,
+		br = "<br>", 
+		tab = "+";
 	
 	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
 		if (from) 
@@ -4696,7 +4698,7 @@ FLEX.select.status = function (req,res) {
 				recs.forEach( (rec) => delete rec["W"+n] );
 		
 		if (compress) {
-			var rtn = {ID: 1, sum:""} , br = "<br>", tab = "+";
+			var rtn = {ID: 1, sum:""};
 			
 			recs.forEach( (rec,idx) => {
 				if (idx) {
