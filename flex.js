@@ -4678,13 +4678,53 @@ FLEX.execute.publish = function (req,res) {
 	});
 }
 
-FLEX.select.devstatus = function (req,res) {
+FLEX.select.status = function (req,res) {
 	var
 		sql = req.sql,
-		query = req.query;
+		query = req.query,
+		from = query.from,
+		to = query.to,
+		compress = query.compress;
 	
-	READ.xlsx(sql,"./shares/devstatus.xlsx", function (recs) {
-		res(recs);
+	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
+		if (from) 
+			for (var n=1,N=parseInt(from); n<N; n++)
+				recs.forEach( (rec) => delete rec["W"+n] );
+		
+		if (to)
+			for (var n=parseInt(to)+1, N=99; n<N; n++)
+				recs.forEach( (rec) => delete rec["W"+n] );
+		
+		if (compress) {
+			var rtn = {ID: 1, sum:""} , br = "<br>", tab = "+";
+			
+			recs.forEach( (rec,idx) => {
+				if (idx) {
+					var task = "";
+					
+					Each(rec, (key,val) => {
+						if (val)
+							switch (key) {
+								case "ID":
+								case "sheet":
+									break;
+
+								default:
+									if ( key.startsWith("W") ) 
+										rtn.sum += "> " + task + ":" + br + tab + val.replace(/\n/g,br+tab) + br;
+									else
+										task += val + ".";
+							}
+					});
+				}
+			});
+				
+			rtn.sum = rtn.sum.replace(/\_/g,"").replace(/\.\:/g,":");
+			res([rtn]);
+		}
+			
+		else
+			res(recs);
 	});
 	
 	
