@@ -23,7 +23,13 @@
 @requires feed-read
 */
  
-var 	// nodejs bindings
+var 	
+	// globals
+	TRACE = "X>",
+	ENV = process.env, 					// external variables
+	SUBMITTED = "submitted",
+
+	// nodejs bindings
 	VM = require('vm'), 				// V8 JS compiler
 	STREAM = require("stream"), 	// pipe-able streams
 	CLUSTER = require('cluster'),		// Support for multiple cores	
@@ -33,24 +39,19 @@ var 	// nodejs bindings
 	URL = require('url'), 				// Network interface
 	FS = require('fs'),					// Need filesystem for crawling directory
 	CP = require('child_process'), 		// Child process threads
-	OS = require('os');					// OS utilitites
+	OS = require('os'),					// OS utilitites
 
-var 		// 3rd party bindings
+	// 3rd party bindings
 	//PDF = require('pdffiller'), 		// pdf form processing
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
 	ATOM = require("atomic"), 		// tauif simulation engines
 	RAN = require("randpr"), 		// random process
-	FEED = require('feed');				// RSS / ATOM news feeder
-	//READ = require('feed-read'); 		// RSS / ATOM news reader
+	FEED = require('feed'),				// RSS / ATOM news feeder
+	//RSS = require('feed-read'), 		// RSS / ATOM news reader
 
-var 	// globals
-	TRACE = "X>",
-	ENV = process.env, 					// external variables
-	SUBMITTED = "submitted";
-
-var 	// totem bindings
+	// totem bindings
 	READ = require("reader");
 
 const { Copy,Each,Log } = require("enum");
@@ -4675,6 +4676,18 @@ FLEX.execute.publish = function (req,res) {
 		
 		sql.query( "INSERT INTO app.publish SET ?", pub );
 	});
+}
+
+FLEX.select.devstatus = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query;
+	
+	READ.xlsx(sql,"./shares/devstatus.xlsx", function (recs) {
+		res(recs);
+	});
+	
+	
 }
 
 // UNCLASSIFIED
