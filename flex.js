@@ -4682,24 +4682,28 @@ FLEX.select.status = function (req,res) {
 	var
 		sql = req.sql,
 		query = req.query,
-		from = query.from,
-		to = query.to || from,
+		now = new Date(),
+		year = query.year || now.getFullYear(),
+		week = now.getWeek(),
+		from = parseInt(query.from || "0") || week,
+		weeks = parseInt(query.weeks || "0"),
+		to = parseInt(query.to || "0") || (from+weeks),
 		compress = query.compress,
-		br = "<br>", 
-		tab = "+";
+		rtn = {ID: 1};
+	
+	//Log(year,week,from,to);
 	
 	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
+		
 		if (from) 
 			for (var n=1,N=parseInt(from); n<N; n++)
-				recs.forEach( (rec) => delete rec["W"+n] );
+				recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
 		
 		if (to)
 			for (var n=parseInt(to)+1, N=99; n<N; n++)
-				recs.forEach( (rec) => delete rec["W"+n] );
+				recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
 		
 		if (compress) {
-			var rtn = {ID: 1, sum:""};
-			
 			recs.forEach( (rec,idx) => {
 				if (idx) {
 					var task = "";
@@ -4712,16 +4716,41 @@ FLEX.select.status = function (req,res) {
 									break;
 
 								default:
-									if ( key.startsWith("W") ) 
-										rtn.sum += "> " + task + ":" + br + tab + val.replace(/\n/g,br+tab) + br;
+									if ( key.startsWith("_") && task ) {
+										switch (compress) {
+											case "robot":
+												rtn[key] += `> ${task}: ${val}`;
+												break;
+												
+											case "human":
+											default:
+												var 
+													parts = task.split("."),
+													object = parts.pop(),
+													type = parts.pop(),
+													service = parts.pop(),
+													effort = parts.pop();
+
+												//Log(task, parts);
+										
+												rtn[key] += `> ${val} the ${object} ${type} for the ${effort} ${service} effort`;
+										}
+										rtn[key] = rtn[key].replace(/\n/g,"");
+									}
+									
 									else
-										task += val + ".";
+									if ( key.startsWith(".") )
+										task += "."+val;
 							}
 					});
 				}
+				
+				else
+					Each(rec, (key,val) => {
+						if ( key.startsWith("_") ) rtn[key] = "";
+					});
 			});
 				
-			rtn.sum = rtn.sum.replace(/\_/g,"").replace(/\.\:/g,":");
 			res([rtn]);
 		}
 			
