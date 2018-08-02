@@ -4689,75 +4689,96 @@ FLEX.select.status = function (req,res) {
 		weeks = parseInt(query.weeks || "0"),
 		to = parseInt(query.to || "0") || (from+weeks),
 		compress = query.compress,
+		rtns = [],
 		rtn = {ID: 1};
 	
-	//Log(year,week,from,to);
+	Log(year,week,from,to);
 	
 	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
-		
-		if (from) 
-			for (var n=1,N=parseInt(from); n<N; n++)
-				recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
-		
-		if (to)
-			for (var n=parseInt(to)+1, N=99; n<N; n++)
-				recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
-		
-		if (compress) {
+
+		if (recs ) {
+			if (from) 
+				for (var n=1,N=from; n<N; n++)
+					recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
+
+			if (to)
+				for (var n=to+1, N=99; n<N; n++)
+					recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
+
 			recs.forEach( (rec,idx) => {
 				if (idx) {
-					var task = "";
-					
+					var task = "", use = true, testable = false;
+
 					Each(rec, (key,val) => {
-						if (val)
-							switch (key) {
-								case "ID":
-								case "sheet":
-									break;
-
-								default:
-									if ( key.startsWith("_") && task ) {
-										switch (compress) {
-											case "robot":
-												rtn[key] += `> ${task}: ${val}`;
-												break;
-												
-											case "human":
-											default:
-												var 
-													parts = task.split("."),
-													object = parts.pop(),
-													type = parts.pop(),
-													service = parts.pop(),
-													effort = parts.pop();
-
-												//Log(task, parts);
-										
-												rtn[key] += `> ${val} the ${object} ${type} for the ${effort} ${service} effort`;
-										}
-										rtn[key] = rtn[key].replace(/\n/g,"");
-									}
-									
-									else
-									if ( key.startsWith(".") )
-										task += "."+val;
+						if ( key.startsWith(".") ) {
+							testable = true;
+							if ( test = query[ key.substr(1).toLowerCase() ] ) {
+								if (val)
+									use = test.toLowerCase() == val.toLowerCase();
+								else
+									use = false;
 							}
+						}
 					});
+
+					if (use && testable) 
+						if (compress) 
+							Each(rec, (key,val) => {
+								if (val)
+									switch (key) {
+										case "ID":
+										case "sheet":
+											break;
+
+										default:
+											if ( key.startsWith("_") && task ) {
+												switch (compress) {
+													case "robot":
+														rtn[key] += `> ${task}: ${val}`;
+														break;
+
+													case "human":
+														var 
+															parts = task.split("."),
+															object = parts.pop(),
+															type = parts.pop(),
+															service = parts.pop(),
+															effort = parts.pop();
+
+														//Log(task, parts);
+
+														rtn[key] += `> ${val} the ${object} ${type} for the ${effort} ${service} effort`;
+														break;
+														
+													default:
+														rtn[key] = "invalid compress option";														
+												}
+												rtn[key] = rtn[key].replace(/\n/g,"");
+											}
+
+											else
+												task += "."+val;
+									}
+							});
+
+						else
+							rtns.push( new Object(rec) );
+
 				}
-				
+
 				else
 					Each(rec, (key,val) => {
 						if ( key.startsWith("_") ) rtn[key] = "";
 					});
 			});
-				
-			res([rtn]);
+
+			res( compress ? [rtn] : rtns );
 		}
-			
+		
 		else
-			res(recs);
+			res( new Error("could not find status.xlsx") );
+		
 	});
-	
 	
 }
 
