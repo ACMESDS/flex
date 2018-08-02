@@ -4688,6 +4688,7 @@ FLEX.select.status = function (req,res) {
 		from = parseInt(query.from || "0") || week,
 		weeks = parseInt(query.weeks || "0"),
 		to = parseInt(query.to || "0") || (from+weeks),
+		_year = "_" + year,
 		compress = query.compress,
 		rtns = [],
 		rtn = {ID: 1};
@@ -4697,13 +4698,19 @@ FLEX.select.status = function (req,res) {
 	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
 
 		if (recs ) {
+			Each( recs[0], (key,val) => {
+				if ( key.startsWith("_") )
+					if ( !key.startsWith(_year) )
+						recs.forEach( (rec) => delete rec[key] );
+			});
+				
 			if (from) 
 				for (var n=1,N=from; n<N; n++)
-					recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
+					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
 
 			if (to)
 				for (var n=to+1, N=99; n<N; n++)
-					recs.forEach( (rec) => delete rec["_"+year+"-"+n] );
+					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
 
 			recs.forEach( (rec,idx) => {
 				if (idx) {
