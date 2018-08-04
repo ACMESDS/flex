@@ -15,6 +15,7 @@
 @requires enum
 @requires atomic
 
+@requires uglify-js
 @requires pdffiller
 @requires nodemailer
 @requires nodemailer-smtp-transport
@@ -42,16 +43,17 @@ var
 	OS = require('os'),					// OS utilitites
 
 	// 3rd party bindings
+	UG = require("uglify-js"), 			// code minifier
 	//PDF = require('pdffiller'), 		// pdf form processing
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
 	IMAP = require('imap'),				// IMAP mail receiver
-	ATOM = require("atomic"), 		// tauif simulation engines
-	RAN = require("randpr"), 		// random process
 	FEED = require('feed'),				// RSS / ATOM news feeder
 	//RSS = require('feed-read'), 		// RSS / ATOM news reader
 
 	// totem bindings
+	ATOM = require("atomic"), 		// tauif simulation engines
+	//RAN = require("randpr"), 		// random process
 	READ = require("reader");
 
 const { Copy,Each,Log } = require("enum");
@@ -190,6 +192,38 @@ blog markdown documents a usecase:
 			}
 		},
 		
+		getLicense: function (code, type, secret, cb) {
+			switch (type) {
+				case "js":
+					FS.writeFileSync("/local/babel/e6code.js", code);
+					
+					CP.exec("cd /local/babel; npm run publish", (err,log) => {
+						FS.readFile("/local/babel/e5code.js", "utf8", (err,e5code) => {
+							//Log("babel>>>>", e5code,err);
+
+							if (err)
+								cb( null );
+
+							else {
+								var min = UG.minify( e5code );
+
+								if (min.error) 
+									cb( null );
+
+								else 
+									cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
+							}
+						});
+					});
+					break;
+					
+				case "py":
+				case "m":
+				default:
+					cb(null);
+			}
+		},
+							
 		publisher: function ( sql, pub ) { //< publish plugins under path
 			Log("pubsetup", pub);
 			CP.exec(`cd ${pub.Path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
@@ -1607,7 +1641,7 @@ FLEX.select.likeus = function Xselect(req, res) {
 		3: "better than average",
 		4: "below average",
 		5: "first class",
-		default: "limtied"
+		default: "limited"
 	}			
 	
 	if ( req.profile.Credit ) {
@@ -4690,6 +4724,18 @@ FLEX.select.status = function (req,res) {
 		to = parseInt(query.to || "0") || (from+weeks),
 		_year = "_" + year,
 		compress = query.compress,
+		interp = query.interp,
+		acts = {
+			"\n": "",
+			_I: "installed",
+			_C: "created",
+			_F: "fixed",
+			_D: "documented",
+			_B: "built",
+			_T: "transitioned",
+			_R: "removed",
+			_T: "terminated"
+		},
 		rtns = [],
 		rtn = {ID: 1};
 	
@@ -4697,39 +4743,50 @@ FLEX.select.status = function (req,res) {
 	
 	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
 
-		if (recs ) {
-			Each( recs[0], (key,val) => {
+		if (recs ) {			
+			Each( recs[0], (key,val) => {  // remove cols outside this year
 				if ( key.startsWith("_") )
 					if ( !key.startsWith(_year) )
 						recs.forEach( (rec) => delete rec[key] );
 			});
 				
-			if (from) 
-				for (var n=1,N=from; n<N; n++)
+			if (from) 	// remove cols before from-week
+				for (var n=1,N=from; n<N; n++)  
 					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
 
-			if (to)
+			if (to)		// remove cols after to-week
 				for (var n=to+1, N=99; n<N; n++)
 					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
 
-			recs.forEach( (rec,idx) => {
-				if (idx) {
+			var fill = new Object(recs[0]);
+			
+			recs.forEach( (rec,idx) => {  // scan all records
+				if (idx) {	// not the header record
 					var task = "", use = true, testable = false;
 
-					Each(rec, (key,val) => {
+					if (interp)   // interpolate missing keys
+						Each(fill, (key,val) => {
+							if ( key.startsWith(".") )
+								if ( val = rec[key] )
+									fill[key] = val;
+								
+								else
+									rec[key] = fill[key];
+						});
+
+					Each(rec, (key,val) => {  // see if this record can be used
 						if ( key.startsWith(".") ) {
 							testable = true;
-							if ( test = query[ key.substr(1).toLowerCase() ] ) {
-								if (val)
+							if ( test = query[ key.substr(1).toLowerCase() ] ) 
+								if ( val ) 
 									use = test.toLowerCase() == val.toLowerCase();
 								else
 									use = false;
-							}
 						}
 					});
 
 					if (use && testable) 
-						if (compress) 
+						if (compress)   // produce compressed output
 							Each(rec, (key,val) => {
 								if (val)
 									switch (key) {
@@ -4738,7 +4795,11 @@ FLEX.select.status = function (req,res) {
 											break;
 
 										default:
-											if ( key.startsWith("_") && task ) {
+											Each( acts, (act, sub) => {  // expand shortcuts
+												val = val.replace( new RegExp(act,"g"), sub);
+											});
+											
+											if ( key.startsWith("_") && task )
 												switch (compress) {
 													case "robot":
 														rtn[key] += `> ${task}: ${val}`;
@@ -4760,20 +4821,17 @@ FLEX.select.status = function (req,res) {
 													default:
 														rtn[key] = "invalid compress option";														
 												}
-												rtn[key] = rtn[key].replace(/\n/g,"");
-											}
 
 											else
 												task += "."+val;
 									}
 							});
 
-						else
+						else	// append record to returned
 							rtns.push( new Object(rec) );
-
 				}
 
-				else
+				else  // use header record to prime returns
 					Each(rec, (key,val) => {
 						if ( key.startsWith("_") ) rtn[key] = "";
 					});
