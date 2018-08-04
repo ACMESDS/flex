@@ -106,12 +106,12 @@ blog markdown documents a usecase:
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
 		
-		publish: function (sql, type, file,path) {  // publish a plugin file of type
+		publish: function (sql, type, name, path) {  // publish a plugin name of type under path
 			try {			
 				var 
 					resetAll = false,
-					name = file.replace(".js",""),
 					modpath = process.cwd() + "/" + path + "/" + name,
+					secret = name + "." + type,
 					mod = require(modpath);
 
 				Trace("PUBLISHING "+name);
@@ -152,7 +152,31 @@ blog markdown documents a usecase:
 						
 				});
 
-				if ( code = mod.engine || mod.code )
+				if ( code = mod.engine || mod.code ) {
+					FLEX.getLicense( code, type, secret, (minCode, license) => {
+						
+						if (license) {
+							var pub = {
+								License: license,
+								By: "totem",
+								Published: new Date(),
+								Master: minCode,
+								Product: name,
+								Copies: 1,
+								Path: modpath
+							};
+
+							Log("LICENSED", name, license);
+
+							sql.query(
+								"INSERT INTO app.publish SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
+								pub );
+						}
+						
+						else 
+							Log("LICENSE FAILED", name);
+					});
+					
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
 							Name: name,
@@ -162,16 +186,17 @@ blog markdown documents a usecase:
 							//State: "{}",  //JSON.stringify({Port:name}),
 						}, code+"" 
 					]);
+				}
 				
 				if ( smop = mod.smop ) {  // matlab to python convertor
 					var 
-						msrc = path+"/"+smop+".m",
-						pytar = path+"/"+smop+".py";
+						mSrc = path+"/"+smop+".m",
+						pyTar = path+"/"+smop+".py";
 
-					FS.writeFile( msrc, code, "utf8", function (err) {
-						CP.execFile("python", ["matlobtopython.py", "smop", msrc, "-o", pytar], function (err) {
+					FS.writeFile( mSrc, code, "utf8", function (err) {
+						CP.execFile("python", ["matlabtopython.py", "smop", mSrc, "-o", pyTar], function (err) {
 							if (!err) 
-								FS.readFile( pytar, "utf8", function (err,pycode) {
+								FS.readFile( pyTar, "utf8", function (err,pycode) {
 									if (!err)
 										sql.query( 
 											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -195,45 +220,109 @@ blog markdown documents a usecase:
 		getLicense: function (code, type, secret, cb) {
 			switch (type) {
 				case "js":
-					FS.writeFileSync("/local/babel/e6code.js", code);
-					
-					CP.exec("cd /local/babel; npm run publish", (err,log) => {
-						FS.readFile("/local/babel/e5code.js", "utf8", (err,e5code) => {
-							//Log("babel>>>>", e5code,err);
+					//cb(null); break;
+					var
+						e6Tmp = "/local/babel/e6code.js",
+						e5Tmp = "/local/babel/e5code.js";
+						
+					FS.writeFile(e6Tmp, code, "utf8", (err) => {
+						CP.exec("cd /local/babel; npm run publish", (err,log) => {
+							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+								//Log("babel>>>>", e5code,err);
 
-							if (err)
-								cb( null );
-
-							else {
-								var min = UG.minify( e5code );
-
-								if (min.error) 
+								if (err)
 									cb( null );
 
-								else 
-									cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
-							}
+								else {
+									var min = UG.minify( e5code );
+
+									if (min.error) 
+										cb( null );
+
+									else 
+										cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
+								}
+							});
+						});
+					});
+					break;						
+					
+				case "py":
+					// problematic with python code as -O obvuscator cant be reseeded
+					//cb(null); break;
+					var pyTmp = "./tmp/publish.py";
+					
+					FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
+						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+							if (err)
+								cb(null);
+
+							else
+								cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
 						});
 					});
 					break;
 					
-				case "py":
 				case "m":
+				case "me":
+					/*
+					Could use Matlab's pcode generator - but only avail within matlab
+					 		cd to MATLABROOT (avail w matlabroot cmd)
+					 		matlab -nosplash -r script.m
+					 		start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
+					
+					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
+										
+					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
+					to remove comments - but you're back to enqueue.
+					
+					Better option to use smop to convert matlab to python, then pyminify that.
+					*/
+					//cb(null); break;
+					
+					var 
+						mTmp = "./tmp/publish.m",
+						pyTmp = "./tmp/publish.py";
+					
+					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
+						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
+							
+							if (err)
+								cb( null );
+
+							else
+								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
+									if (err) 
+										cb( null );
+
+									else
+										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+											if (err)
+												cb(null);
+
+											else
+												cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+										});										
+								});									
+						});
+					});
+					break;
+					
 				default:
 					cb(null);
 			}
 		},
 							
 		publisher: function ( sql, pub ) { //< publish plugins under path
-			Log("pubsetup", pub);
+			//Log("pubsetup", pub);
 			CP.exec(`cd ${pub.Path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
-				Trace("pubrun: "+err);
+				//Log("pubrun", err, FLEX.paths.plugins);
 				
 				FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
 					FLEX.indexer( pub.Path+"/"+type, function (files) {	// get FILEs to publish
 						files.forEach( function (file) {
 							if ( file.endsWith(".js") ) 
-								FLEX.publish(sql, type, file, pub.Path+"/"+type);
+								FLEX.publish(sql, type, file.replace(".js",""), pub.Path+"/"+type);
 						});
 					});
 				});				
@@ -605,8 +694,7 @@ blog markdown documents a usecase:
 						Path: FLEX.paths.publish, 
 						Published: new Date(),
 						By: "totem",
-						Ver: "0.0.0",
-						Path: ""
+						Ver: "0.0.0"
 					});
 
 				if (false)
