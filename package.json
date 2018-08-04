@@ -17,6 +17,7 @@
   "license": "ISC",
   "dependencies": {
     "feed": "^1.1.1",
+    "html-minifier": "^3.5.19",
     "imap": "^0.8.19",
     "nodemailer": "^4.6.7",
     "nodemailer-smtp-transport": "^2.7.4",

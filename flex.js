@@ -16,6 +16,7 @@
 @requires atomic
 
 @requires uglify-js
+@requires html-minifier
 @requires pdffiller
 @requires nodemailer
 @requires nodemailer-smtp-transport
@@ -43,7 +44,8 @@ var
 	OS = require('os'),					// OS utilitites
 
 	// 3rd party bindings
-	UG = require("uglify-js"), 			// code minifier
+	JSMIN = require("uglify-js"), 			// code minifier
+	HTMLMIN = require("html-minifier"), // html minifier
 	//PDF = require('pdffiller'), 		// pdf form processing
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
@@ -106,7 +108,7 @@ blog markdown documents a usecase:
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
 
-		mustLicense: true,
+		mustLicense: false,
 		
 		licenseCode: function (sql, code, secret, pub, cb ) {  //< callback cb(pub) or cb(null)
 			
@@ -237,6 +239,13 @@ blog markdown documents a usecase:
 		
 		getLicense: function (code, type, secret, cb) {
 			switch (type) {
+				case "html":
+					var minCode = HTMLMIN.minify(code, {
+						removeAttributeQuotes: true
+					});
+					cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+					break;
+					
 				case "js":
 					//cb(null); break;
 					var
@@ -252,7 +261,7 @@ blog markdown documents a usecase:
 									cb( null );
 
 								else {
-									var min = UG.minify( e5code );
+									var min = JSMIN.minify( e5code );
 
 									if (min.error) 
 										cb( null );
@@ -325,9 +334,10 @@ blog markdown documents a usecase:
 						});
 					});
 					break;
-					
+
+				case "jade":
 				default:
-					cb(null);
+					cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
 			}
 		},
 							
