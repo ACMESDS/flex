@@ -105,16 +105,45 @@ blog markdown documents a usecase:
 			Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
+
+		mustLicense: true,
 		
-		publish: function (sql, type, name, path) {  // publish a plugin name of type under path
+		licenseCode: function (sql, code, secret, pub, cb ) {  //< callback cb(pub) or cb(null)
+			
+			var 
+				parts = pub.Product.split("."),
+				type = parts.pop(),
+				name = parts.pop();
+			
+			FLEX.getLicense( code, type, secret, (minCode, license) => {
+				if (license) {
+					cb( Copy({
+						License: license,
+						Master: minCode,
+						Copies: 1
+					}, pub) );
+
+					sql.query(
+						"INSERT INTO app.publish SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
+						pub );
+				}
+
+				else 
+					cb( null );
+			});
+		},
+		
+		publishPlugin: function (sql, plugin, path) {  // publish a plugin = name.type under path
 			try {			
 				var 
 					resetAll = false,
+					parts = plugin.split("."),
+					type = parts.pop(),
+					name = parts.pop(),
 					modpath = process.cwd() + "/" + path + "/" + name,
-					secret = name + "." + type,
 					mod = require(modpath);
 
-				Trace("PUBLISHING "+name);
+				Trace("PUBLISHING "+plugin);
 
 				// FLEX.execute[name] = runPlugin;
 
@@ -153,29 +182,18 @@ blog markdown documents a usecase:
 				});
 
 				if ( code = mod.engine || mod.code ) {
-					FLEX.getLicense( code, type, secret, (minCode, license) => {
-						
-						if (license) {
-							var pub = {
-								License: license,
-								By: "totem",
-								Published: new Date(),
-								Master: minCode,
-								Product: name,
-								Copies: 1,
-								Path: modpath
-							};
-
-							Log("LICENSED", name, license);
-
-							sql.query(
-								"INSERT INTO app.publish SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
-								pub );
-						}
-						
-						else 
-							Log("LICENSE FAILED", name);
-					});
+					
+					if (FLEX.mustLicense)
+						FLEX.licenseCode( sql, code, plugin, {
+							By: "totem",
+							Published: new Date(),
+							Product: plugin,
+							Path: modpath
+						}, (pub) => {
+							
+							if (pub)
+								Log("LICENCED", pub.Product);
+						});
 					
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -322,7 +340,7 @@ blog markdown documents a usecase:
 					FLEX.indexer( pub.Path+"/"+type, function (files) {	// get FILEs to publish
 						files.forEach( function (file) {
 							if ( file.endsWith(".js") ) 
-								FLEX.publish(sql, type, file.replace(".js",""), pub.Path+"/"+type);
+								FLEX.publishPlugin(sql, file.replace(".js","")+"."+type, pub.Path+"/"+type);
 						});
 					});
 				});				
