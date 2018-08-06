@@ -238,107 +238,112 @@ blog markdown documents a usecase:
 		},
 		
 		getLicense: function (code, type, secret, cb) {
-			switch (type) {
-				case "html":
-					var minCode = HTMLMIN.minify(code, {
-						removeAttributeQuotes: true
-					});
-					cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
-					break;
-					
-				case "js":
-					//cb(null); break;
-					var
-						e6Tmp = "/local/babel/e6code.js",
-						e5Tmp = "/local/babel/e5code.js";
-						
-					FS.writeFile(e6Tmp, code, "utf8", (err) => {
-						CP.exec("cd /local/babel; npm run publish", (err,log) => {
-							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-								//Log("babel>>>>", e5code,err);
+			
+			if (secret)
+				switch (type) {
+					case "html":
+						var minCode = HTMLMIN.minify(code, {
+							removeAttributeQuotes: true
+						});
+						cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+						break;
+
+					case "js":
+						//cb(null); break;
+						var
+							e6Tmp = "/local/babel/e6code.js",
+							e5Tmp = "/local/babel/e5code.js";
+
+						FS.writeFile(e6Tmp, code, "utf8", (err) => {
+							CP.exec("cd /local/babel; npm run publish", (err,log) => {
+								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+									//Log("babel>>>>", e5code,err);
+
+									if (err)
+										cb( null );
+
+									else {
+										var min = JSMIN.minify( e5code );
+
+										if (min.error) 
+											cb( null );
+
+										else 
+											cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
+									}
+								});
+							});
+						});
+						break;						
+
+					case "py":
+						// problematic with python code as -O obvuscator cant be reseeded
+						//cb(null); break;
+						var pyTmp = "./tmp/publish.py";
+
+						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
+							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+								if (err)
+									cb(null);
+
+								else
+									cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+							});
+						});
+						break;
+
+					case "m":
+					case "me":
+						/*
+						Could use Matlab's pcode generator - but only avail within matlab
+								cd to MATLABROOT (avail w matlabroot cmd)
+								matlab -nosplash -r script.m
+								start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
+
+						but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
+
+						From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
+						to remove comments - but you're back to enqueue.
+
+						Better option to use smop to convert matlab to python, then pyminify that.
+						*/
+						//cb(null); break;
+
+						var 
+							mTmp = "./tmp/publish.m",
+							pyTmp = "./tmp/publish.py";
+
+						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
+							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
 
 								if (err)
 									cb( null );
 
-								else {
-									var min = JSMIN.minify( e5code );
+								else
+									FS.readFile( pyTmp, "utf8", (err,pyCode) => {
+										if (err) 
+											cb( null );
 
-									if (min.error) 
-										cb( null );
+										else
+											CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+												if (err)
+													cb(null);
 
-									else 
-										cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
-								}
+												else
+													cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+											});										
+									});									
 							});
 						});
-					});
-					break;						
-					
-				case "py":
-					// problematic with python code as -O obvuscator cant be reseeded
-					//cb(null); break;
-					var pyTmp = "./tmp/publish.py";
-					
-					FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
-						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-							if (err)
-								cb(null);
+						break;
 
-							else
-								cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
-						});
-					});
-					break;
-					
-				case "m":
-				case "me":
-					/*
-					Could use Matlab's pcode generator - but only avail within matlab
-					 		cd to MATLABROOT (avail w matlabroot cmd)
-					 		matlab -nosplash -r script.m
-					 		start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
-					
-					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
-										
-					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
-					to remove comments - but you're back to enqueue.
-					
-					Better option to use smop to convert matlab to python, then pyminify that.
-					*/
-					//cb(null); break;
-					
-					var 
-						mTmp = "./tmp/publish.m",
-						pyTmp = "./tmp/publish.py";
-					
-					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
-						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
-							
-							if (err)
-								cb( null );
-
-							else
-								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
-									if (err) 
-										cb( null );
-
-									else
-										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-											if (err)
-												cb(null);
-
-											else
-												cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
-										});										
-								});									
-						});
-					});
-					break;
-
-				case "jade":
-				default:
-					cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
-			}
+					case "jade":
+					default:
+						cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
+				}
+			
+			else
+				cb( code, CRYPTO.createHmac("sha256", type).update(code).digest("hex") );
 		},
 							
 		publisher: function ( sql, pub ) { //< publish plugins under path
