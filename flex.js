@@ -108,7 +108,8 @@ blog markdown documents a usecase:
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
 
-		mustLicense: true,
+		licenseOnDownload: true,
+		licenseOnRestart: false,
 		
 		serviceID: function (url) {
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
@@ -213,7 +214,7 @@ blog markdown documents a usecase:
 
 				if ( code = mod.engine || mod.code ) {
 					
-					if (false) // (FLEX.mustLicense)
+					if (FLEX.licenseOnRestart) 
 						FLEX.licenseCode( sql, code, {
 							EndUser: "totem",
 							EndService: ENV.SERVICE_WORKER_URL,
@@ -223,7 +224,7 @@ blog markdown documents a usecase:
 						}, (pub) => {
 							
 							if (pub)
-								Log("LICENCED", pub.Product);
+								Log("LICENSED", pub.Product);
 						});
 					
 					sql.query( 
@@ -268,7 +269,7 @@ blog markdown documents a usecase:
 		
 		genLicense: function (code, type, secret, cb) {
 			
-			Log("gen lic", secret);
+			//Log("gen lic", secret);
 			if (secret)
 				switch (type) {
 					case "html":
@@ -287,7 +288,7 @@ blog markdown documents a usecase:
 						FS.writeFile(e6Tmp, code, "utf8", (err) => {
 							CP.exec("cd /local/babel; npm run publish", (err,log) => {
 								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-									Log("babel>>>>", e5code,err);
+									Log("babel>>>>", err);
 
 									if (err)
 										cb( null );
@@ -307,12 +308,14 @@ blog markdown documents a usecase:
 						break;						
 
 					case "py":
-						cb(null); break;
+						// cb(null); break;
 						// problematic with python code as -O obvuscator cant be reseeded
 						var pyTmp = "./tmp/publish.py";
 
 						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
 							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+								Log("pymin>>>>", err);
+								
 								if (err)
 									cb(null);
 
@@ -324,7 +327,7 @@ blog markdown documents a usecase:
 
 					case "m":
 					case "me":
-						cb(null); break;
+						//cb(null); break;
 						/*
 						Could use Matlab's pcode generator - but only avail within matlab
 								cd to MATLABROOT (avail w matlabroot cmd)
@@ -345,7 +348,8 @@ blog markdown documents a usecase:
 
 						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
 							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
-
+								Log("matmin>>>>", err);
+								
 								if (err)
 									cb( null );
 
@@ -369,8 +373,7 @@ blog markdown documents a usecase:
 
 					case "jade":
 					default:
-						cb(null); break;
-						
+						//cb(null); break;
 						cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
 				}
 			
