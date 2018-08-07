@@ -109,7 +109,7 @@ blog markdown documents a usecase:
 		},
 
 		licenseOnDownload: true,
-		licenseOnRestart: false,
+		licenseOnRestart: true,
 		
 		serviceID: function (url) {
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
@@ -117,64 +117,61 @@ blog markdown documents a usecase:
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
 
-			function returnLicense() {
-				FLEX.genLicense( code, type, secret, (minCode, license) => {
+			function returnLicense(pub) {
+				var
+					product = pub.Product,
+					endService = pub.EndService,
+					parts = product.split("."),
+					type = parts.pop(),
+					name = parts.pop(),
+					secret = product + "@" + endService;
+				
+				FLEX.genLicense( code, product, type, secret, (minCode, license) => {
+					
 					if (license) {
 						cb( Copy({
 							License: license,
-							Master: minCode,
 							EndServiceID: FLEX.serviceID( pub.EndService ),
 							Copies: 1
 						}, pub) );
 
-						sql.query(
-							"INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
-							pub, (err) => Log("pub", err)  );
+						sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", pub );
+						
+						sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
+							Master: minCode,
+							License: license,
+							EndServiceID: pub.EndServiceID
+						}, {Master: minCode} ] );
 					}
 
 					else 
 						cb( null );
+
 				});
 			}
 			
-			var 
-				fetcher = FLEX.fetcher,	
-				product = pub.Product,
-				endService = pub.EndService,
-				parts = product.split("."),
-				type = parts.pop(),
-				name = parts.pop(),
-				secret = product + "@" + endService;
-			
-			Log("lic code", endService, product);
-			
-			if (endService)
-				fetcher( endService, null, null, (rtn) => {  // validate end service
-
-					//Log("publish endsrv check", rtn);
-
+			if (endService = pub.EndService)
+				FLEX.fetcher( endService, null, null, (rtn) => {  // validate end service
 					if (rtn) 
-						returnLicense();
+						returnLicense(pub);
 					
 					else
 						cb( null  );
 				});	
 			
 			else
-				returnLicense();
+				returnLicense(pub);
 		},
 		
-		publishPlugin: function (sql, plugin, path) {  // publish a plugin = name.type under path
+		publishPlugin: function (sql, name, type, relicense) {  // publish plugin = name.type under path
 			try {			
 				var 
 					resetAll = false,
-					parts = plugin.split("."),
-					type = parts.pop(),
-					name = parts.pop(),
-					modpath = process.cwd() + "/" + path + "/" + name,
-					mod = require(modpath);
+					paths = FLEX.paths,
+					path = process.cwd() + "/" + paths.publish[type] + "/" + name,
+					mod = require(path);
 
-				Trace("PUBLISHING "+plugin);
+				Log("PUBLISHING",name);
 
 				// FLEX.execute[name] = runPlugin;
 
@@ -214,17 +211,17 @@ blog markdown documents a usecase:
 
 				if ( code = mod.engine || mod.code ) {
 					
-					if (FLEX.licenseOnRestart) 
+					if ( relicense ) 
 						FLEX.licenseCode( sql, code, {
 							EndUser: "totem",
-							EndService: ENV.SERVICE_WORKER_URL,
+							EndService: ENV.SERVICE_MASTER_URL,
 							Published: new Date(),
-							Product: plugin,
-							Path: modpath
+							Product: name + "." + type,
+							Path: path
 						}, (pub) => {
 							
 							if (pub)
-								Log("LICENSED", pub.Product);
+								Log("LICENSED", pub);
 						});
 					
 					sql.query( 
@@ -263,11 +260,11 @@ blog markdown documents a usecase:
 			}
 
 			catch (err) {
-				Log("IGNORING ", name, err);
+				Log("IGNORING", name, err);
 			}
 		},
 		
-		genLicense: function (code, type, secret, cb) {
+		genLicense: function (code, product, type, secret, cb) {
 			
 			//Log("gen lic", secret);
 			if (secret)
@@ -282,13 +279,13 @@ blog markdown documents a usecase:
 					case "js":
 						//cb(null); break;
 						var
-							e6Tmp = "/local/babel/e6code.js",
-							e5Tmp = "/local/babel/e5code.js";
+							e6Tmp = "./tmp/e6/" + product,
+							e5Tmp = "./tmp/e5/" + product;
 
 						FS.writeFile(e6Tmp, code, "utf8", (err) => {
-							CP.exec("cd /local/babel; npm run publish", (err,log) => {
+							CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
 								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-									Log("babel>>>>", err);
+									Log("jsmin>>>>", err);
 
 									if (err)
 										cb( null );
@@ -299,7 +296,7 @@ blog markdown documents a usecase:
 										if (min.error) 
 											cb( null );
 
-										else 
+										else   
 											cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
 									}
 								});
@@ -310,7 +307,7 @@ blog markdown documents a usecase:
 					case "py":
 						// cb(null); break;
 						// problematic with python code as -O obvuscator cant be reseeded
-						var pyTmp = "./tmp/publish.py";
+						var pyTmp = "./tmp/" + product;
 
 						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
 							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
@@ -343,8 +340,8 @@ blog markdown documents a usecase:
 						*/
 
 						var 
-							mTmp = "./tmp/publish.m",
-							pyTmp = "./tmp/publish.py";
+							mTmp = "./tmp/matsrc/" + product,
+							pyTmp = "./tmp/matout/" + product;
 
 						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
 							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
@@ -380,20 +377,43 @@ blog markdown documents a usecase:
 			else
 				cb( code, CRYPTO.createHmac("sha256", type).update(code).digest("hex") );
 		},
-							
-		publisher: function ( sql, pub ) { //< publish plugins under path
-			//Log("pubsetup", pub);
-			CP.exec(`cd ${pub.Path}; sh publish.sh "${pub.Published}" "${pub.Ver}"`, function (err) {
-				//Log("pubrun", err, FLEX.paths.plugins);
-				
-				FLEX.paths.plugins.forEach( function (type) {  // get TYPEs to publish
-					FLEX.indexer( pub.Path+"/"+type, function (files) {	// get FILEs to publish
-						files.forEach( function (file) {
-							if ( file.endsWith(".js") ) 
-								FLEX.publishPlugin(sql, file.replace(".js","")+"."+type, pub.Path+"/"+type);
-						});
-					});
-				});				
+
+		publishPlugins: function ( sql ) { //< publish all plugin products
+			Each( FLEX.paths.publish, (type, path) => { 		// get plugin file types to publish	
+				FLEX.indexer( path, (files) => {	// get plugin file names to publish
+					files.forEach( (file) => {
+						var
+							parts = file.split("."),
+							filetype = parts.pop(),
+							filename = parts.pop();
+						
+						switch (filetype) {
+							case "js":
+								var 
+									now = new Date(),
+									ver = "vX";
+
+								CP.exec(`cd ${path}; sh ${filename}.sh "${now}" "${ver}"`, (err) => {
+									FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
+								});
+								break;
+								
+							case "jade":
+								FS.readFile( path + "/" + filename, "utf8", (err,code) => {
+									sql.query( 
+										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+											Name: filename,
+											Code: code,
+											Type: filetype,
+											Enabled: 1
+										}, code
+									]);	
+								});
+								break;
+								
+						}
+					});	
+				});
 			});
 		},
 		
@@ -426,8 +446,13 @@ blog markdown documents a usecase:
 		},
 		
 		paths: {
-			publish: "./public",
-			plugins: ["js", "py", "m", "me", "jade"],
+			publish: {
+				js: "./public/js",
+				py: "./public/py",
+				me: "./public/me",
+				m: "./public/m",
+				jade: "./public/jade"
+			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
 			host: ""
@@ -757,13 +782,8 @@ blog markdown documents a usecase:
 			FLEX.thread( function (sql) {				
 				READ.config(sql);			
 				
-				if (CLUSTER.isMaster)   
-					FLEX.publisher( sql, {
-						Path: FLEX.paths.publish, 
-						Published: new Date(),
-						EndUser: "totem",
-						Ver: "0.0.0"
-					});
+				if (CLUSTER.isMaster)   					
+					FLEX.publishPlugins( sql );
 
 				if (false)
 					sql.query("SELECT Name FROM app.engines WHERE Enabled")
@@ -4850,22 +4870,30 @@ FLEX.execute.publish = function (req,res) {
 		query = req.query,
 		product = query.product;
 	
-	res( product ? "publishing" : "missing &product" );
+	if (product) 
+		sql.query( "SELECT * FROM app.releases WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product}, (pubs) => {
+			
+			if ( pub = pubs[0] ) {
+				res( `Publishing product ${product}` );
+				
+				var 
+					parts = pub.Ver.split("."),
+					ver = pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join("."),
+					product = pub.Product || "",
+					parts = product.split("."),
+					type = parts.pop(),
+					name = parts.pop();
+				
+				FLEX.publishPlugin( sql, name, type, true );
+			}
+			
+			else
+				res( `Product ${product} does not exist` );
+			
+		});
 	
-	sql.query( "SELECT * FROM app.releases WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product})
-	.on("result", function (pub) {
-		var 
-			parts = pub.Ver.split(".");
-		
-		pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
-		pub.Published = new Date();
-		pub.EndUser = client;
-		delete pub.ID;
-		
-		FLEX.publisher( sql, pub );
-		
-		sql.query( "INSERT INTO app.releases SET ?", pub );
-	});
+	else
+		res( "missing product parameter" );	
 }
 
 FLEX.select.status = function (req,res) {
