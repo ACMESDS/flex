@@ -108,31 +108,59 @@ blog markdown documents a usecase:
 			Steps: "value overrides the supervisor's observation interval (0 defaults) "
 		},
 
-		mustLicense: false,
+		mustLicense: true,
 		
-		licenseCode: function (sql, code, secret, pub, cb ) {  //< callback cb(pub) or cb(null)
+		serviceID: function (url) {
+			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
+		},
+		
+		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
+
+			function returnLicense() {
+				FLEX.genLicense( code, type, secret, (minCode, license) => {
+					if (license) {
+						cb( Copy({
+							License: license,
+							Master: minCode,
+							EndServiceID: FLEX.serviceID( pub.EndService ),
+							Copies: 1
+						}, pub) );
+
+						sql.query(
+							"INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
+							pub, (err) => Log("pub", err)  );
+					}
+
+					else 
+						cb( null );
+				});
+			}
 			
 			var 
-				parts = pub.Product.split("."),
+				fetcher = FLEX.fetcher,	
+				product = pub.Product,
+				endService = pub.EndService,
+				parts = product.split("."),
 				type = parts.pop(),
-				name = parts.pop();
+				name = parts.pop(),
+				secret = product + "@" + endService;
 			
-			FLEX.getLicense( code, type, secret, (minCode, license) => {
-				if (license) {
-					cb( Copy({
-						License: license,
-						Master: minCode,
-						Copies: 1
-					}, pub) );
+			Log("lic code", endService, product);
+			
+			if (endService)
+				fetcher( endService, null, null, (rtn) => {  // validate end service
 
-					sql.query(
-						"INSERT INTO app.publish SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", 
-						pub );
-				}
+					//Log("publish endsrv check", rtn);
 
-				else 
-					cb( null );
-			});
+					if (rtn) 
+						returnLicense();
+					
+					else
+						cb( null  );
+				});	
+			
+			else
+				returnLicense();
 		},
 		
 		publishPlugin: function (sql, plugin, path) {  // publish a plugin = name.type under path
@@ -185,9 +213,10 @@ blog markdown documents a usecase:
 
 				if ( code = mod.engine || mod.code ) {
 					
-					if (FLEX.mustLicense)
-						FLEX.licenseCode( sql, code, plugin, {
-							By: "totem",
+					if (false) // (FLEX.mustLicense)
+						FLEX.licenseCode( sql, code, {
+							EndUser: "totem",
+							EndService: ENV.SERVICE_WORKER_URL,
 							Published: new Date(),
 							Product: plugin,
 							Path: modpath
@@ -237,8 +266,9 @@ blog markdown documents a usecase:
 			}
 		},
 		
-		getLicense: function (code, type, secret, cb) {
+		genLicense: function (code, type, secret, cb) {
 			
+			Log("gen lic", secret);
 			if (secret)
 				switch (type) {
 					case "html":
@@ -257,7 +287,7 @@ blog markdown documents a usecase:
 						FS.writeFile(e6Tmp, code, "utf8", (err) => {
 							CP.exec("cd /local/babel; npm run publish", (err,log) => {
 								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-									//Log("babel>>>>", e5code,err);
+									Log("babel>>>>", e5code,err);
 
 									if (err)
 										cb( null );
@@ -277,8 +307,8 @@ blog markdown documents a usecase:
 						break;						
 
 					case "py":
+						cb(null); break;
 						// problematic with python code as -O obvuscator cant be reseeded
-						//cb(null); break;
 						var pyTmp = "./tmp/publish.py";
 
 						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
@@ -294,6 +324,7 @@ blog markdown documents a usecase:
 
 					case "m":
 					case "me":
+						cb(null); break;
 						/*
 						Could use Matlab's pcode generator - but only avail within matlab
 								cd to MATLABROOT (avail w matlabroot cmd)
@@ -307,7 +338,6 @@ blog markdown documents a usecase:
 
 						Better option to use smop to convert matlab to python, then pyminify that.
 						*/
-						//cb(null); break;
 
 						var 
 							mTmp = "./tmp/publish.m",
@@ -339,6 +369,8 @@ blog markdown documents a usecase:
 
 					case "jade":
 					default:
+						cb(null); break;
+						
 						cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
 				}
 			
@@ -726,7 +758,7 @@ blog markdown documents a usecase:
 					FLEX.publisher( sql, {
 						Path: FLEX.paths.publish, 
 						Published: new Date(),
-						By: "totem",
+						EndUser: "totem",
 						Ver: "0.0.0"
 					});
 
@@ -4817,19 +4849,19 @@ FLEX.execute.publish = function (req,res) {
 	
 	res( product ? "publishing" : "missing &product" );
 	
-	sql.query( "SELECT * FROM app.publish WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product})
+	sql.query( "SELECT * FROM app.releases WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product})
 	.on("result", function (pub) {
 		var 
 			parts = pub.Ver.split(".");
 		
 		pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join(".");
 		pub.Published = new Date();
-		pub.By = client;
+		pub.EndUser = client;
 		delete pub.ID;
 		
 		FLEX.publisher( sql, pub );
 		
-		sql.query( "INSERT INTO app.publish SET ?", pub );
+		sql.query( "INSERT INTO app.releases SET ?", pub );
 	});
 }
 
