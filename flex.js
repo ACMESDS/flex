@@ -175,7 +175,7 @@ blog markdown documents a usecase:
 
 				// FLEX.execute[name] = runPlugin;
 
-				if ( mod.clear )
+				if ( mod.clear || mod.reset )
 					sql.query("DROP TABLE app.??", name);
 
 				sql.query( 
@@ -207,6 +207,11 @@ blog markdown documents a usecase:
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
 						});
 						
+					if ( inits = mod.inits || mod.initial || mod.initialize ) 
+						inits.forEach( function (init, idx) {
+							sql.query("INSERT INTO app.?? SET ?", init);
+						});
+						
 				});
 
 				if ( code = mod.engine || mod.code ) {
@@ -235,28 +240,92 @@ blog markdown documents a usecase:
 					]);
 				}
 				
-				if ( smop = mod.smop ) {  // matlab to python convertor
+				if ( topy = mod.topy || mod.smop ) {  // to python convertor
 					var 
-						mSrc = path+"/"+smop+".m",
-						pyTar = path+"/"+smop+".py";
+						xSrc = path+"/"+topy+"."+type,
+						pyTar = path+"/"+topy+".py";
 
-					FS.writeFile( mSrc, code, "utf8", function (err) {
-						CP.execFile("python", ["matlabtopython.py", "smop", mSrc, "-o", pyTar], function (err) {
-							if (!err) 
-								FS.readFile( pyTar, "utf8", function (err,pycode) {
-									if (!err)
-										sql.query( 
-											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-												Name: name,
-												Code: pycode,
-												Type: type,
-												Enabled: 1
-											}, pycode 
-										]);
-								});									
-						});
-					});					
+					FS.writeFile( xSrc, code, "utf8", function (err) {
+						if (type == "matlab")
+							CP.execFile("python", ["matlabtopython.py", "smop", xSrc, "-o", pyTar], function (err) {
+								if (!err) 
+									FS.readFile( pyTar, "utf8", function (err,pycode) {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: name,
+													Code: pycode,
+													Type: type,
+													Enabled: 1
+												}, pycode 
+											]);
+									});									
+							});
+						
+						else
+						if (type == "js")
+							CP.execFile("python", ["jstopython.py", xSrc, "-o", pyTar], function (err) {
+								if (!err) 
+									FS.readFile( pyTar, "utf8", function (err,pycode) {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: name,
+													Code: pycode,
+													Type: type,
+													Enabled: 1
+												}, pycode 
+											]);
+									});									
+							});
+							
+					});	
+					
 				}
+				
+				else
+				if ( tojs = mod.tojs || mod.giphy ) { // to javascript converter
+					var 
+						xSrc = path+"/"+topy+"."+type,
+						jsTar = path+"/"+topy+".js";
+
+					FS.writeFile( xSrc, code, "utf8", function (err) {
+						if (type == "matlab")
+							CP.execFile("python", ["matlabtopython.py", "smop", xSrc, "-o", jsTar], function (err) {
+								if (!err) 
+									FS.readFile( pyTar, "utf8", function (err,pycode) {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: name,
+													Code: pycode,
+													Type: type,
+													Enabled: 1
+												}, pycode 
+											]);
+									});									
+							});
+						
+						else
+						if (type == "py")
+							CP.execFile("python", ["pytojs.py", xSrc, "-o", jsTar], function (err) {
+								if (!err) 
+									FS.readFile( jsTar, "utf8", function (err,pycode) {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: name,
+													Code: pycode,
+													Type: type,
+													Enabled: 1
+												}, pycode 
+											]);
+									});									
+							});
+							
+					});	
+				}
+				
 			}
 
 			catch (err) {
@@ -383,7 +452,8 @@ blog markdown documents a usecase:
 				FLEX.indexer( path, (files) => {	// get plugin file names to publish
 					files.forEach( (file) => {
 						var
-							parts = file.split("."),
+							product = file,
+							parts = product.split("."),
 							filetype = parts.pop(),
 							filename = parts.pop();
 						
@@ -393,7 +463,7 @@ blog markdown documents a usecase:
 									now = new Date(),
 									ver = "vX";
 
-								CP.exec(`cd ${path}; sh ${filename}.sh "${now}" "${ver}"`, (err) => {
+								CP.exec(`cd ${path}; sh ${filename}.sh "${now}" "${ver}" "${product}"`, (err) => {
 									FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
 								});
 								break;
