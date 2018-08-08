@@ -109,7 +109,7 @@ blog markdown documents a usecase:
 		},
 
 		licenseOnDownload: true,
-		licenseOnRestart: true,
+		licenseOnRestart: false,
 		
 		serviceID: function (url) {
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
@@ -279,8 +279,8 @@ blog markdown documents a usecase:
 					case "js":
 						//cb(null); break;
 						var
-							e6Tmp = "./tmp/e6/" + product,
-							e5Tmp = "./tmp/e5/" + product;
+							e6Tmp = "./temps/e6/" + product,
+							e5Tmp = "./temps/e5/" + product;
 
 						FS.writeFile(e6Tmp, code, "utf8", (err) => {
 							CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
@@ -307,7 +307,7 @@ blog markdown documents a usecase:
 					case "py":
 						// cb(null); break;
 						// problematic with python code as -O obvuscator cant be reseeded
-						var pyTmp = "./tmp/" + product;
+						var pyTmp = "./temps/" + product;
 
 						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
 							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
@@ -340,8 +340,8 @@ blog markdown documents a usecase:
 						*/
 
 						var 
-							mTmp = "./tmp/matsrc/" + product,
-							pyTmp = "./tmp/matout/" + product;
+							mTmp = "./temps/matsrc/" + product,
+							pyTmp = "./temps/matout/" + product;
 
 						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
 							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
@@ -399,15 +399,16 @@ blog markdown documents a usecase:
 								break;
 								
 							case "jade":
-								FS.readFile( path + "/" + filename, "utf8", (err,code) => {
-									sql.query( 
-										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-											Name: filename,
-											Code: code,
-											Type: filetype,
-											Enabled: 1
-										}, code
-									]);	
+								FS.readFile( path + "/" + file, "utf8", (err,code) => {
+									if (!err)
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+												Name: filename,
+												Code: code,
+												Type: filetype,
+												Enabled: 1
+											}, code
+										]);	
 								});
 								break;
 								
@@ -446,6 +447,8 @@ blog markdown documents a usecase:
 		},
 		
 		paths: {
+			status: "./public/shares/status.xlsx",
+			logins: "./public/shares/logins",
 			publish: {
 				js: "./public/js",
 				py: "./public/py",
@@ -4294,19 +4297,20 @@ FLEX.select.login = function(req,res) {
 		group = req.group,
 		profile = req.profile,
 		userHome = `/local/users/${user}`,
+		logins = FLEX.paths.logins,
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
 		isp = {
 			machine: "totem.west.ile.nga.ic.gov",
 			admin: "totemadmin@coe.ic.gov",
 			ps: "brian.d.james@coe.ic.gov",
-			remotein: `./shares/${user}.rdp`,
+			remotein: `${logins}/${user}.rdp`,
 			sudos: [
 				`adduser ${user} -M --gid ${group} -p ${ENV.LOGIN_PASS}`,
 				`usermod -d ${userHome} ${user}`,
 				`id ${user}`,
 				`mkdir -p ${userHome}/.ssh`,
 				`cp ./certs/${user} ${userHome}/.ssh`,
-				`cp ./shares/template.rdp ./shares/${user}.rdp`,
+				`cp ${logins}/template.rdp ${logins}/${user}.rdp`,
 				`ln -s /local/service ${userHome}/totem`
 			],				
 			hosted: false
@@ -4589,7 +4593,7 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 			mode: "XX", //image.SensorCode,
 			bands: 0, //parseInt(image.BandCountQuantity),
 			gsd: 0, //parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
-			wms: site.urls.master+"/shares/spoof.jpg"			
+			wms: site.urls.master+"/shares/images/spoof.jpg"			
 			/*{
 			GetRecordsResponse: {
 				SearchResults: {
@@ -4925,7 +4929,7 @@ FLEX.select.status = function (req,res) {
 	
 	Log(year,week,from,to);
 	
-	READ.xlsx(sql,"./shares/status.xlsx", function (recs) {
+	READ.xlsx(sql, FLEX.paths.status, function (recs) {
 
 		if (recs ) {			
 			Each( recs[0], (key,val) => {  // remove cols outside this year
