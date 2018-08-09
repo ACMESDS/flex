@@ -163,174 +163,116 @@ blog markdown documents a usecase:
 				returnLicense(pub);
 		},
 		
-		publishPlugin: function (sql, name, type, relicense) {  // publish plugin = name.type under path
-			try {			
-				var 
-					resetAll = false,
-					paths = FLEX.paths,
-					path = process.cwd() + "/" + paths.publish[type] + "/" + name,
-					mod = require(path);
+		publishPlugin: function (sql, name, type, relicense) {  // publish product = name.type
+			var 
+				resetAll = false,
+				paths = FLEX.paths,
+				path = process.cwd() + "/" + paths.publish[type] + "/" + name;
+			
+			Log("PUBLISHING",name, path);
 
-				Log("PUBLISHING",name);
+			try {
+				var	mod = require(path);
+			}
+			catch (err) {
+				Log("PUBLISH ignoring js-less", name, err);
+				return;
+			}
 
-				// FLEX.execute[name] = runPlugin;
+			// FLEX.execute[name] = runPlugin;
 
-				if ( mod.clear || mod.reset )
-					sql.query("DROP TABLE app.??", name);
+			if ( mod.clear || mod.reset )
+				sql.query("DROP TABLE app.??", name);
+
+			sql.query( 
+				`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
+				[], function (err) {
+
+				var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
+
+				if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) )
+					Each( keys, function (key,type) {
+						if ( doc = docs[key] )
+							doc.renderBlog({now:new Date()}, "", function (html) {
+								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
+							});
+
+						else								
+							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+					});
+
+				else
+				if ( keys = mod.usecase || mod.keys || mod.adds )
+					Each( keys, function (key,type) {
+						if ( doc = docs[key] )
+							doc.renderBlog({now:new Date()}, "", function (html) {
+								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
+							});
+
+						else
+							sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
+					});
+
+				if ( inits = mod.inits || mod.initial || mod.initialize ) 
+					inits.forEach( function (init, idx) {
+						sql.query("INSERT INTO app.?? SET ?", init);
+					});
+
+			});
+
+			if ( code = mod.engine || mod.code ) {
+
+				if ( relicense ) 
+					FLEX.licenseCode( sql, code, {
+						EndUser: "totem",
+						EndService: ENV.SERVICE_MASTER_URL,
+						Published: new Date(),
+						Product: name + "." + type,
+						Path: path
+					}, (pub) => {
+
+						if (pub)
+							Log("LICENSED", pub);
+					});
 
 				sql.query( 
-					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
-					[], function (err) {
-
-					var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
-						
-					if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) )
-						Each( keys, function (key,type) {
-							if ( doc = docs[key] )
-								doc.renderBlog({now:new Date()}, "", function (html) {
-									sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
-								});
-							
-							else								
-								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
-						});
-
-					else
-					if ( keys = mod.usecase || mod.keys || mod.adds )
-						Each( keys, function (key,type) {
-							if ( doc = docs[key] )
-								doc.renderBlog({now:new Date()}, "", function (html) {
-									sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
-								});
-							
-							else
-								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
-						});
-						
-					if ( inits = mod.inits || mod.initial || mod.initialize ) 
-						inits.forEach( function (init, idx) {
-							sql.query("INSERT INTO app.?? SET ?", init);
-						});
-						
-				});
-
-				if ( code = mod.engine || mod.code ) {
-					
-					if ( relicense ) 
-						FLEX.licenseCode( sql, code, {
-							EndUser: "totem",
-							EndService: ENV.SERVICE_MASTER_URL,
-							Published: new Date(),
-							Product: name + "." + type,
-							Path: path
-						}, (pub) => {
-							
-							if (pub)
-								Log("LICENSED", pub);
-						});
-					
-					sql.query( 
-						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-							Name: name,
-							Code: code+"",
-							Type: type,
-							Enabled: 1
-							//State: "{}",  //JSON.stringify({Port:name}),
-						}, code+"" 
-					]);
-				}
-				
-				if ( topy = mod.topy || mod.smop ) {  // to python convertor
-					var 
-						xSrc = path+"/"+topy+"."+type,
-						pyTar = path+"/"+topy+".py";
-
-					FS.writeFile( xSrc, code, "utf8", function (err) {
-						if (type == "matlab")
-							CP.execFile("python", ["matlabtopython.py", "smop", xSrc, "-o", pyTar], function (err) {
-								if (!err) 
-									FS.readFile( pyTar, "utf8", function (err,pycode) {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: name,
-													Code: pycode,
-													Type: type,
-													Enabled: 1
-												}, pycode 
-											]);
-									});									
-							});
-						
-						else
-						if (type == "js")
-							CP.execFile("python", ["jstopython.py", xSrc, "-o", pyTar], function (err) {
-								if (!err) 
-									FS.readFile( pyTar, "utf8", function (err,pycode) {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: name,
-													Code: pycode,
-													Type: type,
-													Enabled: 1
-												}, pycode 
-											]);
-									});									
-							});
-							
-					});	
-					
-				}
-				
-				else
-				if ( tojs = mod.tojs || mod.giphy ) { // to javascript converter
-					var 
-						xSrc = path+"/"+topy+"."+type,
-						jsTar = path+"/"+topy+".js";
-
-					FS.writeFile( xSrc, code, "utf8", function (err) {
-						if (type == "matlab")
-							CP.execFile("python", ["matlabtopython.py", "smop", xSrc, "-o", jsTar], function (err) {
-								if (!err) 
-									FS.readFile( pyTar, "utf8", function (err,pycode) {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: name,
-													Code: pycode,
-													Type: type,
-													Enabled: 1
-												}, pycode 
-											]);
-									});									
-							});
-						
-						else
-						if (type == "py")
-							CP.execFile("python", ["pytojs.py", xSrc, "-o", jsTar], function (err) {
-								if (!err) 
-									FS.readFile( jsTar, "utf8", function (err,pycode) {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: name,
-													Code: pycode,
-													Type: type,
-													Enabled: 1
-												}, pycode 
-											]);
-									});									
-							});
-							
-					});	
-				}
-				
+					"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+						Name: name,
+						Code: code+"",
+						Type: type,
+						Enabled: 1
+						//State: "{}",  //JSON.stringify({Port:name}),
+					}, code+"" 
+				]);
 			}
 
-			catch (err) {
-				Log("IGNORING", name, err);
-			}
+			var 
+				from = type,
+				to = mod.to || from,
+				fromFile = path+"/"+name+"."+from,
+				toFile = path+"/"+name+"."+to;
+
+			Log(from,"=>",to);
+			
+			if ( from != to )
+				FS.writeFile( fromFile, code, "utf8", function (err) {
+					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
+					CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+						if (!err) 
+							FS.readFile( toFile, "utf8", function (err,code) {
+								if (!err)
+									sql.query( 
+										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+											Name: name,
+											Code: code,
+											Type: type,
+											Enabled: 1
+										}, code 
+									]);
+							});									
+					});
+				});	
+
 		},
 		
 		genLicense: function (code, product, type, secret, cb) {
