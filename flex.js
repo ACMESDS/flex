@@ -14,6 +14,7 @@
 
 @requires enum
 @requires atomic
+@requires reader
 
 @requires uglify-js
 @requires html-minifier
@@ -23,6 +24,8 @@
 @requires imap
 @requires feed
 @requires feed-read
+@requires jshint
+@requires prettydiff
 */
  
 var 	
