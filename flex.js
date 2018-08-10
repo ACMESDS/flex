@@ -178,7 +178,7 @@ blog markdown documents a usecase:
 				var	mod = require(path);
 			}
 			catch (err) {
-				Log("PUBLISH ignoring js-less", name, err);
+				Log("PUBLISH ignoring bad/missing js-define file", name, err);
 				return;
 			}
 
@@ -193,7 +193,7 @@ blog markdown documents a usecase:
 
 				var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
 
-				if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) )
+				if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) || mod._mods)
 					Each( keys, function (key,type) {
 						if ( doc = docs[key] )
 							doc.renderBlog({now:new Date()}, "", function (html) {
@@ -201,6 +201,12 @@ blog markdown documents a usecase:
 							});
 
 						else								
+						if (mod._mods)
+							if (key.charAt(0) == "_")
+								sql.query( `ALTER TABLE app.${name} CHANGE ${key.substr(1)} ${key} ${type}`, (err) => Log(err) );
+							else
+								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+						else							
 							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
 					});
 
@@ -247,35 +253,34 @@ blog markdown documents a usecase:
 						//State: "{}",  //JSON.stringify({Port:name}),
 					}, code+"" 
 				]);
+
+				var 
+					from = type,
+					to = mod.to || from,
+					fromFile = path+"/"+name+"."+from,
+					toFile = path+"/"+name+"."+to;
+
+				Log(from,"=>",to);
+
+				if ( from != to )
+					FS.writeFile( fromFile, code, "utf8", function (err) {
+						//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
+						CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+							if (!err) 
+								FS.readFile( toFile, "utf8", function (err,code) {
+									if (!err)
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+												Name: name,
+												Code: code,
+												Type: type,
+												Enabled: 1
+											}, code 
+										]);
+								});									
+						});
+					});	
 			}
-
-			var 
-				from = type,
-				to = mod.to || from,
-				fromFile = path+"/"+name+"."+from,
-				toFile = path+"/"+name+"."+to;
-
-			Log(from,"=>",to);
-			
-			if ( from != to )
-				FS.writeFile( fromFile, code, "utf8", function (err) {
-					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
-					CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-						if (!err) 
-							FS.readFile( toFile, "utf8", function (err,code) {
-								if (!err)
-									sql.query( 
-										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-											Name: name,
-											Code: code,
-											Type: type,
-											Enabled: 1
-										}, code 
-									]);
-							});									
-					});
-				});	
-
 		},
 		
 		genLicense: function (code, product, type, secret, cb) {
