@@ -4079,10 +4079,11 @@ function selectDS(req,res) {
 		query = req.query,
 		index = req.index;
 	
+	/*
 	if ( filters = flags.filters )
 		filters.forEach( function (filter) {
 			query[filter.property] = filter.value;
-		});
+		}); */
 
 	sql.run( Copy( flags, {
 		crud: req.action,
@@ -5053,6 +5054,28 @@ FLEX.select.status = function (req,res) {
 		
 	});
 	
+}
+
+FLEX.select.pubsites = function (req,res) {
+	var 
+		sql = req.sql,
+		query = req.query,
+		product = query.product || "",
+		site = FLEX.site,
+		pre = `${site.urls.worker}/${product}?endservice=`,
+		rtns = [];
+	
+	sql.query(
+		"SELECT Name,Path FROM app.lookups WHERE ?", {Ref: product}, (err,recs) => {
+		
+		recs.forEach( (rec) => {
+			rtns.push( `<a href="${pre}${rec.Path}">${rec.Name}</a>` );
+		});
+		
+		rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">new</a>` );
+		res( rtns.join(", ") );
+	});
+
 }
 
 // UNCLASSIFIED
