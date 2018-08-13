@@ -5072,8 +5072,8 @@ FLEX.select.pubsites = function (req,res) {
 			rtns.push( `<a href="${pre}${rec.Path}">${rec.Name}</a>` );
 		});
 		
-		rtns.push( `<a href="${pre}">define</a>` );
-		rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">new</a>` );
+		rtns.push( `<a href="${pre}">other</a>` );
+		rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
 		
 		res( rtns.join(", ") );
 	});
