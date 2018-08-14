@@ -5061,19 +5061,23 @@ FLEX.select.pubsites = function (req,res) {
 		sql = req.sql,
 		query = req.query,
 		product = query.product || "",
+		via = query.via || "",
 		site = FLEX.site,
-		pre = `${site.urls.worker}/${product}?endservice=`,
+		licpath = `${site.urls.worker}/${product}?endservice=`,
+		viapath = `${site.urls.worker}/${product}?via=${via}`,
 		rtns = [];
 	
 	sql.query(
 		"SELECT Name,Path FROM app.lookups WHERE ?", {Ref: product}, (err,recs) => {
 		
 		recs.forEach( (rec) => {
-			rtns.push( `<a href="${pre}${rec.Path}">${rec.Name}</a>` );
+			rtns.push( `<a href="${licpath}${rec.Path}">${rec.Name}</a>` );
 		});
 		
-		rtns.push( `<a href="${pre}">other</a>` );
-		rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
+		if (via)
+			rtns.push( `<a href="${viapath}">other</a>` );
+			
+		//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
 		
 		res( rtns.join(", ") );
 	});
