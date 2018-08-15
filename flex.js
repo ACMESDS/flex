@@ -169,16 +169,17 @@ blog markdown documents a usecase:
 		publishPlugin: function (sql, name, type, relicense) {  // publish product = name.type
 			var 
 				resetAll = false,
-				paths = FLEX.paths,
-				path = process.cwd() + "/" + paths.publish[type] + "/" + name;
+				paths = FLEX.paths.publish,
+				product = name + "." + type,
+				pathname = paths[type] + name;
 			
-			Log("PUBLISHING",name, path);
+			Log("PUBLISH FROM", pathname, process.cwd());
 
 			try {
-				var	mod = require(path);
+				var	mod = require(process.cwd() + pathname.substr(1));
 			}
 			catch (err) {
-				Log("PUBLISH ignoring bad/missing js-define file", name, err);
+				Log(err);
 				return;
 			}
 
@@ -227,6 +228,8 @@ blog markdown documents a usecase:
 						sql.query("INSERT INTO app.?? SET ?", init);
 					});
 
+				if  ( readme = mod.readme )
+					FS.writeFile( pathname+".xmd", readme, "utf8" );
 			});
 
 			if ( code = mod.engine || mod.code ) {
@@ -236,8 +239,8 @@ blog markdown documents a usecase:
 						EndUser: "totem",
 						EndService: ENV.SERVICE_MASTER_URL,
 						Published: new Date(),
-						Product: name + "." + type,
-						Path: path
+						Product: product,
+						Path: pathname
 					}, (pub) => {
 
 						if (pub)
@@ -249,22 +252,23 @@ blog markdown documents a usecase:
 						Name: name,
 						Code: code+"",
 						Type: type,
-						Enabled: 1
-						//State: "{}",  //JSON.stringify({Port:name}),
+						Enabled: 1,
+						Wrap: (mod.wrap || "")+ "",
+						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
 					}, code+"" 
 				]);
 
 				var 
 					from = type,
 					to = mod.to || from,
-					fromFile = path+"/"+name+"."+from,
-					toFile = path+"/"+name+"."+to;
+					fromFile = pathname + "." + from,
+					toFile = pathname + "." + to;
 
 				Log(from,"=>",to);
 
 				if ( from != to )
-					FS.writeFile( fromFile, code, "utf8", function (err) {
-						//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
+					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
+					FS.writeFile( fromFile, code, "utf8", (err) => {
 						CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
 							if (!err) 
 								FS.readFile( toFile, "utf8", function (err,code) {
@@ -398,7 +402,8 @@ blog markdown documents a usecase:
 		},
 
 		publishPlugins: function ( sql ) { //< publish all plugin products
-			Each( FLEX.paths.publish, (type, path) => { 		// get plugin file types to publish	
+			var paths = FLEX.paths.publish;
+			Each( paths, (type, path) => { 		// get plugin file types to publish	
 				FLEX.indexer( path, (files) => {	// get plugin file names to publish
 					files.forEach( (file) => {
 						var
@@ -419,7 +424,7 @@ blog markdown documents a usecase:
 								break;
 								
 							case "jade":
-								FS.readFile( path + "/" + file, "utf8", (err,code) => {
+								FS.readFile( path + file, "utf8", (err,code) => {
 									if (!err)
 										sql.query( 
 											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
@@ -470,11 +475,11 @@ blog markdown documents a usecase:
 			status: "./public/shares/status.xlsx",
 			logins: "./public/shares/logins",
 			publish: {
-				js: "./public/js",
-				py: "./public/py",
-				me: "./public/me",
-				m: "./public/m",
-				jade: "./public/jade"
+				js: "./public/js/",
+				py: "./public/py/",
+				me: "./public/me/",
+				m: "./public/m/",
+				jade: "./public/jade/"
 			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
