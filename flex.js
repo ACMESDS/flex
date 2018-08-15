@@ -202,8 +202,8 @@ blog markdown documents a usecase:
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					subs: Copy( mod.subs || {}, {
 						NAME: name.toUpperCase(),
-						by: "[org](atorg)",
-						poc: "[poc](mailto:poc?subject=tbd&body=tbd)",
+						by: "tbd",
+						poc: function (req) { return "tbd"; },
 						compreqts: "tbd",
 						summary: "tbd",
 						name: name,
