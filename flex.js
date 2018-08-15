@@ -167,24 +167,53 @@ blog markdown documents a usecase:
 		},
 		
 		publishPlugin: function (sql, name, type, relicense) {  // publish product = name.type
+			
+			function getter( opt, def ) {	
+				if (opt) 
+					if ( opt.name == "get" )
+						return opt( FS.readFileSync , CP.exec );
+					else
+						return opt+"";
+				else
+					return def || "";
+			}
+			
 			var 
 				resetAll = false,
 				paths = FLEX.paths.publish,
 				product = name + "." + type,
+				site = FLEX.site,
 				pathname = paths[type] + name;
 			
-			Log("PUBLISH FROM", pathname, process.cwd());
+			// Log("PUBLISH", pathname, process.cwd());
 
 			try {
 				var	mod = require(process.cwd() + pathname.substr(1));
 			}
 			catch (err) {
-				Log(err);
+				Log("PUBLISH", name, err);
 				return;
 			}
 
 			// FLEX.execute[name] = runPlugin;
 
+			var
+				defs = { 
+					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
+					subs: Copy( mod.subs || {}, {
+						NAME: name.toUpperCase(),
+						by: "[org](atorg)",
+						poc: "[poc](mailto:poc?subject=tbd&body=tbd)",
+						compreqts: "tbd",
+						summary: "tbd",
+						name: name,
+						type: type,
+						product: product,
+						ver: "tbd",
+						now: new Date()
+					})
+				};
+			
 			if ( mod.clear || mod.reset )
 				sql.query("DROP TABLE app.??", name);
 
@@ -232,7 +261,7 @@ blog markdown documents a usecase:
 					FS.writeFile( pathname+".xmd", readme, "utf8" );
 			});
 
-			if ( code = mod.engine || mod.code ) {
+			if ( code = getter( mod.engine || mod.code) ) {
 
 				if ( relicense ) 
 					FLEX.licenseCode( sql, code, {
@@ -247,44 +276,63 @@ blog markdown documents a usecase:
 							Log("LICENSED", pub);
 					});
 
-				sql.query( 
-					"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-						Name: name,
-						Code: code+"",
-						Type: type,
-						Enabled: 1,
-						Wrap: (mod.wrap || "")+ "",
-						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-					}, code+"" 
-				]);
-
 				var 
 					from = type,
 					to = mod.to || from,
 					fromFile = pathname + "." + from,
-					toFile = pathname + "." + to;
+					toFile = pathname + "." + to,
+					rev = {
+						Code: code,
+						Wrap: getter( mod.wrap ),
+						ToU: getter( mod.tou || mod.readme, defs.tou ).parseJS(defs.subs),
+						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})						
+					};
 
-				Log(from,"=>",to);
+				Log("PUBLISH", name, `${from}=>${to}` );
 
-				if ( from != to )
+				if ( from == to )  // use code as-is
+					sql.query( 
+						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+							Name: name,
+							Type: type,
+							Enabled: 1
+						}), rev ]);
+				
+				else  // convert code to requested type
 					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
 					FS.writeFile( fromFile, code, "utf8", (err) => {
 						CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
 							if (!err) 
 								FS.readFile( toFile, "utf8", function (err,code) {
+									rev.Code = code;
 									if (!err)
 										sql.query( 
-											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
 												Name: name,
-												Code: code,
 												Type: type,
 												Enabled: 1
-											}, code 
-										]);
+											}), rev ]);
 								});									
 						});
 					});	
+			
 			}
+			
+			CP.exec(`cd ${name}.distro; sh publish.sh ${name} ${product}`);
+			//`cd ${path}; sh ${filename}.sh "${now}" "${ver}" "${product}"`, (err) => {
+			/*
+			FS.access( pathname+".distro", FS.F_OK, (err) => {
+				if (!err) 
+					CP.exec(`
+cd ${name}.distro
+curl "${site.urls.master}/${name}.tou" >README.md
+git commit -am "revised ToU"
+git push origin master
+`, 
+						(err, out) => {
+							Log("DISTRO PUB", err);
+					});
+			}); */
 		},
 		
 		genLicense: function (code, product, type, secret, cb) {
@@ -418,9 +466,7 @@ blog markdown documents a usecase:
 									now = new Date(),
 									ver = "vX";
 
-								CP.exec(`cd ${path}; sh ${filename}.sh "${now}" "${ver}" "${product}"`, (err) => {
-									FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
-								});
+								FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
 								break;
 								
 							case "jade":
@@ -5066,21 +5112,21 @@ FLEX.select.pubsites = function (req,res) {
 		sql = req.sql,
 		query = req.query,
 		product = query.product || "",
-		via = query.via || "",
+		proxy = query.proxy || "",
 		site = FLEX.site,
-		licpath = `${site.urls.worker}/${product}?endservice=`,
-		viapath = `${site.urls.worker}/${product}?via=${via}`,
+		licensePath = `${site.urls.worker}/${product}?endservice=`,
+		proxyPath = `${site.urls.worker}/${product}?proxy=${proxy}`,
 		rtns = [];
 	
 	sql.query(
 		"SELECT Name,Path FROM app.lookups WHERE ?", {Ref: product}, (err,recs) => {
 		
 		recs.forEach( (rec) => {
-			rtns.push( `<a href="${licpath}${rec.Path}">${rec.Name}</a>` );
+			rtns.push( `<a href="${licensePath}${rec.Path}">${rec.Name}</a>` );
 		});
 		
-		if (via)
-			rtns.push( `<a href="${viapath}">other</a>` );
+		if (proxy)
+			rtns.push( `<a href="${proxyPath}">other</a>` );
 			
 		//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
 		
