@@ -144,7 +144,7 @@ blog markdown documents a usecase:
 							Master: minCode,
 							License: license,
 							EndServiceID: pub.EndServiceID
-						}, {Master: minCode} ] );
+						}, {Master: minCode} ] );		
 					}
 
 					else 
@@ -198,13 +198,18 @@ blog markdown documents a usecase:
 			// FLEX.execute[name] = runPlugin;
 
 			var
+				envs = {
+					js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
+					py: "anconda 4.9.x, .... ",
+					m: "matab R18, odbc, simulink, stateflow"
+				},
 				defs = { 
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					subs: Copy( mod.subs || {}, {
 						NAME: name.toUpperCase(),
 						by: "tbd",
-						poc: function (req) { return "tbd"; },
-						compreqts: "tbd",
+						poc: function (req) { return `mailto:tbd@coe.ic.gov?subject=${name} request&body=${req}`; },
+						compreqts: envs[type] || "tbd",
 						summary: "tbd",
 						name: name,
 						type: type,
@@ -5116,6 +5121,7 @@ FLEX.select.pubsites = function (req,res) {
 		site = FLEX.site,
 		licensePath = `${site.urls.worker}/${product}?endservice=`,
 		proxyPath = `${site.urls.worker}/${product}?proxy=${proxy}`,
+		sites = {},
 		rtns = [];
 	
 	sql.query(
@@ -5123,16 +5129,85 @@ FLEX.select.pubsites = function (req,res) {
 		
 		recs.forEach( (rec) => {
 			rtns.push( `<a href="${licensePath}${rec.Path}">${rec.Name}</a>` );
+			sites[rec.Path] = rec.Name;
 		});
 		
-		if (proxy)
-			rtns.push( `<a href="${proxyPath}">other</a>` );
+		sql.query(
+			"SELECT endService FROM app.releases GROUP BY endServiceID", 
+			[],  (err,recs) => {
 			
-		//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
-		
-		res( rtns.join(", ") );
+			recs.forEach( (rec) => {
+				if ( !sites[rec.endService] ) {
+					var 
+						url = URL.parse(rec.endService),
+						name = (url.host||"none").split(".")[0];
+					
+					rtns.push( `<a href="${licensePath}${rec.endService}">${name}</a>` );
+				}
+			});
+				
+			if (proxy)
+				rtns.push( `<a href="${proxyPath}">other</a>` );
+
+			//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
+
+			res( rtns.join(", ") );
+		});
 	});
 
+}
+
+FLEX.select.pubsum = function (req,res) {
+	var 
+		sql = req.sql,
+		query = req.query,
+		site = FLEX.site,
+		totem = site.urls.worker+"/",
+		fetcher = FLEX.fetcher,
+		product = query.product;
+	
+	sql.query(
+		product 
+			? 
+				"SELECT endService, endServiceID, 'none' AS Users, "
+				+ " 'fail' AS Status, "
+				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
+				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
+				+ "FROM app.releases WHERE ? GROUP BY endServiceID, Product"
+		
+			:
+				"SELECT Product, endService, endServiceID, 'none' AS Users, "
+				+ " 'fail' AS Status, "
+				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
+				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
+				+ "FROM app.releases GROUP BY endServiceID, Product",
+		
+		["?", {Product: product}], (err,recs) => {
+
+			function fetcher(url, cb) {
+				FLEX.fetcher(url, null, null, cb);
+			}
+			
+			//Log(err, recs);
+			recs.serialize( fetcher, "getUsers", (rec,users) => {
+				if (rec) {
+					delete rec.endService;
+					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
+					rec.Product = rec.Product.tag("a", {href:totem+rec.Product.split(".")[0]+".run"});
+					rec.Status = "pass";
+					rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
+					rec.getUsers = "test".tag("a",{href:rec.getUsers});
+					rec.pocs = (rec.pocs.split(",").length+"").tag("a",{href:"mailto:"+rec.pocs});
+				}
+				
+				else
+					res( recs );
+			});
+	});
+} 
+
+FLEX.select.getusers = function (req,res) {
+	res( JSON.stringify( ["u1","u2","u3"] ) );
 }
 
 // UNCLASSIFIED
