@@ -203,13 +203,17 @@ blog markdown documents a usecase:
 					py: "anconda 4.9.x, .... ",
 					m: "matab R18, odbc, simulink, stateflow"
 				},
+
+				poc = "brian.d.james@coe.ic.gov",	
 				defs = { 
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					subs: Copy( mod.subs || {}, {
 						NAME: name.toUpperCase(),
+						totem: site.urls.worker,  //< careful use https as /pubsum will use https services
 						by: "tbd",
-						poc: function (req) { return `mailto:tbd@coe.ic.gov?subject=${name} request&body=${req}`; },
-						compreqts: envs[type] || "tbd",
+						fetch: function (req) { return `<!---fetch ${site.urls.worker}/${req}?product=${product}--->`; },
+						request: function (req) { return `[NGA/Research](mailto:${poc}?subject=${name} request&body=${req})`; },
+						reqts: envs[type] || "tbd",
 						summary: "tbd",
 						name: name,
 						type: type,
@@ -571,106 +575,15 @@ git push origin master
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
 		skinner: () => {Trace("site skinner not configured");},  //< site skinner
 
-		/*
-		runEngine: function (req,res) {  // run engine and callback res(ctx || null) with updated context ctx
-
-			ATOM.select(req, function (ctx) {  // compile and step the engine
-				//Log("run eng", ctx);
-				
-				if (ctx)  
-					res( ctx );
-				
-				else  { // engine does not exist/failed so try builtin
-					if ( plugin = FLEX.plugins[req.table] )  
-						
-						try {
-							plugin(req.query, res);
-						}
-						
-						catch (err) {
-							res( null );
-						}
-
-					else
-						res( null );
-				}
-			}); 
-		}, */
-		
-		/*
-		eachPlugin: function ( sql, group, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
-			sql.eachTable( group, function (table) { 
-				ATOM.getEngine( sql, group, table, function (eng) {
-					if (eng) cb(eng);
-				});
-			});
-		},*/
-		
-		/*
-		eachUsecase: function ( sql, group, where, cb ) {  // callback cb(eng,ctx) with each engine and its context meeting ctx where clause
-			FLEX.eachPlugin( sql, group, function (eng) {
-				if (eng)
-					FLEX.getContext( sql, group+"."+table, where, function (ctx) {
-						if (ctx) cb( eng, ctx );
-					});
-			});
-		},*/
-		
-		/*
-		taskPlugins: function ( sql, group, cb ) {  //< callback cb(taskID,pluginName) of cloned ingest usecase
-			
-			if (false) // legacy - clone Name="ingest" mode
-				FLEX.eachUsecase( sql, group, {Name:"ingest"}, function (eng,ctx) {
-					var tarkeys = [], srckeys = [], hasJob = false, pluginName = eng.Name;
-
-					Object.keys(ctx).each( function (n,key) { // look for Job key
-						var keyesc = "`" + key.Field + "`";
-						switch (key.Field) {
-							case "Save":
-								break;
-							case "Job":
-								hasJob = true;
-							case "Name":
-								srckeys.push("? AS "+keyesc);
-								tarkeys.push(keyesc);
-								break;
-							default:
-								srckeys.push(keyesc);
-								tarkeys.push(keyesc);
-						}
-					});
-
-					if (hasJob) 
-						sql.query( // add usecase to plugin by cloning its Name="ingest" usecase
-							"INSERT INTO ??.?? ("+tarkeys.join()+") SELECT "+srckeys.join()+" FROM ??.?? WHERE ID=?", [
-								group, pluginName,
-								"ingest " + new Date(),
-								JSON.stringify(job),
-								group, pluginName,
-								ctx.ID
-						], function (err, info) {
-							if ( !err ) cb( pluginName, info.insertId );
-						});
-				});
-			
-			else 
-				FLEX.eachPlugin( sql, group, function (eng) {
-					if (eng) cb( eng.Name );
-				});
-		},
-		*/
-		
 		getContext: function ( sql, host, where, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 			
 			function config(js, ctx) {
-				//Log("config", js);
 				try {
 					VM.runInContext( js, VM.createContext(ctx)  );	
 				}
 				catch (err) {
-					Log(err);
+					Log("config ctx", err);
 				}
-				//Log("ctx",ctx);
 			}
 			
 			sql.forFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [host,where], function (ctx) {
@@ -681,20 +594,7 @@ git push origin master
 
 					sql.jsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
-						keys.parseJSON(ctx);
-						/*
-						keys.each(function (n,key) {
-							try { 
-								ctx[key] = JSON.parse( ctx[key] || "null" ); 
-							}
-
-							catch (err) {
-								ctx[key] = null; 
-							}
-
-						}); */
-						
-						cb(ctx);
+						cb( keys.parseJSON( ctx, {} ) );
 					});
 				}
 
@@ -752,7 +652,7 @@ git push origin master
 		**/
 
 			var
-				fetch = FLEX.fetcher,
+				fetcher = FLEX.fetcher,
 				sql = req.sql,
 				query = req.query,
 				jobname = "totem."+ req.client + "." + req.table + "." + (query.ID||0);
@@ -760,7 +660,7 @@ git push origin master
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // attempt out-source
-				fetch(agent.tag( "?", Copy(query,{push:jobname})), function (jobid) {
+				fetcher(agent.tag( "?", Copy(query,{push:jobname})), function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -778,9 +678,9 @@ git push origin master
 
 								Trace("POLLING AGENT FOR job"+jobid);
 
-								fetch(req.agent+"?pull="+jobid, function (ctx) {
+								fetcher(req.agent+"?pull="+jobid, function (ctx) {
 
-									if (ctx)
+									if ( ctx = ctx.parseJSON() )
 										FLEX.thread( function (sql) {
 											Trace("FREEING AGENT FOR job-"+jobid, sql);
 											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
@@ -4244,105 +4144,7 @@ function updateDS(req, res) {
 	
 }
 
-/*
-function queryDS(req, res) {
-		
-	var 
-		sql = req.sql,							// sql connection
-		flags = req.flags,
-		query = req.query,
-		body = Copy(query,req.body),
-		emit = FLEX.emitter;
-
-	delete body.ID;
-
-	Log(req.action, query, body);
-	
-	sql.context({ds: {
-		table:	FLEX.reroute[req.table] || (req.group + "." + req.table),
-		where:	flags.where || query,
-		res:	res,
-		order:	(flags.sort||"").parseJSON(null),
-		having: flags.having,
-		group: 	flags.group || flags.tree,
-		score:	flags.score,
-		limit: 	flags.limit ? [ Math.max(0,parseInt( flags.start || "0" )), Math.max(0, parseInt( flags.limit || "0" )) ] : null,
-		index: 	{
-			has:flags.has, 
-			nlp:flags.nlp, 
-			bin:flags.bin, 
-			qex:flags.qex, 
-			browse:flags.browse, 
-			pivot:flags.pivot, 
-			select: flags.index ? flags.index.split(",") : "*"
-		},
-		data:	body,
-		client: req.client
-	}}, function (ctx) {
-			
-		ctx.ds.rec = (flags.lock ? "lock." : "") + req.action;
-		
-	});
-}
-*/
-
 //============ misc 
-
-/*
-FLEX.select.quizes = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
-	
-	if (query.lesson)
-		sql.query(  // prime quiz if it does not already exists
-			"INSERT INTO app.quizes SELECT * FROM app.quizes WHERE least(?,1)", {
-				Client: "Teacher",
-				Lesson: query.lesson
-			}, function (err) {
-
-				sql.query(  // clear last results
-					"UPDATE app.quizes SET ? WHERE least(?,1)", [{
-						A: "",
-						C: "",
-					}, {
-						Client: req.client,
-						Lesson: query.lesson
-					}], function (err) {
-
-						sql.query(  // return client's quiz 
-							"SELECT * FROM app.quizes WHERE least(?,1)", {
-									Client: req.client
-							}, function (err,recs) {
-								res(err || recs);
-							});
-
-					});
-			});
-	
-	else
-		sql.query(
-			"SELECT * FROM app.quizes WHERE least(?,1)", {
-					Client: req.client
-			}, function (err,recs) {
-				res(err || recs);
-			});
-}
-
-FLEX.execute.quizes = function (req, res) { 
-	var sql = req.sql, log = req.log, query = req.query;
-	
-	if (query.lesson)
-		sql.query(
-			"SELECT * FROM app.quizes WHERE least(?,1)", {
-				Client: "Teacher",
-				Lesson: query.lesson
-			}, function (err,ans) {
-				res("Refresh to get scores");
-			})
-		
-	else
-		res("Mission lesson");
-}
-*/
 
 FLEX.select.follow = function (req,res) {  // follow a link
 	var 
@@ -4589,7 +4391,7 @@ FLEX.select.wfs = function (req,res) {  //< Respond with ess-compatible image ca
 	if ( url = ENV[`WFS_${src}`] )
 		fetcher( url.tag("?", query), null, function (cat) {  // query catalog for desired data channel
 
-			if ( cat ) {
+			if ( cat = cat.parseJSON() ) {
 				switch ( src ) {  // normalize cat response to ess
 					case "DGLOBE":
 					case "OMAR":
@@ -5125,7 +4927,11 @@ FLEX.select.pubsites = function (req,res) {
 		rtns = [];
 	
 	sql.query(
-		"SELECT Name,Path FROM app.lookups WHERE ?", {Ref: product}, (err,recs) => {
+		product 
+			? "SELECT Name,Path FROM app.lookups WHERE ?"
+			: "SELECT Name,Path FROM app.lookups WHERE length(Ref)", 
+			
+		{Ref: product}, (err,recs) => {
 		
 		recs.forEach( (rec) => {
 			rtns.push( `<a href="${licensePath}${rec.Path}">${rec.Name}</a>` );
@@ -5163,13 +4969,16 @@ FLEX.select.pubsum = function (req,res) {
 		query = req.query,
 		site = FLEX.site,
 		totem = site.urls.worker+"/",
+		product = query.product,
 		fetcher = FLEX.fetcher,
-		product = query.product;
+		fetch = function (url, cb) {
+			fetcher(url, null, null, (info) => cb( info.parseJSON() || [] ) );
+		};			
 	
 	sql.query(
 		product 
 			? 
-				"SELECT endService, endServiceID, 'none' AS Users, "
+				"SELECT Product, endService, endServiceID, 'none' AS Users, "
 				+ " 'fail' AS Status, "
 				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
 				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
@@ -5184,12 +4993,8 @@ FLEX.select.pubsum = function (req,res) {
 		
 		["?", {Product: product}], (err,recs) => {
 
-			function fetcher(url, cb) {
-				FLEX.fetcher(url, null, null, cb);
-			}
-			
 			//Log(err, recs);
-			recs.serialize( fetcher, "getUsers", (rec,users) => {
+			recs.serialize( fetch, "getUsers", (rec,users) => {
 				if (rec) {
 					delete rec.endService;
 					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
