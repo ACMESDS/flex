@@ -168,25 +168,26 @@ blog markdown documents a usecase:
 		
 		publishPlugin: function (sql, name, type, relicense) {  // publish product = name.type
 			
-			function getter( opt, def ) {	
+			function getter( opt ) {	
 				if (opt) 
-					if ( opt.name == "get" )
-						return opt( FS.readFileSync , CP.exec );
+					if ( typeof opt == "function" )
+						switch (opt.name) {
+							case "engine":
+							case "tou":
+								return opt( FS.readFileSync , CP.exec );
+							default:
+								return opt+"";
+						}
 					else
-						return opt+"";
+						return opt;
 				else
-					return def || "";
+					return opt;
 			}
 			
 			var 
-				resetAll = false,
 				paths = FLEX.paths.publish,
-				product = name + "." + type,
-				site = FLEX.site,
 				pathname = paths[type] + name;
 			
-			// Log("PUBLISH", pathname, process.cwd());
-
 			try {
 				var	mod = require(process.cwd() + pathname.substr(1));
 			}
@@ -195,33 +196,46 @@ blog markdown documents a usecase:
 				return;
 			}
 
-			// FLEX.execute[name] = runPlugin;
-
 			var
-				envs = {
-					js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
-					py: "anconda 4.9.x, .... ",
-					m: "matab R18, odbc, simulink, stateflow"
-				},
-
-				poc = "brian.d.james@coe.ic.gov",	
+				resetAll = false,
+				product = name + "." + type,
+				site = FLEX.site,
 				defs = { 
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
-					subs: Copy( mod.subs || {}, {
-						NAME: name.toUpperCase(),
-						totem: site.urls.worker,  //< careful use https as /pubsum will use https services
-						by: "tbd",
-						fetch: function (req) { return `<!---fetch ${site.urls.worker}/${req}?product=${product}--->`; },
-						request: function (req) { return `[NGA/Research](mailto:${poc}?subject=${name} request&body=${req})`; },
-						reqts: envs[type] || "tbd",
-						summary: "tbd",
-						name: name,
-						type: type,
-						product: product,
-						ver: "tbd",
-						now: new Date()
-					})
-				};
+					envs: {
+						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
+						py: "anconda 4.9.x, .... ",
+						m: "matab R18, odbc, simulink, stateflow"
+					},
+					poc: "brian.d.james@coe.ic.gov",
+					totem: site.urls.master
+				},
+				subs = Copy( mod.subs || {}, {
+					NAME: name.toUpperCase(),
+					totem: defs.totem,
+					by: "[NGA/Research](https://nga.research.ic.gov)",
+					advrepo: `https://sc.appdev.proj.coe.ic.gov/analyticmodelling/${name}`,
+					register: "<!---parms endservice=https://myserivce.ic.gov/endpoint--->",
+					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
+					fetch: (req, opts, input) => { 
+						var 
+							url = (req.charAt(0) == "/") ? `${defs.totem}${req}` : req,
+							tags = { product: product };
+						
+						if (opts)
+							Each(opts, ( key, val ) => {
+								tags[key] = val;
+							});
+						
+						return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
+					},
+					poc: defs.poc,
+					request: (req) => `[NGA/Research](mailto:${defs.poc}?subject=${name} request&body=${req})`,
+					reqts: defs.envs[type] || "tbd",
+					summary: "tbd",
+					ver: "tbd",
+					now: new Date()						
+				});
 			
 			if ( mod.clear || mod.reset )
 				sql.query("DROP TABLE app.??", name);
@@ -292,8 +306,8 @@ blog markdown documents a usecase:
 					toFile = pathname + "." + to,
 					rev = {
 						Code: code,
-						Wrap: getter( mod.wrap ),
-						ToU: getter( mod.tou || mod.readme, defs.tou ).parseJS(defs.subs),
+						Wrap: getter( mod.wrap ) || "",
+						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseJS(subs),
 						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})						
 					};
 
@@ -4971,8 +4985,8 @@ FLEX.select.pubsum = function (req,res) {
 		totem = site.urls.worker+"/",
 		product = query.product,
 		fetcher = FLEX.fetcher,
-		fetch = function (url, cb) {
-			fetcher(url, null, null, (info) => cb( info.parseJSON() || [] ) );
+		fetch = function (rec, cb) {
+			fetcher(rec.getUsers, null, null, (info) => cb( info.parseJSON() || [] ) );
 		};			
 	
 	sql.query(
@@ -4994,7 +5008,7 @@ FLEX.select.pubsum = function (req,res) {
 		["?", {Product: product}], (err,recs) => {
 
 			//Log(err, recs);
-			recs.serialize( fetch, "getUsers", (rec,users) => {
+			recs.serialize( fetch, (rec,users) => {
 				if (rec) {
 					delete rec.endService;
 					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
