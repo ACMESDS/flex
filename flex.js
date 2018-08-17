@@ -166,7 +166,7 @@ blog markdown documents a usecase:
 				returnLicense(pub);
 		},
 		
-		publishPlugin: function (sql, name, type, relicense) {  // publish product = name.type
+		publishPlugin: function (req, name, type, relicense) {  // publish product = name.type
 			
 			function getter( opt ) {	
 				if (opt) 
@@ -185,6 +185,7 @@ blog markdown documents a usecase:
 			}
 			
 			var 
+				sql = req.sql,
 				paths = FLEX.paths.publish,
 				pathname = paths[type] + name;
 			
@@ -249,7 +250,7 @@ blog markdown documents a usecase:
 				if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) || mod._mods)
 					Each( keys, function (key,type) {
 						if ( doc = docs[key] )
-							doc.renderBlog({now:new Date()}, "", function (html) {
+							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
 								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
 							});
 
@@ -267,7 +268,7 @@ blog markdown documents a usecase:
 				if ( keys = mod.usecase || mod.keys || mod.adds )
 					Each( keys, function (key,type) {
 						if ( doc = docs[key] )
-							doc.renderBlog({now:new Date()}, "", function (html) {
+							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
 							});
 
@@ -364,7 +365,7 @@ git push origin master
 			if (secret)
 				switch (type) {
 					case "html":
-						var minCode = HTMLMIN.minify(code, {
+						var minCode = HTMLMIN.minify(code.replace(/<br>/g,""), {
 							removeAttributeQuotes: true
 						});
 						cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
@@ -473,7 +474,9 @@ git push origin master
 		},
 
 		publishPlugins: function ( sql ) { //< publish all plugin products
-			var paths = FLEX.paths.publish;
+			var 
+				paths = FLEX.paths.publish;
+			
 			Each( paths, (type, path) => { 		// get plugin file types to publish	
 				FLEX.indexer( path, (files) => {	// get plugin file names to publish
 					files.forEach( (file) => {
@@ -487,9 +490,14 @@ git push origin master
 							case "js":
 								var 
 									now = new Date(),
-									ver = "vX";
+									ver = "vX",
+									req = {  //< bogus incomplete request
+										sql: sql,
+										client: "totem",
+										group: "app"
+									};
 
-								FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
+								FLEX.publishPlugin(req, filename, type, FLEX.licenseOnRestart);
 								break;
 								
 							case "jade":
@@ -4781,7 +4789,7 @@ FLEX.execute.publish = function (req,res) {
 					type = parts.pop(),
 					name = parts.pop();
 				
-				FLEX.publishPlugin( sql, name, type, true );
+				FLEX.publishPlugin( req, name, type, true );
 			}
 			
 			else
@@ -4985,9 +4993,18 @@ FLEX.select.pubsum = function (req,res) {
 		totem = site.urls.worker+"/",
 		product = query.product,
 		fetcher = FLEX.fetcher,
-		fetch = function (rec, cb) {
+		fetchUsers = function (rec, cb) {
 			fetcher(rec.getUsers, null, null, (info) => cb( info.parseJSON() || [] ) );
-		};			
+		},
+		fetchMods = function (rec, cb) {
+			sql.query(
+				"SELECT group_concat(DISTINCT EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
+				{ Product: rec.Name+".html" },
+				(err, mods) => { 
+					if ( mod = mods[0] || { Mods: "" } )
+						cb( mod.Mods );
+				});
+		};
 	
 	sql.query(
 		product 
@@ -5008,11 +5025,12 @@ FLEX.select.pubsum = function (req,res) {
 		["?", {Product: product}], (err,recs) => {
 
 			//Log(err, recs);
-			recs.serialize( fetch, (rec,users) => {
+			recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 				if (rec) {
 					delete rec.endService;
+					rec.Name = rec.Product.split(".")[0];
 					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
-					rec.Product = rec.Product.tag("a", {href:totem+rec.Product.split(".")[0]+".run"});
+					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
 					rec.Status = "pass";
 					rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
 					rec.getUsers = "test".tag("a",{href:rec.getUsers});
@@ -5020,7 +5038,14 @@ FLEX.select.pubsum = function (req,res) {
 				}
 				
 				else
-					res( recs );
+					recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
+						if (rec) {
+							rec.Mods = (mods.split(",").length+"").tag("a",{href:"mailto:"+mods});
+						}
+						
+						else
+							res( recs );
+					});
 			});
 	});
 } 
