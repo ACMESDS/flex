@@ -616,7 +616,7 @@ git push origin master
 
 					sql.jsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
-						cb( keys.parseJSON( ctx, {} ) );
+						cb( keys.parseJSON( ctx, null ) );
 					});
 				}
 
