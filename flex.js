@@ -80,25 +80,26 @@ var
 			Pipe: `
 json regulates chips and events to the engine:
 
-file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
-group: "KEY,..." || ""  
-where: { KEY: VALUE, ...} || {}  
-order: "KEY,..." || "t"  
-limit: VALUE || 1000  
-task: "NAME" || ""  
-aoi: "NAME" || [ [lat,lon], ... ] || []
+	file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
+	group: "KEY,..." || ""  
+	where: { KEY: VALUE, ...} || {}  
+	order: "KEY,..." || "t"  
+	limit: VALUE || 1000  
+	task: "NAME" || ""  
+	aoi: "NAME" || [ [lat,lon], ... ] || []
 
 `,
 			Description: `
-blog markdown documents a usecase:
+blog markdown for documenting [totem plugin](/api.view) usecases:
 
-[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
-[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
-[ TEXT ]( LINK )  
-[ FONT ]( TEXT )  
-!$ inline TeX $  ||  $$ break TeX $$ || a$ AsciiMath $ || m$ MathML $  
-#{ KEY } || #{ KEY }( SHORTCUT ) || ={ KEY } || !{ EXPR }  || \${ KEY as TeX matrix  }  
-#TAG
+	HASH[ URL ]  
+	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
+	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
+	[ TEXT ]( LINK )  
+	[ FONT ]( TEXT )  
+	$$ inline TeX $$  ||  o$ break TeX $o || a$ AsciiMath $a || m$ MathML $m  
+	#{ KEY } || #{ KEY }( SHORTCUT ) || ={ KEY } || !{ EXPR }  || \${ KEY as TeX matrix  }  
+	!!TAG
 
 `,
 
@@ -124,6 +125,8 @@ blog markdown documents a usecase:
 				var
 					product = pub.Product,
 					endService = pub.EndService,
+					endUser = pub.EndUser,
+					getUsers = `${endService}/getusers?product=${product}`,
 					parts = product.split("."),
 					type = parts.pop(),
 					name = parts.pop(),
@@ -154,10 +157,17 @@ blog markdown documents a usecase:
 			}
 			
 			if (endService = pub.EndService)
-				FLEX.fetcher( endService, null, null, (rtn) => {  // validate end service
-					if (rtn) 
-						returnLicense(pub);
+				FLEX.fetcher( getUsers, null, null, (info) => {  // validate end service
+					var 
+						valid = false, 
+						users = info.parseJSON() || [] ;
 					
+					users.forEach( (user) => { 
+						if (user == endUser) valid = true;
+					});
+					
+					if (valid) 
+						returnLicense(pub);
 					else
 						cb( null  );
 				});	
@@ -211,15 +221,20 @@ blog markdown documents a usecase:
 					poc: "brian.d.james@coe.ic.gov",
 					totem: site.urls.master
 				},
-				pj = function (js) { console.log( ">>>>>>>>>>", js, subs); return (js||"").parseJS(subs); } ,
-				subs = Copy( mod.subs || {}, {
+				pj = function (js) { return (js||"").parseJS(subkeys); } ,
+				defDocs = FLEX.defDocs || {},
+				dockeys = Copy( defDocs, mod.docs || mod.dockeys || {}),
+				modkeys = mod.mods || mod.modkeys || mod._mods,
+				addkeys = mod.adds || mod.addkeys || mod.keys,
+				subkeys = Copy( mod.subs || mod.subkeys || {}, {
 					NAME: name.toUpperCase(),
+					name: name,
+					product: product,
 					totem: defs.totem,
 					by: "[NGA/Research](https://nga.research.ic.gov)",
 					advrepo: `https://sc.appdev.proj.coe.ic.gov/analyticmodelling/${name}`,
 					register: "<!---parms endservice=https://myserivce.ic.gov/endpoint--->",
 					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
-					pj: pj,
 					fetch: (req, opts, input) => { 
 						var 
 							url = (req.charAt(0) == "/") ? `${defs.totem}${req}` : req,
@@ -233,6 +248,20 @@ blog markdown documents a usecase:
 						return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
 					},
 					poc: defs.poc,
+					gridify: site.gridify,
+					tag: site.tag,
+					interface: () => {
+						var ifs = [];
+						Each( Copy( modkeys, Copy( addkeys, {} ) ), (key, type) => {
+							if ( key in defDocs )
+								 ifs.push({ 
+									 Key: key, 
+									 Type: type, 
+									 Details: dockeys[key] || "documentation missing" 
+								 });
+						});
+						return ifs.gridify();
+					},							 
 					request: (req) => `[NGA/Research](mailto:${defs.poc}?subject=${name} request&body=${req})`,
 					reqts: defs.envs[type] || "tbd",
 					summary: "tbd",
@@ -240,24 +269,14 @@ blog markdown documents a usecase:
 					now: new Date()						
 				});
 
-			subs.relinfo = function () { return pj( `
-as of ${now}  
-${fetch("/pubsum.html")}  
-Clients: ${product} users from EndService  
-Mods: moderators of ${product} via ${totem}/${name}.run  
-PoCs: users responsible for meeting the ${product} Terms of Use in their EndService  
-Please note that high connection-fails puts the EndService is at risk of loosing its ${product} license  
-` ); };
-			
-			if (name = "jsdemo1") 
-				pj( "
-as of ${now}  
-${fetch("/pubsum.html")}  
-Clients: ${product} users from EndService  
-Mods: moderators of ${product} via ${totem}/${name}.run  
-PoCs: users responsible for meeting the ${product} Terms of Use in their EndService  
-Please note that high connection-fails puts the EndService is at risk of loosing its ${product} license  
-" );
+				/*
+				subkeys.relinfo = pj(
+"as of ${now}  "
++"${fetch('/pubsum.html')}  "
++"Clients: ${product} users from EndService  "
++"Mods: moderators of ${product} via ${totem}/${name}.run  "
++"PoCs: users responsible for meeting the ${product} Terms of Use in their EndService  "
++"Please note that high connection-fails puts the EndService is at risk of loosing its ${product} license  "); */
 			
 			if ( mod.clear || mod.reset )
 				sql.query("DROP TABLE app.??", name);
@@ -266,11 +285,9 @@ Please note that high connection-fails puts the EndService is at risk of loosing
 				`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
 				[], function (err) {
 
-				var docs = Copy( FLEX.defDocs, mod.docs || {}) ;
-
-				if ( keys = mod.modify || mod.mods || (resetAll ? mod.keys || mod.usecase : null) || mod._mods)
-					Each( keys, function (key,type) {
-						if ( doc = docs[key] )
+				if ( modkeys )
+					Each( modkeys, function (key,type) {
+						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
 								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
 							});
@@ -286,9 +303,9 @@ Please note that high connection-fails puts the EndService is at risk of loosing
 					});
 
 				else
-				if ( keys = mod.usecase || mod.keys || mod.adds )
-					Each( keys, function (key,type) {
-						if ( doc = docs[key] )
+				if ( addkeys)
+					Each( addkeys, function (key,type) {
+						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
 							});
@@ -329,7 +346,7 @@ Please note that high connection-fails puts the EndService is at risk of loosing
 					rev = {
 						Code: code,
 						Wrap: getter( mod.wrap ) || "",
-						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseJS(subs),
+						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseJS(subkeys),
 						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})						
 					};
 
@@ -5026,7 +5043,7 @@ SELECT.pubsum = function (req,res) {
 		product = query.product,
 		fetcher = FLEX.fetcher,
 		fetchUsers = function (rec, cb) {
-			fetcher(rec.getUsers, null, null, (info) => cb( info.parseJSON() || [] ) );
+			fetcher(rec.getUsers, null, null, (info) => cb( info.parseJSON() ) );
 		},
 		fetchMods = function (rec, cb) {
 			sql.query(
@@ -5034,7 +5051,7 @@ SELECT.pubsum = function (req,res) {
 				{ Product: rec.Name+".html" },
 				(err, mods) => { 
 					if ( mod = mods[0] || { Mods: "" } )
-						cb( mod.Mods );
+						cb( mod.Mods || "" );
 				});
 		};
 	
@@ -5042,14 +5059,14 @@ SELECT.pubsum = function (req,res) {
 		product 
 			? 
 				"SELECT Product, endService, endServiceID, 'none' AS Users, "
-				+ " 'fail' AS Status, "
+				+ " 'fail' AS Status, Fails, "
 				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
 				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
 				+ "FROM app.releases WHERE ? GROUP BY endServiceID, Product"
 		
 			:
 				"SELECT Product, endService, endServiceID, 'none' AS Users, "
-				+ " 'fail' AS Status, "
+				+ " 'fail' AS Status, Fails, "
 				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
 				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
 				+ "FROM app.releases GROUP BY endServiceID, Product",
@@ -5059,12 +5076,16 @@ SELECT.pubsum = function (req,res) {
 			//Log(err, recs);
 			recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 				if (rec) {
+					if ( users )
+						rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
+					else 
+						sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
+
 					delete rec.endService;
 					rec.Name = rec.Product.split(".")[0];
 					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
 					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
 					rec.Status = "pass";
-					rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
 					rec.getUsers = "test".tag("a",{href:rec.getUsers});
 					rec.pocs = (rec.pocs.split(",").length+"").tag("a",{href:"mailto:"+rec.pocs});
 				}
@@ -5083,7 +5104,7 @@ SELECT.pubsum = function (req,res) {
 } 
 
 SELECT.getusers = function (req,res) {
-	res( JSON.stringify( ["u1","u2","u3"] ) );
+	res( JSON.stringify( ["test1@coe.ic.gov","test2@coe.ic.gov","test3@coe.ic.gov"] ) );
 }
 
 // UNCLASSIFIED
