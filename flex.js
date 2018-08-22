@@ -126,7 +126,6 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					product = pub.Product,
 					endService = pub.EndService,
 					endUser = pub.EndUser,
-					getUsers = `${endService}/getusers?product=${product}`,
 					parts = product.split("."),
 					type = parts.pop(),
 					name = parts.pop(),
@@ -157,7 +156,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			}
 			
 			if (endService = pub.EndService)
-				FLEX.fetcher( getUsers, null, null, (info) => {  // validate end service
+				FLEX.fetcher( endService, null, null, (info) => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -233,7 +232,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					totem: defs.totem,
 					by: "[NGA/Research](https://nga.research.ic.gov)",
 					advrepo: `https://sc.appdev.proj.coe.ic.gov/analyticmodelling/${name}`,
-					register: "<!---parms endservice=https://myserivce.ic.gov/endpoint--->",
+					register: "<!---parms endservice=https://myserivce/getclients?product=${product}--->",
 					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 					fetch: (req, opts, input) => { 
 						var 
@@ -269,15 +268,6 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					now: new Date()						
 				});
 
-				/*
-				subkeys.relinfo = pj(
-"as of ${now}  "
-+"${fetch('/pubsum.html')}  "
-+"Clients: ${product} users from EndService  "
-+"Mods: moderators of ${product} via ${totem}/${name}.run  "
-+"PoCs: users responsible for meeting the ${product} Terms of Use in their EndService  "
-+"Please note that high connection-fails puts the EndService is at risk of loosing its ${product} license  "); */
-			
 			if ( mod.clear || mod.reset )
 				sql.query("DROP TABLE app.??", name);
 
@@ -5042,8 +5032,8 @@ SELECT.pubsum = function (req,res) {
 		totem = site.urls.worker+"/",
 		product = query.product,
 		fetcher = FLEX.fetcher,
-		fetchUsers = function (rec, cb) {
-			fetcher(rec.getUsers, null, null, (info) => cb( info.parseJSON() ) );
+		fetchClients = function (rec, cb) {
+			fetcher(rec.endService, null, null, (info) => cb( info.parseJSON() ) );
 		},
 		fetchMods = function (rec, cb) {
 			sql.query(
@@ -5060,21 +5050,19 @@ SELECT.pubsum = function (req,res) {
 			? 
 				"SELECT Product, endService, endServiceID, 'none' AS Users, "
 				+ " 'fail' AS Status, Fails, "
-				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
 				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
 				+ "FROM app.releases WHERE ? GROUP BY endServiceID, Product"
 		
 			:
 				"SELECT Product, endService, endServiceID, 'none' AS Users, "
 				+ " 'fail' AS Status, Fails, "
-				+ "concat(endService, '/getusers', ?, 'product=', Product) AS getUsers, "
 				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
 				+ "FROM app.releases GROUP BY endServiceID, Product",
 		
 		["?", {Product: product}], (err,recs) => {
 
 			//Log(err, recs);
-			recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
+			recs.serialize( fetchClients, (rec,users) => {  // retain user stats
 				if (rec) {
 					if ( users )
 						rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
@@ -5086,7 +5074,7 @@ SELECT.pubsum = function (req,res) {
 					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
 					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
 					rec.Status = "pass";
-					rec.getUsers = "test".tag("a",{href:rec.getUsers});
+					rec.endService = "test".tag("a",{href:rec.endService});
 					rec.pocs = (rec.pocs.split(",").length+"").tag("a",{href:"mailto:"+rec.pocs});
 				}
 				
@@ -5103,7 +5091,7 @@ SELECT.pubsum = function (req,res) {
 	});
 } 
 
-SELECT.getusers = function (req,res) {
+SELECT.getclients = function (req,res) {
 	res( JSON.stringify( ["test1@coe.ic.gov","test2@coe.ic.gov","test3@coe.ic.gov"] ) );
 }
 
