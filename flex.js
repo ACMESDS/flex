@@ -494,7 +494,8 @@ git push origin master
 					case "jade":
 					default:
 						//cb(null); break;
-						cb( code, CRYPTO.createHmac("sha256", secret).update(code).digest("hex") );
+						var min = code.replace(/  /g,"").replace(/\n/g," ").replace(/, /g,",").replace(/\. /g,".");
+						cb( min, CRYPTO.createHmac("sha256", secret).update(min).digest("hex") );
 				}
 			
 			else
@@ -5048,34 +5049,34 @@ SELECT.pubsum = function (req,res) {
 	sql.query(
 		product 
 			? 
-				"SELECT Product, endService, endServiceID, 'none' AS Users, "
+				"SELECT Product, EndService, EndServiceID, 'none' AS EndClients, "
 				+ " 'fail' AS Status, Fails, "
-				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
-				+ "FROM app.releases WHERE ? GROUP BY endServiceID, Product"
+				+ "group_concat(DISTINCT EndUser) AS EndUsers, sum(Copies) AS Copies "
+				+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product"
 		
 			:
-				"SELECT Product, endService, endServiceID, 'none' AS Users, "
+				"SELECT Product, EndService, EndServiceID, 'none' AS EndClients, "
 				+ " 'fail' AS Status, Fails, "
-				+ "group_concat(DISTINCT EndUser) AS pocs, sum(Copies) AS Copies "
-				+ "FROM app.releases GROUP BY endServiceID, Product",
+				+ "group_concat(DISTINCT EndUser) AS EndUsers, sum(Copies) AS Copies "
+				+ "FROM app.releases GROUP BY EndServiceID, Product",
 		
-		["?", {Product: product}], (err,recs) => {
+		[ {Product: product}], (err,recs) => {
 
 			//Log(err, recs);
-			recs.serialize( fetchClients, (rec,users) => {  // retain user stats
+			recs.serialize( fetchClients, (rec,clients) => {  // retain user stats
 				if (rec) {
 					if ( users )
-						rec.Users = (users.length+"").tag("a",{href:"mailto:"+users.join(";")});
+						rec.EndClients = (clients.length+"").tag("a",{href:"mailto:"+clients.join(";")});
 					else 
 						sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
 
-					delete rec.endService;
+					//delete rec.endService;
 					rec.Name = rec.Product.split(".")[0];
-					rec.endServiceID = rec.endServiceID.tag("a",{href:totem+`masters.html?endServiceID=${rec.endServiceID}`});
+					rec.EndServiceID = rec.EndServiceID.tag("a",{href:totem+`masters.html?EndServiceID=${rec.EndServiceID}`});
 					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
 					rec.Status = "pass";
-					rec.endService = "test".tag("a",{href:rec.endService});
-					rec.pocs = (rec.pocs.split(",").length+"").tag("a",{href:"mailto:"+rec.pocs});
+					rec.EndService = "test".tag("a",{href:rec.EndService});
+					rec.EndUsers = (rec.EndUsers.split(",").length+"").tag("a",{href:"mailto:"+rec.EndUsers});
 				}
 				
 				else
