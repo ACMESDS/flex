@@ -125,7 +125,6 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				var
 					product = pub.Product,
 					endService = pub.EndService,
-					endUser = pub.EndUser,
 					parts = product.split("."),
 					type = parts.pop(),
 					name = parts.pop(),
@@ -162,7 +161,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						users = info.parseJSON() || [] ;
 					
 					users.forEach( (user) => { 
-						if (user == endUser) valid = true;
+						if (user == pub.EndUser) valid = true;
 					});
 					
 					if (valid) 
@@ -214,11 +213,17 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					envs: {
 						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
-						py: "anconda 4.9.x, .... ",
+						py: "anconda 4.9.x, .... *************** TBD *************** ",
 						m: "matab R18, odbc, simulink, stateflow"
 					},
-					poc: "brian.d.james@coe.ic.gov",
-					totem: site.urls.master
+					pocs: ["brian.d.james@coe.ic.gov"],
+					totem: site.urls.master,
+					fetchURL: site.urls.master + "/" + name
+				},
+				urls = {
+					pub: `${defs.fetchURL}.pub`,
+					xmd: `${defs.fetchURL}.xmd`,
+					publist: `${defs.fetchURL}.publist`
 				},
 				pj = function (js) { return (js||"").parseJS(subkeys); } ,
 				defDocs = FLEX.defDocs || {},
@@ -229,15 +234,20 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					NAME: name.toUpperCase(),
 					name: name,
 					product: product,
-					totem: defs.totem,
+					urls: {
+						totem: defs.totem,
+						run : `${defs.totem}/${name }.run`
+					},
 					by: "[NGA/Research](https://nga.research.ic.gov)",
 					advrepo: `https://sc.appdev.proj.coe.ic.gov/analyticmodelling/${name}`,
-					register: "<!---parms endservice=https://myserivce/getclients?product=${product}--->",
+					register: `<!---parms endservice=https://myserivce/getclients?product=${product}--->`,
 					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 					fetch: (req, opts, input) => { 
 						var 
-							url = (req.charAt(0) == "/") ? `${defs.totem}${req}` : req,
+							url = urls[req] || ( (req.charAt(0) == "/") ? `${defs.totem}${req}` : req ),
 							tags = { product: product };
+						
+						Log(urls, url);
 						
 						if (opts)
 							Each(opts, ( key, val ) => {
@@ -246,13 +256,12 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						
 						return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
 					},
-					poc: defs.poc,
 					gridify: site.gridify,
 					tag: site.tag,
 					interface: () => {
 						var ifs = [];
 						Each( Copy( modkeys, Copy( addkeys, {} ) ), (key, type) => {
-							if ( key in defDocs )
+							if ( !(key in defDocs) )
 								 ifs.push({ 
 									 Key: key, 
 									 Type: type, 
@@ -261,11 +270,11 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						});
 						return ifs.gridify();
 					},							 
-					request: (req) => `[NGA/Research](mailto:${defs.poc}?subject=${name} request&body=${req})`,
+					request: (req) => "[NGA/Research]( " + defs.pocs.mailify({subject: name+" request", body: req}, "error") + ")",
 					reqts: defs.envs[type] || "tbd",
 					summary: "tbd",
 					ver: "tbd",
-					now: new Date()						
+					now: (new Date())+""
 				});
 
 			if ( mod.clear || mod.reset )
@@ -494,7 +503,7 @@ git push origin master
 					case "jade":
 					default:
 						//cb(null); break;
-						var min = code.replace(/  /g,"").replace(/\n/g," ").replace(/, /g,",").replace(/\. /g,".");
+						var min = code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".");
 						cb( min, CRYPTO.createHmac("sha256", secret).update(min).digest("hex") );
 				}
 			
@@ -4976,6 +4985,7 @@ SELECT.status = function (req,res) {
 	
 }
 
+/*
 SELECT.pubsites = function (req,res) {
 	var 
 		sql = req.sql,
@@ -5024,7 +5034,9 @@ SELECT.pubsites = function (req,res) {
 	});
 
 }
+*/
 
+/*
 SELECT.pubsum = function (req,res) {
 	var 
 		sql = req.sql,
@@ -5034,7 +5046,7 @@ SELECT.pubsum = function (req,res) {
 		product = query.product,
 		fetcher = FLEX.fetcher,
 		fetchClients = function (rec, cb) {
-			fetcher(rec.endService, null, null, (info) => cb( info.parseJSON() ) );
+			fetcher(rec.endService, null, null, (info) => cb( info.parseJSON() || [] ) );
 		},
 		fetchMods = function (rec, cb) {
 			sql.query(
@@ -5066,7 +5078,7 @@ SELECT.pubsum = function (req,res) {
 			recs.serialize( fetchClients, (rec,clients) => {  // retain user stats
 				if (rec) {
 					if ( users )
-						rec.EndClients = (clients.length+"").tag("a",{href:"mailto:"+clients.join(";")});
+						rec.EndClients = clients.mailify();
 					else 
 						sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
 
@@ -5076,13 +5088,13 @@ SELECT.pubsum = function (req,res) {
 					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
 					rec.Status = "pass";
 					rec.EndService = "test".tag("a",{href:rec.EndService});
-					rec.EndUsers = (rec.EndUsers.split(",").length+"").tag("a",{href:"mailto:"+rec.EndUsers});
+					rec.EndUsers = rec.EndUsers.split(",").mailify();
 				}
 				
 				else
 					recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
 						if (rec) {
-							rec.Mods = (mods.split(",").length+"").tag("a",{href:"mailto:"+mods});
+							rec.Mods = mods.split(",").mailify();
 						}
 						
 						else
@@ -5091,9 +5103,10 @@ SELECT.pubsum = function (req,res) {
 			});
 	});
 } 
+*/
 
 SELECT.getclients = function (req,res) {
-	res( JSON.stringify( ["test1@coe.ic.gov","test2@coe.ic.gov","test3@coe.ic.gov"] ) );
+	res( JSON.stringify( [req.client] ) );
 }
 
 // UNCLASSIFIED
