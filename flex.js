@@ -221,9 +221,9 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					fetchURL: site.urls.master + "/" + name
 				},
 				urls = {
-					pub: `${defs.fetchURL}.pub`,
-					xmd: `${defs.fetchURL}.xmd`,
-					publist: `${defs.fetchURL}.publist`
+					status: `${defs.fetchURL}.status`,
+					md: `${defs.fetchURL}.md`,
+					suitors: `${defs.fetchURL}.suitors`
 				},
 				pj = function (js) { return (js||"").parseJS(subkeys); } ,
 				defDocs = FLEX.defDocs || {},
