@@ -119,6 +119,35 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
 		},
 		
+		pluginPaths: function (product, proxy) {
+			var 
+				site = FLEX.site.urls,
+				parts = product.split("."),
+				type = parts.pop(),
+				name = parts.pop(),
+				paths = {  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
+					totem: site.master,
+					product: site.master + "/" + name
+				};
+			
+			return {
+				loopback:  `${paths.totem}/${product}?endservice=${paths.product}.users`,
+				license: `${paths.totem}/${product}?endservice=`,
+				proxy: paths.product + ".tou?proxy=${proxy}",
+				status: paths.product + ".status",
+				md: paths.product + ".md",
+				suitors: paths.product + ".suitors",
+				totem: paths.totem,
+				run: paths.product + ".run",
+				tou: paths.product + ".tou",
+				pub: paths.product + ".pub",
+				repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
+				repoat: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name + "/raw/master",
+				relinfo: paths.totem + "/releases.html?product=" + product
+			};
+			
+		},
+		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
 
 			function returnLicense(pub) {
@@ -223,22 +252,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					},
 					pocs: ["brian.d.james@coe.ic.gov"]
 				},
-				paths: {
-					totem: site.urls.master,
-					product: site.urls.master + "/" + name
-				},
-				urls = {
-					status: paths.product + ".status",
-					md: paths.product + ".md",
-					suitors: paths.product + ".suitors",
-					totem: paths.totem,
-					run: paths.product + ".run",
-					tou: paths.product + ".tou",
-					pub: paths.product + ".pub",
-					repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
-					repoat: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name + "/raw/master"
-					relinfo: paths.totem + "/releases.html?product=" + product
-				},
+				urls = FLEX.pluginPaths(product),
 				pj = function (js) { return (js||"").parseJS(subkeys); } ,
 				defDocs = FLEX.defDocs || {},
 				dockeys = Copy( defDocs, mod.docs || mod.dockeys || {}),
@@ -257,7 +271,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 							url = urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
 							tags = { product: product };
 						
-						Log(urls, url);
+						//Log(urls, url);
 						
 						if (opts)
 							Each(opts, ( key, val ) => {
@@ -5115,8 +5129,10 @@ SELECT.pubsum = function (req,res) {
 } 
 */
 
+/*
 SELECT.getclients = function (req,res) {
 	res( JSON.stringify( [req.client] ) );
-}
+} */
+
 
 // UNCLASSIFIED
