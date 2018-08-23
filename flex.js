@@ -216,14 +216,21 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						py: "anconda 4.9.x, .... *************** TBD *************** ",
 						m: "matab R18, odbc, simulink, stateflow"
 					},
-					pocs: ["brian.d.james@coe.ic.gov"],
+					pocs: ["brian.d.james@coe.ic.gov"]
+				},
+				paths: {
 					totem: site.urls.master,
-					fetchURL: site.urls.master + "/" + name
+					product: site.urls.master + "/" + name
 				},
 				urls = {
-					status: `${defs.fetchURL}.status`,
-					md: `${defs.fetchURL}.md`,
-					suitors: `${defs.fetchURL}.suitors`
+					status: paths.product + ".status",
+					md: paths.product + ".md",
+					suitors: paths.product + ".suitors",
+					totem: paths.totem,
+					run: paths.product + ".run",
+					tou: paths.product + ".tou",
+					advrepo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
+					relinfo: paths.totem + "/releases.html?product=" + product
 				},
 				pj = function (js) { return (js||"").parseJS(subkeys); } ,
 				defDocs = FLEX.defDocs || {},
@@ -234,17 +241,13 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					NAME: name.toUpperCase(),
 					name: name,
 					product: product,
-					urls: {
-						totem: defs.totem,
-						run : `${defs.totem}/${name }.run`
-					},
+					urls: urls,
 					by: "[NGA/Research](https://nga.research.ic.gov)",
-					advrepo: `https://sc.appdev.proj.coe.ic.gov/analyticmodelling/${name}`,
 					register: `<!---parms endservice=https://myserivce/getclients?product=${product}--->`,
 					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 					fetch: (req, opts, input) => { 
 						var 
-							url = urls[req] || ( (req.charAt(0) == "/") ? `${defs.totem}${req}` : req ),
+							url = urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
 							tags = { product: product };
 						
 						Log(urls, url);
