@@ -182,7 +182,12 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						switch (opt.name) {
 							case "engine":
 							case "tou":
-								return opt( FS.readFileSync , CP.exec );
+							case "wrap":
+								return opt({
+									path: pathname,
+									read: FS.readFileSync,
+									exec: CP.exec 
+								});
 							default:
 								return opt+"";
 						}
@@ -229,7 +234,9 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					totem: paths.totem,
 					run: paths.product + ".run",
 					tou: paths.product + ".tou",
-					advrepo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
+					pub: paths.product + ".pub",
+					repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
+					repoat: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name + "/raw/master"
 					relinfo: paths.totem + "/releases.html?product=" + product
 				},
 				pj = function (js) { return (js||"").parseJS(subkeys); } ,
