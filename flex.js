@@ -119,6 +119,205 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
 		},
 		
+		pluginAttribute: function ( sql, attr, owner, endService, proxy, eng, cb ) {
+				
+			var
+				name = eng.Name,
+				type = eng.Type,
+				product = name + "." + type,
+				urls = FLEX.pluginPaths(product, proxy);
+			
+			switch ( attr ) {
+				case "users":
+					cb([owner]);
+					break;
+					
+				case "md":
+				case "toumd":
+					if ( eng.ToU )
+						eng.ToU.Xfetch( cb );
+					
+					else 
+						cb( null );
+					
+					break;
+		
+				case "pub":
+					cb(null);
+					break;
+					
+				case "status":
+					var 
+						fetcher = FLEX.fetcher,
+						fetchOwners = function (rec, cb) {
+							fetcher(rec.EndService, null, null, (info) => cb( info.parseJSON() ) );
+						},
+						fetchMods = function (rec, cb) {
+							sql.query(
+								"SELECT group_concat(DISTINCT EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
+								{ Product: rec.Name+".html" },
+								(err, mods) => { 
+									if ( mod = mods[0] || { Mods: "" } )
+										cb( mod.Mods || "" );
+								});
+						};
+
+					sql.query(
+						"SELECT Ver, Comment, Product, License, EndService, EndServiceID, 'none' AS Owners, "
+						+ " 'fail' AS Status, Fails, "
+						+ "group_concat(DISTINCT EndUser) AS Users, sum(Copies) AS Copies "
+						+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product",
+
+						[ {Product: product}], (err,recs) => {
+
+							recs.serialize( fetchOwners, (rec,owners) => {  // retain user stats
+								if (rec) {
+									if ( owners )
+										rec.Owners = owners.mailify();
+									else 
+										sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
+
+									var 
+										url = URL.parse(rec.EndService),
+										host = url.host.split(".")[0];
+
+									rec.License = rec.License.tag("a",{href:urls.totem+`/masters.html?EndServiceID=${rec.EndServiceID}`});
+									rec.Product = rec.Product.tag("a", {href:urls.run});
+									rec.Status = "pass";
+									rec.EndService = host.tag("a",{href:rec.EndService});
+									rec.Users = rec.Users.split(",").mailify();
+									delete rec.EndServiceID;
+								}
+
+								else
+									recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
+										if (rec) {
+											rec.Mods = mods.split(",").mailify();
+										}
+
+										else 
+											cb( recs.gridify() );
+									});
+							});
+					});
+					
+					break;
+					
+				case "suitors":
+				case "publist":
+					var 
+						sites = {},
+						rtns = [];
+
+					sql.query(
+						"SELECT Name,Path FROM app.lookups WHERE ?",
+						{Ref: product}, (err,recs) => {
+
+						recs.forEach( (rec) => {
+							rtns.push( `<a href="${urls.license}${rec.Path}">${rec.Name}</a>` );
+							sites[rec.Path] = rec.Name;
+						});
+
+						sql.query(
+							"SELECT endService FROM app.releases GROUP BY endServiceID", 
+							[],  (err,recs) => {
+
+							recs.forEach( (rec) => {
+								if ( !sites[rec.endService] ) {
+									var 
+										url = URL.parse(rec.endService),
+										name = (url.host||"none").split(".")[0];
+
+									rtns.push( `<a href="${urls.license}${rec.endService}">${name}</a>` );
+								}
+							});
+
+							rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
+								
+							if (proxy)
+								rtns.push( `<a href="${urls.proxy}">other</a>` );
+
+							//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
+
+							cb( rtns.join(", ") );
+						});
+					});					
+					break;
+					
+				case "tou":
+					(eng.ToU||"").Xfetch( (html) => html.Xjade( {}, proxy, product, (html) => cb(html) ));
+					break;
+
+				case "js":
+				case "py":
+				case "me":
+				case "m":
+					sql.query(
+						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY Published DESC LIMIT 1", {
+							EndUser: owner,
+							EndServiceID: FLEX.serviceID( endService ),
+							Product: product
+					}, (err, pubs) => {
+
+						function addTerms(code, type, pub, cb) {
+							var 
+								prefix = {
+									js: "// ",
+									py: "# ",
+									matlab: "% ",
+									jade: "// "
+								},
+								pre = "\n"+(prefix[type] || ">>");
+
+							FS.readFile("./public/tou.txt", "utf8", (err, terms) => {
+								cb( (err ? "" : pre + terms.parseJS({
+									product: pub.Product,
+									service: pub.EndService,
+									published: pub.Published,
+									license: pub.License,
+									client: pub.EndUser,
+									urls: urls
+								}).replace(/\n/g,pre) ) + "\n" + code);
+							});
+						}
+
+						if ( pub = pubs[0] )
+							addTerms( eng.Code, type, pub, cb );
+
+						else
+						if ( FLEX.licenseOnDownload )
+							if ( endService )
+								FLEX.licenseCode( sql, eng.Code, {
+									EndUser: owner,
+									EndService: endService,
+									Published: new Date(),
+									Product: product,
+									Path: "/"+product
+								}, (pub) => {
+									if (pub) 
+										addTerms( eng.Code, pub, cb );
+
+									else
+										cb( null );
+								});
+
+							else
+								cb( null );
+
+						else
+							cb( eng.Code );
+					});
+					break;
+					
+				case "jade":
+					cb( (eng.Type == "jade") ? eng.Code : null );
+					break;
+
+				default:
+					cb( null );
+			}
+		},
+				
 		pluginPaths: function (product, proxy) {
 			var 
 				site = FLEX.site.urls,
@@ -4841,6 +5040,7 @@ function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
 }
 
+/*
 EXECUTE.publish = function (req,res) {
 	var
 		sql = req.sql,
@@ -4873,6 +5073,7 @@ EXECUTE.publish = function (req,res) {
 	else
 		res( "missing product parameter" );	
 }
+*/
 
 SELECT.status = function (req,res) {
 	var
