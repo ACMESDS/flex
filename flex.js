@@ -125,8 +125,11 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
-				urls = FLEX.pluginPaths(product, proxy);
+				keys = FLEX.pluginKeys(product),
+				urls = keys.urls;
 			
+			urls.proxy = urls.tou.tag("?", {proxy: proxy});
+
 			switch ( attr ) {
 				case "users":
 					cb([owner]);
@@ -163,10 +166,10 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						};
 
 					sql.query(
-						"SELECT Ver, Comment, Product, License, EndService, EndServiceID, 'none' AS Owners, "
+						"SELECT Ver, Published, Comment, Product, License, EndService, EndServiceID, 'none' AS Owners, "
 						+ " 'fail' AS Status, Fails, "
 						+ "group_concat(DISTINCT EndUser) AS Users, sum(Copies) AS Copies "
-						+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product",
+						+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product ORDER BY Published",
 
 						[ {Product: product}], (err,recs) => {
 
@@ -218,7 +221,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 							sites[rec.Path] = rec.Name;
 						});
 
-						sql.query(
+						/*sql.query(
 							"SELECT endService FROM app.releases GROUP BY endServiceID", 
 							[],  (err,recs) => {
 
@@ -240,7 +243,16 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 							//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
 
 							cb( rtns.join(", ") );
-						});
+						}); */
+						rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
+
+						if (proxy)
+							rtns.push( `<a href="${urls.proxy}">other</a>` );
+
+						//rtns.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
+
+						cb( rtns.join(", ") );
+							
 					});					
 					break;
 					
@@ -270,14 +282,12 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 								pre = "\n"+(prefix[type] || ">>");
 
 							FS.readFile("./public/tou.txt", "utf8", (err, terms) => {
-								cb( (err ? "" : pre + terms.parseJS({
-									product: pub.Product,
-									service: pub.EndService,
-									published: pub.Published,
+								cb( (err ? "" : pre + terms.parseJS( Copy({
+									"urls.service": pub.EndService,
 									license: pub.License,
-									client: pub.EndUser,
-									urls: urls
-								}).replace(/\n/g,pre) ) + "\n" + code);
+									published: pub.Published,
+									owner: pub.EndUser
+								}, keys, ".")).replace(/\n/g,pre) ) + "\n" + code);
 							});
 						}
 
@@ -318,32 +328,65 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			}
 		},
 				
-		pluginPaths: function (product, proxy) {
+		pluginKeys: function (product, keys) {
 			var 
-				site = FLEX.site.urls,
+				site = FLEX.site,
 				parts = product.split("."),
 				type = parts.pop(),
 				name = parts.pop(),
-				paths = {  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
-					totem: site.master,
-					product: site.master + "/" + name
+				paths = {  
+					master: site.urls.master,
+					worker: site.urls.worker,
+					product: site.urls.worker + "/" + name,
+					repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/"
 				};
 			
-			return {
-				loopback:  `${paths.totem}/${product}?endservice=${paths.product}.users`,
-				license: `${paths.totem}/${product}?endservice=`,
-				proxy: paths.product + ".tou?proxy=${proxy}",
-				status: paths.product + ".status",
-				md: paths.product + ".md",
-				suitors: paths.product + ".suitors",
-				totem: paths.totem,
-				run: paths.product + ".run",
-				tou: paths.product + ".tou",
-				pub: paths.product + ".pub",
-				repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name,
-				repoat: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/" + name + "/raw/master",
-				relinfo: paths.totem + "/releases.html?product=" + product
-			};
+			return This = Copy( keys || {}, {
+				Name: name.toUpperCase(),
+				name: name,
+				product: product,
+				by: "[NGA/Research](https://nga.research.ic.gov)",
+				register: `<!---parms endservice=https://myserivce/getclients?product=${product}--->`,
+				input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
+				fetch: (req, opts, input) => { 
+					var 
+						url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
+						tags = { product: product };
+
+					//Log(urls, url);
+
+					if (opts)
+						Each(opts, ( key, val ) => {
+							tags[key] = val;
+						});
+
+					return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
+				},
+				gridify: site.gridify,
+				tag: site.tag,
+				pocs: null,
+				request: (req) => This.pocs 
+					? "[NGA/Research]( " + This.pocs.mailify({subject: name+" request", body: req}, "error") + ")"
+					: "no POCs",
+				
+				now: (new Date())+"",
+				urls: {
+					loopback:  `${paths.worker}/${product}?endservice=${paths.product}.users`,
+					license: `${paths.worker}/${product}?endservice=`,
+					product: paths.product,
+					status: paths.product + ".status",
+					md: paths.product + ".md",
+					suitors: paths.product + ".suitors",
+					Totem: paths.worker,
+					totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
+					run: paths.product + ".run",
+					tou: paths.product + ".tou",
+					pub: paths.product + ".pub",
+					repo: paths.repo + name,
+					repoat: paths.repo + name + "/raw/master",
+					relinfo: paths.master + "/releases.html?product=" + product
+				}
+			}, ".");
 			
 		},
 		
@@ -441,50 +484,27 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			var
 				resetAll = false,
 				product = name + "." + type,
-				site = FLEX.site,
-				defs = { 
+				defs = {   // defaults
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					envs: {
 						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
 						py: "anconda 4.9.x, .... *************** TBD *************** ",
 						m: "matab R18, odbc, simulink, stateflow"
 					},
-					pocs: ["brian.d.james@coe.ic.gov"]
+					docs = FLEX.defDocs || {}
 				},
-				urls = FLEX.pluginPaths(product),
-				pj = function (js) { return (js||"").parseJS(subkeys); } ,
-				defDocs = FLEX.defDocs || {},
-				dockeys = Copy( defDocs, mod.docs || mod.dockeys || {}),
+				dockeys = Copy( defs.docs, mod.docs || mod.dockeys || {}),
 				modkeys = mod.mods || mod.modkeys || mod._mods,
 				addkeys = mod.adds || mod.addkeys || mod.keys,
-				subkeys = Copy( mod.subs || mod.subkeys || {}, {
-					NAME: name.toUpperCase(),
-					name: name,
-					product: product,
-					urls: urls,
-					by: "[NGA/Research](https://nga.research.ic.gov)",
-					register: `<!---parms endservice=https://myserivce/getclients?product=${product}--->`,
-					input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
-					fetch: (req, opts, input) => { 
-						var 
-							url = urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
-							tags = { product: product };
-						
-						//Log(urls, url);
-						
-						if (opts)
-							Each(opts, ( key, val ) => {
-								tags[key] = val;
-							});
-						
-						return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
-					},
-					gridify: site.gridify,
-					tag: site.tag,
+				subkeys = FLEX.pluginKeys(product, Copy( mod.subs || {} , {
+					summary: "tbd",
+					reqts: defs.envs[type] || "tbd",
+					ver: "tbd",
+					pocs: ["brian.d.james@coe.ic.gov"],
 					interface: () => {
 						var ifs = [];
 						Each( Copy( modkeys, Copy( addkeys, {} ) ), (key, type) => {
-							if ( !(key in defDocs) )
+							if ( !(key in defs.docs) )
 								 ifs.push({ 
 									 Key: key, 
 									 Type: type, 
@@ -492,14 +512,9 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 								 });
 						});
 						return ifs.gridify();
-					},							 
-					request: (req) => "[NGA/Research]( " + defs.pocs.mailify({subject: name+" request", body: req}, "error") + ")",
-					reqts: defs.envs[type] || "tbd",
-					summary: "tbd",
-					ver: "tbd",
-					now: (new Date())+""
-				});
-
+					}
+				}));	
+				
 			if ( mod.clear || mod.reset )
 				sql.query("DROP TABLE app.??", name);
 
@@ -528,7 +543,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				if ( addkeys)
 					Each( addkeys, function (key,type) {
 						if ( doc = dockeys[key] )
-							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
+							doc.Xblog(req, "", {}, {}, subkeys, function (html) {
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
 							});
 
@@ -569,7 +584,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						Code: code,
 						Wrap: getter( mod.wrap ) || "",
 						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseJS(subkeys),
-						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})						
+						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
 					};
 
 				Log("PUBLISH", name, `${from}=>${to}` );
