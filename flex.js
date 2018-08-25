@@ -491,7 +491,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						py: "anconda 4.9.x, .... *************** TBD *************** ",
 						m: "matab R18, odbc, simulink, stateflow"
 					},
-					docs = FLEX.defDocs || {}
+					docs: FLEX.defDocs || {}
 				},
 				dockeys = Copy( defs.docs, mod.docs || mod.dockeys || {}),
 				modkeys = mod.mods || mod.modkeys || mod._mods,
@@ -855,9 +855,6 @@ git push origin master
 				stamp: new Date(),
 				pivots: ""
 			}
-		},
-		
-		reroute: {  //< default table -> db.table translators
 		},
 		
 		// CRUDE interface
@@ -4348,7 +4345,8 @@ function selectDS(req,res) {
 
 	sql.run( Copy( flags, {
 		crud: req.action,
-		from: FLEX.reroute[req.table] || (req.group + "." + req.table),
+		from: req.table,
+		db: req.group || "app",
 		where: query,
 		index: index,
 		having: {},
@@ -4370,7 +4368,8 @@ function insertDS(req, res) {
 
 	sql.run( Copy( flags, {
 		crud: req.action,
-		from: FLEX.reroute[req.table] || (req.group + "." + req.table),
+		from: req.table,
+		db: req.group || "app",
 		set: body,
 		client: req.client
 	}), FLEX.emitter, function (err,info) {
@@ -4392,7 +4391,8 @@ function deleteDS(req, res) {
 	if ( query.ID )
 		sql.run( Copy( flags, {
 			crud: req.action,
-			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
+			from: req.table,
+			db: req.group || "app",
 			where: query,
 			client: req.client
 		}), FLEX.emitter, function (err,info) {
@@ -4424,7 +4424,8 @@ function updateDS(req, res) {
 	if ( query.ID )
 		sql.run( Copy( flags, {
 			crud: req.action,
-			from: FLEX.reroute[req.table] || (req.group + "." + req.table),
+			from: req.table,
+			db: req.group || "app",
 			where: query,
 			set: body,
 			client: req.client
@@ -4937,8 +4938,9 @@ Totem(req,res) endpoint for builtin testing
 @param {Object} req Totem request
 @param {Function} res Totem response
 */
-	var N = req.query.N || 20;
-	var lambda = req.query.lambda || 2;
+	var 
+		N = req.query.N || 20,
+		lambda = req.query.lambda || 2;
 	
 	var
 		actions = ["insert","update","delete"],
@@ -4979,11 +4981,12 @@ Totem(req,res) endpoint for builtin testing
 			req.ses.action = args.action;
 
 			FLEX.open(req,res);  		// need cb?			
-		}, t0, {	parms: {f1:f1.rand(),f2:f2.rand(),f3:f3.rand()}, 
-					table: tables.rand(), 
-					action: actions.rand(),
-					client: users.rand()
-				});
+		}, t0, {	
+			parms: {f1:f1.rand(),f2:f2.rand(),f3:f3.rand()}, 
+			table: tables.rand(), 
+			action: actions.rand(),
+			client: users.rand()
+		});
 	}
 }
 
@@ -5049,10 +5052,6 @@ Totem(req,res) endpoint to return all sys endpoints
 
 EXECUTE.gitreadme = function(req,res) {
 	res("git commiting and push");
-}
-
-function Trace(msg,sql) {
-	TRACE.trace(msg,sql);
 }
 
 /*
@@ -5350,5 +5349,14 @@ SELECT.getclients = function (req,res) {
 	res( JSON.stringify( [req.client] ) );
 } */
 
+SELECT.test = function(req,res) {
+	req.sql.serialize([{save: "news"},{save:"lookups"}, {save:"/news"} ], {}, res );
+} 
+
+//===================== execution tracing
+
+function Trace(msg,sql) {
+	TRACE.trace(msg,sql);
+}
 
 // UNCLASSIFIED
