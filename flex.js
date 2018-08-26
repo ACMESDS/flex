@@ -543,7 +543,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				if ( addkeys)
 					Each( addkeys, function (key,type) {
 						if ( doc = dockeys[key] )
-							doc.Xblog(req, "", {}, {}, subkeys, function (html) {
+							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
 								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
 							});
 
