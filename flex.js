@@ -157,11 +157,11 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
-								"SELECT group_concat(DISTINCT _EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
+								"SELECT group_concat(DISTINCT _EndUser) AS _Mods FROM app.releases WHERE ? LIMIT 1",
 								{ _Product: rec.Name+".html" },
 								(err, mods) => { 
-									if ( mod = mods[0] || { Mods: "" } )
-										cb( mod.Mods || "" );
+									if ( mod = mods[0] || { _Mods: "" } )
+										cb( mod._Mods || "" );
 								});
 						};
 
@@ -195,7 +195,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 								else
 									recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
 										if (rec) {
-											rec.Mods = mods.split(",").mailify();
+											rec._Mods = mods.split(",").mailify();
 										}
 
 										else 
@@ -488,8 +488,8 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
 					envs: {
 						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
-						py: "anconda 4.9.x, .... *************** TBD *************** ",
-						m: "matab R18, odbc, simulink, stateflow"
+						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
+						m: "matlab R18, odbc, simulink, stateflow"
 					},
 					docs: FLEX.defDocs || {}
 				},
@@ -525,7 +525,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				if ( modkeys )
 					Each( modkeys, function (key,type) {
 						if ( doc = dockeys[key] )
-							doc.Xblog(req, "", {}, {}, {now:new Date()}, function (html) {
+							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
 								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
 							});
 
@@ -887,7 +887,7 @@ git push origin master
 					ctx.Host = host;
 					if ( ctx.Config ) config(ctx.Config, ctx);
 
-					sql.jsonKeys( host, [], function (keys) {  // parse json keys
+					sql.getJsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
 						cb( keys.parseJSON( ctx, null ) );
 					});
