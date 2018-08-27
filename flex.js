@@ -153,12 +153,12 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchOwners = function (rec, cb) {
-							fetcher(rec.EndService, null, null, (info) => cb( info.parseJSON() ) );
+							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
-								"SELECT group_concat(DISTINCT EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
-								{ Product: rec.Name+".html" },
+								"SELECT group_concat(DISTINCT _EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
+								{ _Product: rec.Name+".html" },
 								(err, mods) => { 
 									if ( mod = mods[0] || { Mods: "" } )
 										cb( mod.Mods || "" );
@@ -166,30 +166,30 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						};
 
 					sql.query(
-						"SELECT Ver, Published, Comment, Product, License, EndService, EndServiceID, 'none' AS Owners, "
-						+ " 'fail' AS Status, Fails, "
-						+ "group_concat(DISTINCT EndUser) AS Users, sum(Copies) AS Copies "
-						+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product ORDER BY Published",
+						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Owners, "
+						+ " 'fail' AS _Status, _Fails, "
+						+ "group_concat(DISTINCT _EndUser) AS _Users, sum(_Copies) AS _Copies "
+						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _Product ORDER BY _Published",
 
-						[ {Product: product}], (err,recs) => {
+						[ {_Product: product}], (err,recs) => {
 
 							recs.serialize( fetchOwners, (rec,owners) => {  // retain user stats
 								if (rec) {
 									if ( owners )
-										rec.Owners = owners.mailify();
+										rec._Owners = owners.mailify();
 									else 
-										sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
+										sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
 
 									var 
-										url = URL.parse(rec.EndService),
+										url = URL.parse(rec._EndService),
 										host = url.host.split(".")[0];
 
-									rec.License = rec.License.tag("a",{href:urls.totem+`/masters.html?EndServiceID=${rec.EndServiceID}`});
-									rec.Product = rec.Product.tag("a", {href:urls.run});
-									rec.Status = "pass";
-									rec.EndService = host.tag("a",{href:rec.EndService});
-									rec.Users = rec.Users.split(",").mailify();
-									delete rec.EndServiceID;
+									rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
+									rec._Product = rec._Product.tag("a", {href:urls.run});
+									rec._Status = "pass";
+									rec._EndService = host.tag("a",{href:rec._EndService});
+									rec._Users = rec._Users.split(",").mailify();
+									delete rec._EndServiceID;
 								}
 
 								else
@@ -265,10 +265,10 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				case "me":
 				case "m":
 					sql.query(
-						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY Published DESC LIMIT 1", {
-							EndUser: owner,
-							EndServiceID: FLEX.serviceID( endService ),
-							Product: product
+						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY _Published DESC LIMIT 1", {
+							_EndUser: owner,
+							_EndServiceID: FLEX.serviceID( endService ),
+							_Product: product
 					}, (err, pubs) => {
 
 						function addTerms(code, type, pub, cb) {
@@ -283,10 +283,10 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 
 							FS.readFile("./public/tou.txt", "utf8", (err, terms) => {
 								cb( (err ? "" : pre + terms.parseJS( Copy({
-									"urls.service": pub.EndService,
-									license: pub.License,
-									published: pub.Published,
-									owner: pub.EndUser
+									"urls.service": pub._EndService,
+									license: pub._License,
+									published: pub._Published,
+									owner: pub._EndUser
 								}, keys, ".")).replace(/\n/g,pre) ) + "\n" + code);
 							});
 						}
@@ -298,10 +298,10 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						if ( FLEX.licenseOnDownload )
 							if ( endService )
 								FLEX.licenseCode( sql, eng.Code, {
-									EndUser: owner,
-									EndService: endService,
-									Published: new Date(),
-									Product: product,
+									_EndUser: owner,
+									_EndService: endService,
+									_Published: new Date(),
+									_Product: product,
 									Path: "/"+product
 								}, (pub) => {
 									if (pub) 
@@ -394,8 +394,8 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 
 			function returnLicense(pub) {
 				var
-					product = pub.Product,
-					endService = pub.EndService,
+					product = pub._Product,
+					endService = pub._EndService,
 					parts = product.split("."),
 					type = parts.pop(),
 					name = parts.pop(),
@@ -405,17 +405,17 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					
 					if (license) {
 						cb( Copy({
-							License: license,
-							EndServiceID: FLEX.serviceID( pub.EndService ),
-							Copies: 1
+							_License: license,
+							_EndServiceID: FLEX.serviceID( pub._EndService ),
+							_Copies: 1
 						}, pub) );
 
-						sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE Copies=Copies+1", pub );
+						sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
 						
 						sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
 							Master: minCode,
-							License: license,
-							EndServiceID: pub.EndServiceID
+							_License: license,
+							_EndServiceID: pub._EndServiceID
 						}, {Master: minCode} ] );		
 					}
 
@@ -425,14 +425,14 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				});
 			}
 			
-			if (endService = pub.EndService)
+			if (endService = pub._EndService)
 				FLEX.fetcher( endService, null, null, (info) => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
 					
 					users.forEach( (user) => { 
-						if (user == pub.EndUser) valid = true;
+						if (user == pub._EndUser) valid = true;
 					});
 					
 					if (valid) 
@@ -564,10 +564,10 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 
 				if ( relicense ) 
 					FLEX.licenseCode( sql, code, {
-						EndUser: "totem",
-						EndService: ENV.SERVICE_MASTER_URL,
-						Published: new Date(),
-						Product: product,
+						_EndUser: "totem",
+						_EndService: ENV.SERVICE_MASTER_URL,
+						_Published: new Date(),
+						_Product: product,
 						Path: pathname
 					}, (pub) => {
 
@@ -3858,7 +3858,7 @@ EXECUTE.swaps = function Xexecute(req, res) {
 				subject: "SWAP "+package,
 				body: `
 Please find attached SWAP.  
-Delivery of  "+swap.Product+" is conditional on NGA/OCIO acceptance of this deviation request.`
+Delivery of  "+swap._Product+" is conditional on NGA/OCIO acceptance of this deviation request.`
 			}, sql);
 			
 		});
@@ -5054,41 +5054,6 @@ EXECUTE.gitreadme = function(req,res) {
 	res("git commiting and push");
 }
 
-/*
-EXECUTE.publish = function (req,res) {
-	var
-		sql = req.sql,
-		client = req.client,
-		query = req.query,
-		product = query.product;
-	
-	if (product) 
-		sql.query( "SELECT * FROM app.releases WHERE ? ORDER BY Published DESC LIMIT 1", {Product:product}, (pubs) => {
-			
-			if ( pub = pubs[0] ) {
-				res( `Publishing product ${product}` );
-				
-				var 
-					parts = pub.Ver.split("."),
-					ver = pub.Ver = parts.concat(parseInt(parts.pop()) + 1).join("."),
-					product = pub.Product || "",
-					parts = product.split("."),
-					type = parts.pop(),
-					name = parts.pop();
-				
-				FLEX.publishPlugin( req, name, type, true );
-			}
-			
-			else
-				res( `Product ${product} does not exist` );
-			
-		});
-	
-	else
-		res( "missing product parameter" );	
-}
-*/
-
 SELECT.status = function (req,res) {
 	var
 		sql = req.sql,
@@ -5223,131 +5188,6 @@ SELECT.status = function (req,res) {
 	});
 	
 }
-
-/*
-SELECT.pubsites = function (req,res) {
-	var 
-		sql = req.sql,
-		query = req.query,
-		product = query.product || "",
-		proxy = query.proxy || "",
-		site = FLEX.site,
-		licensePath = `${site.urls.worker}/${product}?endservice=`,
-		proxyPath = `${site.urls.worker}/${product}?proxy=${proxy}`,
-		sites = {},
-		rtns = [];
-	
-	sql.query(
-		product 
-			? "SELECT Name,Path FROM app.lookups WHERE ?"
-			: "SELECT Name,Path FROM app.lookups WHERE length(Ref)", 
-			
-		{Ref: product}, (err,recs) => {
-		
-		recs.forEach( (rec) => {
-			rtns.push( `<a href="${licensePath}${rec.Path}">${rec.Name}</a>` );
-			sites[rec.Path] = rec.Name;
-		});
-		
-		sql.query(
-			"SELECT endService FROM app.releases GROUP BY endServiceID", 
-			[],  (err,recs) => {
-			
-			recs.forEach( (rec) => {
-				if ( !sites[rec.endService] ) {
-					var 
-						url = URL.parse(rec.endService),
-						name = (url.host||"none").split(".")[0];
-					
-					rtns.push( `<a href="${licensePath}${rec.endService}">${name}</a>` );
-				}
-			});
-				
-			if (proxy)
-				rtns.push( `<a href="${proxyPath}">other</a>` );
-
-			//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
-
-			res( rtns.join(", ") );
-		});
-	});
-
-}
-*/
-
-/*
-SELECT.pubsum = function (req,res) {
-	var 
-		sql = req.sql,
-		query = req.query,
-		site = FLEX.site,
-		totem = site.urls.worker+"/",
-		product = query.product,
-		fetcher = FLEX.fetcher,
-		fetchClients = function (rec, cb) {
-			fetcher(rec.endService, null, null, (info) => cb( info.parseJSON() || [] ) );
-		},
-		fetchMods = function (rec, cb) {
-			sql.query(
-				"SELECT group_concat(DISTINCT EndUser) AS Mods FROM app.releases WHERE ? LIMIT 1",
-				{ Product: rec.Name+".html" },
-				(err, mods) => { 
-					if ( mod = mods[0] || { Mods: "" } )
-						cb( mod.Mods || "" );
-				});
-		};
-	
-	sql.query(
-		product 
-			? 
-				"SELECT Product, EndService, EndServiceID, 'none' AS EndClients, "
-				+ " 'fail' AS Status, Fails, "
-				+ "group_concat(DISTINCT EndUser) AS EndUsers, sum(Copies) AS Copies "
-				+ "FROM app.releases WHERE ? GROUP BY EndServiceID, Product"
-		
-			:
-				"SELECT Product, EndService, EndServiceID, 'none' AS EndClients, "
-				+ " 'fail' AS Status, Fails, "
-				+ "group_concat(DISTINCT EndUser) AS EndUsers, sum(Copies) AS Copies "
-				+ "FROM app.releases GROUP BY EndServiceID, Product",
-		
-		[ {Product: product}], (err,recs) => {
-
-			//Log(err, recs);
-			recs.serialize( fetchClients, (rec,clients) => {  // retain user stats
-				if (rec) {
-					if ( users )
-						rec.EndClients = clients.mailify();
-					else 
-						sql.query("UPDATE app.releases SET ? WHERE ?", [ {Fails: ++rec.Fails}, {ID: rec.ID}] );
-
-					//delete rec.endService;
-					rec.Name = rec.Product.split(".")[0];
-					rec.EndServiceID = rec.EndServiceID.tag("a",{href:totem+`masters.html?EndServiceID=${rec.EndServiceID}`});
-					rec.Product = rec.Product.tag("a", {href:totem+rec.Name+".run"});
-					rec.Status = "pass";
-					rec.EndService = "test".tag("a",{href:rec.EndService});
-					rec.EndUsers = rec.EndUsers.split(",").mailify();
-				}
-				
-				else
-					recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
-						if (rec) {
-							rec.Mods = mods.split(",").mailify();
-						}
-						
-						else
-							res( recs );
-					});
-			});
-	});
-} 
-*/
-
-/*
-SELECT.getclients = function (req,res) {
-	res( JSON.stringify( [req.client] ) );
-} */
 
 SELECT.test = function(req,res) {
 	req.sql.serialize([{save: "news"},{save:"lookups"}, {save:"/news"} ], {}, res );
