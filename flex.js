@@ -247,7 +247,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
 
 						if (proxy)
-							rtns.push( `<a href="${urls.proxy}">other</a>` );
+							rtns.push( `<a href="${urls.proxy}">or other</a>` );
 
 						//rtns.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
 
