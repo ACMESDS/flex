@@ -122,6 +122,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 		pluginAttribute: function ( sql, attr, owner, endService, proxy, eng, cb ) {
 				
 			var
+				errors = FLEX.errors,
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
@@ -281,13 +282,17 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 								},
 								pre = "\n"+(prefix[type] || ">>");
 
-							FS.readFile("./public/tou.txt", "utf8", (err, terms) => {
-								cb( (err ? "" : pre + terms.parseJS( Copy({
-									"urls.service": pub._EndService,
-									license: pub._License,
-									published: pub._Published,
-									owner: pub._EndUser
-								}, keys, ".")).replace(/\n/g,pre) ) + "\n" + code);
+							FS.readFile("./public/mds/tou.txt", "utf8", (err, terms) => {
+								if (err) 
+									cb( errors.noLicense );
+								
+								else
+									cb( pre + terms.parseJS( Copy({
+										"urls.service": pub._EndService,
+										license: pub._License,
+										published: pub._Published,
+										owner: pub._EndUser
+									}, keys, ".")).replace(/\n/g,pre) + "\n" + code);
 							});
 						}
 
@@ -485,7 +490,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				resetAll = false,
 				product = name + "." + type,
 				defs = {   // defaults
-					tou: FS.readFileSync( "./public/tou.md", "utf8" ),
+					tou: FS.readFileSync( "./public/mds/tou.md", "utf8" ),
 					envs: {
 						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
 						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
@@ -572,7 +577,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 					}, (pub) => {
 
 						if (pub)
-							Log("LICENSED", pub);
+							Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
 					});
 
 				var 
@@ -587,7 +592,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
 					};
 
-				Log("PUBLISH", name, `${from}=>${to}` );
+				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
 				if ( from == to )  // use code as-is
 					sql.query( 
@@ -799,6 +804,7 @@ git push origin master
 		sendMail: sendMail,
 		
 		errors: {
+			noLicense: new Error("Failed to prepare a product license"),
 			badRequest: new Error("bad/missing request parameter(s)"),
 			noBody: new Error("no body keys"),
 			noID: new Error("missing record ID"),
@@ -4857,7 +4863,7 @@ SELECT.filestats = function (req,res) {
 	var q = sql.query(
 		"SELECT stats.*,voxels.Point AS Location, voxels.Radius AS Radius, "
 		+"app.link(files.Name,concat('/files.view',char(63),'name=',files.Name)) AS Source "
-		+"FROM app.stats "
+		+"FROM app._stats "
 		+"LEFT JOIN app.files ON files.ID = stats.fileID "
 		+"LEFT JOIN app.voxels ON voxels.ID = stats.voxelID",
 		[], function (err,recs) {
