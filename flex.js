@@ -282,7 +282,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 								},
 								pre = "\n"+(prefix[type] || ">>");
 
-							FS.readFile("./public/mds/tou.txt", "utf8", (err, terms) => {
+							FS.readFile("./public/md/tou.txt", "utf8", (err, terms) => {
 								if (err) 
 									cb( errors.noLicense );
 								
@@ -490,7 +490,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 				resetAll = false,
 				product = name + "." + type,
 				defs = {   // defaults
-					tou: FS.readFileSync( "./public/mds/tou.md", "utf8" ),
+					tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
 					envs: {
 						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
 						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
