@@ -174,6 +174,8 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 
 						[ {_Product: product}], (err,recs) => {
 
+							Log(err);
+							
 							recs.serialize( fetchOwners, (rec,owners) => {  // retain user stats
 								if (rec) {
 									if ( owners )
