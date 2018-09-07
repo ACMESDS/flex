@@ -312,7 +312,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 									Path: "/"+product
 								}, (pub) => {
 									if (pub) 
-										addTerms( eng.Code, pub, cb );
+										addTerms( eng.Code, type, pub, cb );
 
 									else
 										cb( null );
@@ -624,7 +624,7 @@ blog markdown for documenting [totem plugin](/api.view) usecases:
 			
 			}
 			
-			CP.exec(`cd ${name}.distro; sh publish.sh ${name} ${product}`);
+			CP.exec(`cd ${name}.d; sh publish.sh`);
 			//`cd ${path}; sh ${filename}.sh "${now}" "${ver}" "${product}"`, (err) => {
 			/*
 			FS.access( pathname+".distro", FS.F_OK, (err) => {
