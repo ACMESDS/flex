@@ -78,29 +78,33 @@ var
 			Ingest: "switch ingests engine results into the database",
 			Share: "switch returns engine results to the status area",
 			Pipe: `
-json regulates chips and events to the engine:
+Contains optional keys:
 
-	file: "/NODE" || "PLUGIN.CASE" || "FILE.TYPE" || "FILE?QUERY" || [ {x,y,z,t,u,n, ...}, ... ]
-	group: "KEY,..." || ""  
-	where: { KEY: VALUE, ...} || {}  
-	order: "KEY,..." || "t"  
-	limit: VALUE || 1000  
-	task: "NAME" || ""  
-	aoi: "NAME" || [ [lat,lon], ... ] || []
+	file: "/DATASET?QUERY" || "PLUGIN.CASE" || "FILENAME" || "FILE.jpg" || "FILE.json"  
+	group: "KEY, ..."  
+	where: { KEY: VALUE, ...}  
+	order: "KEY, ..."  
+	limit: NUMBER  
+	aoi: "NAME" || [ [lat,lon], ... ]  
+	batch: NUMBER  
+	symbols: [ NUMBER, ... ]  
+	keys: [ "KEY", ... ]  
+	steps: NUMBER   
+	actors: NUMBER
 
+to regulate an event *file* through the plugin's supervisor.  A *batch*=0 will disable the supervisor's
+MLE batching.  The values specified for *steps*, *keys*, *symbols*, and *actors* will override default 
+values determined when the *file* was ingested.
 `,
 			Description: `
-blog markdown for documenting [totem plugin](/api.view) usecases:
+Markdown for documenting a plugin usecase:
 
-	HASH[ URL ]  
+	TEXT:\n\nCODE\n  
 	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
-	[ TEXT ]( LINK )  
-	[ FONT ]( TEXT )  
-	$$ inline TeX $$  ||  o$ break TeX $o || a$ AsciiMath $a || m$ MathML $m  
-	#{ KEY } || #{ KEY }( SHORTCUT ) || ={ KEY } || !{ EXPR }  || \${ KEY as TeX matrix  }  
-	!!TAG
-
+	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
+	\${ KEY } || \${tex( KEY )} || \${doc( KEY )} || \${JS EXPRESSION}  
 `,
 
 			Config: "js-script defines a usecase context  ",
