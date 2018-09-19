@@ -928,7 +928,7 @@ git push origin master
 			//Log("run req",req);
 			FLEX.getContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
 				
-				//Log("get ctx", ctx);				
+				//Log("get ctx", ctx);	
 				if (ctx) {
 					Copy(ctx,req.query);
 					//Log("plugin req query", req.query);
@@ -962,12 +962,12 @@ git push origin master
 				fetcher = FLEX.fetcher,
 				sql = req.sql,
 				query = req.query,
-				jobname = "totem."+ req.client + "." + req.table + "." + (query.ID||0);
+				thread = "totem."+ req.client + "." + req.table + "." + (query.Name || query.ID || 0);
 
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // attempt out-source
-				fetcher(agent.tag( "?", Copy(query,{push:jobname})), function (jobid) {
+				fetcher(agent.tag( "?", Copy(query,{push:thread})), function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -1008,9 +1008,11 @@ git push origin master
 
 				});
 
-			else   // in-source
+			else   { // in-source
 				//FLEX.runEngine(req, res);
+				//Log("in-source", req.table);
 				ATOM.select(req, res);
+			}
 		},
 		
 		config: function (opts, cb) {
