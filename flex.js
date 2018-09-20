@@ -137,7 +137,8 @@ Markdown for documenting a plugin usecase:
 
 			switch ( attr ) {
 				case "users":
-					cb([owner]);
+					//cb([owner]);
+					cb(["Brian.D.James@nga.ic.gov", "John.B.Greer@nga.ic.gov"]);
 					break;
 					
 				case "md":
