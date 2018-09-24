@@ -358,7 +358,7 @@ Markdown for documenting a plugin usecase:
 				name: name,
 				product: product,
 				by: "[NGA/Research](https://nga.research.ic.gov)",
-				register: `<!---parms endservice=https://myserivce/getclients?product=${product}--->`,
+				register: `<!---parms endservice=https://myserivce/${product}--->`,
 				input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 				fetch: (req, opts, input) => { 
 					var 
@@ -4870,11 +4870,12 @@ SELECT.filestats = function (req,res) {
 		query = req.query;
 	
 	var q = sql.query(
-		"SELECT stats.*,voxels.Point AS Location, voxels.Radius AS Radius, "
-		+"app.link(files.Name,concat('/files.view',char(63),'name=',files.Name)) AS Source "
-		+"FROM app._stats "
-		+"LEFT JOIN app.files ON files.ID = stats.fileID "
-		+"LEFT JOIN app.voxels ON voxels.ID = stats.voxelID",
+		"SELECT voxels.ID, _stats.*,geomfromtext(concat('POINT(', voxels.lon, ' ', voxels.lat,')')) AS Location, voxels.radius AS Radius, "
+		+ "app.link(files.Name,concat('/files.view',char(63),'name=',files.Name)) AS Source "
+		+ "FROM app._stats "
+		+ "LEFT JOIN app.files ON files.ID = _stats.fileID "
+		+ "LEFT JOIN app.voxels ON voxels.ID = _stats.voxelID "
+		+ "HAVING voxels.ID",
 		[], function (err,recs) {
 			
 		Log(err);
