@@ -123,7 +123,7 @@ Markdown for documenting a plugin usecase:
 			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
 		},
 		
-		pluginAttribute: function ( sql, attr, owner, endService, proxy, eng, cb ) {
+		pluginAttribute: function ( sql, attr, endPartner, endService, proxy, eng, cb ) {
 				
 			var
 				errors = FLEX.errors,
@@ -137,8 +137,10 @@ Markdown for documenting a plugin usecase:
 
 			switch ( attr ) {
 				case "users":
-					//cb([owner]);
-					cb(["Brian.D.James@nga.ic.gov", "John.B.Greer@nga.ic.gov"]);
+					cb([
+						// endPartner  // alllows everyone to do a loopback
+						"Brian.D.James@nga.ic.gov", "John.B.Greer@nga.ic.gov"
+					]);
 					break;
 					
 				case "md":
@@ -158,12 +160,12 @@ Markdown for documenting a plugin usecase:
 				case "status":
 					var 
 						fetcher = FLEX.fetcher,
-						fetchOwners = function (rec, cb) {
+						fetchUsers = function (rec, cb) {
 							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
-								"SELECT group_concat(DISTINCT _EndUser) AS _Mods FROM app.releases WHERE ? LIMIT 1",
+								"SELECT group_concat(DISTINCT _Partner) AS _Mods FROM app.releases WHERE ? LIMIT 1",
 								{ _Product: rec.Name+".html" },
 								(err, mods) => { 
 									if ( mod = mods[0] || { _Mods: "" } )
@@ -172,19 +174,19 @@ Markdown for documenting a plugin usecase:
 						};
 
 					sql.query(
-						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Owners, "
+						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
 						+ " 'fail' AS _Status, _Fails, "
-						+ "group_concat(DISTINCT _EndUser) AS _Users, sum(_Copies) AS _Copies "
+						+ "group_concat(DISTINCT _Partner) AS _Partners, sum(_Copies) AS _Copies "
 						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _Product ORDER BY _Published",
 
 						[ {_Product: product}], (err,recs) => {
 
 							Log(err);
 							
-							recs.serialize( fetchOwners, (rec,owners) => {  // retain user stats
+							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 								if (rec) {
-									if ( owners )
-										rec._Owners = owners.mailify();
+									if ( users )
+										rec._Users = users.mailify();
 									else 
 										sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
 
@@ -196,7 +198,7 @@ Markdown for documenting a plugin usecase:
 									rec._Product = rec._Product.tag("a", {href:urls.run});
 									rec._Status = "pass";
 									rec._EndService = host.tag("a",{href:rec._EndService});
-									rec._Users = rec._Users.split(",").mailify();
+									rec._Partners = rec._Partners.split(",").mailify();
 									delete rec._EndServiceID;
 								}
 
@@ -274,7 +276,7 @@ Markdown for documenting a plugin usecase:
 				case "m":
 					sql.query(
 						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY _Published DESC LIMIT 1", {
-							_EndUser: owner,
+							_Partner: endPartner,
 							_EndServiceID: FLEX.serviceID( endService ),
 							_Product: product
 					}, (err, pubs) => {
@@ -298,7 +300,7 @@ Markdown for documenting a plugin usecase:
 										"urls.service": pub._EndService,
 										license: pub._License,
 										published: pub._Published,
-										owner: pub._EndUser
+										endPartner: pub._Partner
 									}, keys, ".")).replace(/\n/g,pre) + "\n" + code);
 							});
 						}
@@ -310,7 +312,7 @@ Markdown for documenting a plugin usecase:
 						if ( FLEX.licenseOnDownload )
 							if ( endService )
 								FLEX.licenseCode( sql, eng.Code, {
-									_EndUser: owner,
+									_Partner: endPartner,
 									_EndService: endService,
 									_Published: new Date(),
 									_Product: product,
@@ -444,7 +446,7 @@ Markdown for documenting a plugin usecase:
 						users = info.parseJSON() || [] ;
 					
 					users.forEach( (user) => { 
-						if (user == pub._EndUser) valid = true;
+						if (user == pub._Partner) valid = true;
 					});
 					
 					if (valid) 
@@ -576,7 +578,7 @@ Markdown for documenting a plugin usecase:
 
 				if ( relicense ) 
 					FLEX.licenseCode( sql, code, {
-						_EndUser: "totem",
+						_Partner: "totem",
 						_EndService: ENV.SERVICE_MASTER_URL,
 						_Published: new Date(),
 						_Product: product,
