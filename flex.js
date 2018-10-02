@@ -969,7 +969,7 @@ git push origin master
 
 			//Log({viaagent: query});
 			
-			if (agent = query.agent)   // attempt out-source
+			if (agent = query.agent)   // out-source request
 				fetcher(agent.tag( "?", Copy(query,{push:thread})), function (jobid) {
 
 					if ( jobid ) {
@@ -1011,11 +1011,8 @@ git push origin master
 
 				});
 
-			else   { // in-source
-				//FLEX.runEngine(req, res);
-				//Log("in-source", req.table);
+			else   // in-source request
 				ATOM.select(req, res);
-			}
 		},
 		
 		config: function (opts, cb) {
