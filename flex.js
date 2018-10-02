@@ -97,14 +97,15 @@ MLE batching.  The values specified for *steps*, *keys*, *symbols*, and *actors*
 values determined when the *file* was ingested.
 `,
 			Description: `
-Markdown for documenting a plugin usecase:
+Usecase documentation markdown:
 
-	TEXT:\n\nCODE\n  
 	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
 	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
-	\${ KEY } || \${tex( KEY )} || \${doc( KEY )} || \${JS EXPRESSION}  
+	\${ KEY } || \${doc( KEY , "IDX, ..." )}   
+	[ #KEY || DOC ] [ := || ;= || <= ] [ #KEY || DOC ]
+
 `,
 
 			Config: "js-script defines a usecase context  ",
