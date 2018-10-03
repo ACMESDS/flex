@@ -232,7 +232,9 @@ Usecase documentation markdown:
 							sites[rec.Path] = rec.Name;
 						});
 
-						/*sql.query(
+						/*
+						// extend list of suitors with already  etc
+						sql.query(
 							"SELECT endService FROM app.releases GROUP BY endServiceID", 
 							[],  (err,recs) => {
 
@@ -306,31 +308,35 @@ Usecase documentation markdown:
 							});
 						}
 
-						if ( pub = pubs[0] )
-							addTerms( eng.Code, type, pub, cb );
-
-						else
-						if ( FLEX.licenseOnDownload )
-							if ( endService )
-								FLEX.licenseCode( sql, eng.Code, {
-									_Partner: endPartner,
-									_EndService: endService,
-									_Published: new Date(),
-									_Product: product,
-									Path: "/"+product
-								}, (pub) => {
-									if (pub) 
-										addTerms( eng.Code, type, pub, cb );
-
-									else
-										cb( null );
-								});
+						FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
+							var code = err ? eng.Code : srcCode;
+									
+							if ( pub = pubs[0] )
+								addTerms( eng.Code, type, pub, cb );
 
 							else
-								cb( null );
+							if ( FLEX.licenseOnDownload )
+								if ( endService )
+									FLEX.licenseCode( sql, eng.Code, {
+										_Partner: endPartner,
+										_EndService: endService,
+										_Published: new Date(),
+										_Product: product,
+										Path: "/"+product
+									}, (pub) => {
+										if (pub) 
+											addTerms( eng.Code, type, pub, cb );
 
-						else
-							cb( eng.Code );
+										else
+											cb( null );
+									});
+
+								else
+									cb( null );
+
+							else
+								cb( eng.Code );
+						});
 					});
 					break;
 					
