@@ -99,12 +99,13 @@ values determined when the *file* was ingested.
 			Description: `
 Usecase documentation markdown:
 
+	TEXT:\n\nCODE\n  
 	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
 	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
 	\${ KEY } || \${doc( KEY , "IDX, ..." )}   
-	[ #KEY || DOC ] [ := || ;= || <= ] [ #KEY || DOC ]
+	[ #KEY || DOC || KEY,... ] [ := || ;= || <= || >= ] [ #KEY || DOC || KEY,... ]
 
 `,
 
@@ -182,7 +183,7 @@ Usecase documentation markdown:
 
 						[ {_Product: product}], (err,recs) => {
 
-							Log(err);
+							Log("plugin.status", err);
 							
 							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 								if (rec) {
@@ -616,7 +617,7 @@ Usecase documentation markdown:
 							Name: name,
 							Type: type,
 							Enabled: 1
-						}), rev ], (err) => Log(err) );
+						}), rev ] );
 				
 				else  // convert code to requested type
 					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
