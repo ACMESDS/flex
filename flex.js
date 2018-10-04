@@ -179,11 +179,11 @@ Usecase documentation markdown:
 						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
 						+ " 'fail' AS _Status, _Fails, "
 						+ "group_concat(DISTINCT _Partner) AS _Partners, sum(_Copies) AS _Copies "
-						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _Product ORDER BY _Published",
+						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _License ORDER BY _Published",
 
 						[ {_Product: product}], (err,recs) => {
 
-							Log("plugin.status", err);
+							//Log("plugin status", err);
 							
 							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 								if (rec) {
@@ -199,8 +199,8 @@ Usecase documentation markdown:
 									rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
 									rec._Product = rec._Product.tag("a", {href:urls.run});
 									rec._Status = "pass";
-									rec._EndService = host.tag("a",{href:rec._EndService});
 									rec._Partners = rec._Partners.split(",").mailify();
+									rec._EndService = host.tag("a",{href:rec._EndService});
 									delete rec._EndServiceID;
 								}
 
@@ -280,7 +280,7 @@ Usecase documentation markdown:
 				case "m":
 					sql.query(
 						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY _Published DESC LIMIT 1", {
-							_Partner: endPartner,
+							_Partner: endPartner+".forever",
 							_EndServiceID: FLEX.serviceID( endService ),
 							_Product: product
 					}, (err, pubs) => {
@@ -304,7 +304,7 @@ Usecase documentation markdown:
 										"urls.service": pub._EndService,
 										license: pub._License,
 										published: pub._Published,
-										endPartner: pub._Partner
+										partner: pub._Partner
 									}, keys, ".")).replace(/\n/g,pre) + "\n" + code);
 							});
 						}
@@ -313,12 +313,12 @@ Usecase documentation markdown:
 							var code = err ? eng.Code : srcCode;
 									
 							if ( pub = pubs[0] )
-								addTerms( eng.Code, type, pub, cb );
+								addTerms( code, type, pub, cb );
 
 							else
 							if ( FLEX.licenseOnDownload )
 								if ( endService )
-									FLEX.licenseCode( sql, eng.Code, {
+									FLEX.licenseCode( sql, code, {
 										_Partner: endPartner,
 										_EndService: endService,
 										_Published: new Date(),
@@ -326,7 +326,7 @@ Usecase documentation markdown:
 										Path: "/"+product
 									}, (pub) => {
 										if (pub) 
-											addTerms( eng.Code, type, pub, cb );
+											addTerms( code, type, pub, cb );
 
 										else
 											cb( null );
@@ -336,7 +336,7 @@ Usecase documentation markdown:
 									cb( null );
 
 							else
-								cb( eng.Code );
+								cb( code );
 						});
 					});
 					break;
@@ -413,7 +413,8 @@ Usecase documentation markdown:
 		},
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
-
+		// until pyminifier can be reseeded, python code will always get a new license
+			
 			function returnLicense(pub) {
 				var
 					product = pub._Product,
@@ -421,7 +422,7 @@ Usecase documentation markdown:
 					parts = product.split("."),
 					type = parts.pop(),
 					name = parts.pop(),
-					secret = product + "@" + endService;
+					secret = product;
 				
 				FLEX.genLicense( code, product, type, secret, (minCode, license) => {
 					
@@ -656,8 +657,9 @@ git push origin master
 			}); */
 		},
 		
-		genLicense: function (code, product, type, secret, cb) {
-			
+		genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
+		// until pyminifier can be reseeded, python code will always get a new license
+
 			//Log("gen lic", secret);
 			if (secret)
 				switch (type) {
