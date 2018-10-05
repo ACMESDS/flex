@@ -99,13 +99,12 @@ values determined when the *file* was ingested.
 			Description: `
 Usecase documentation markdown:
 
-	TEXT:\n\nCODE\n  
-	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$EXPR & y=KEY$EXPR & src=DS & id=VALUE )  
+	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=BASE$X & y=BASE$Y & OPTS ) || BASE,X,Y >= SKIN,OPTS  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
 	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
-	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
-	\${ KEY } || \${doc( KEY , "IDX, ..." )}   
-	[ #KEY || DOC || KEY,... ] [ := || |= || <= || >= || OP= ] [ #KEY || DOC || KEY,... ]
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || DOC [ := ;= |= ] DOC  
+	\${ KEY } || \${doc( KEY , "IDX, ..." )}  
+	KEY <= VALUE || KEY <= LHS,RHS  
 
 `,
 
