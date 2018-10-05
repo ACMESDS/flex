@@ -105,7 +105,7 @@ Usecase documentation markdown:
 	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
 	\${ KEY } || \${doc( KEY , "IDX, ..." )}   
-	[ #KEY || DOC || KEY,... ] [ := || ;= || <= || >= ] [ #KEY || DOC || KEY,... ]
+	[ #KEY || DOC || KEY,... ] [ := || |= || <= || >= || OP= ] [ #KEY || DOC || KEY,... ]
 
 `,
 
