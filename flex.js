@@ -29,7 +29,7 @@
 */
  
 var 	
-	// globals
+	// globalsini
 	TRACE = "X>",
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted",
@@ -97,14 +97,14 @@ MLE batching.  The values specified for *steps*, *keys*, *symbols*, and *actors*
 values determined when the *file* was ingested.
 `,
 			Description: `
-Usecase documentation markdown:
+Use case documentation <a href="/api.view">markdown</a>:
 
-	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=BASE$X & y=BASE$Y & OPTS ) || BASE,X,Y >= SKIN,OPTS  
+	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=BASE$X & y=BASE$Y & OPTS ) || BASE,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
 	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
-	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || DOC [ := ;= |= ] DOC  
-	\${ KEY } || \${doc( KEY , "IDX, ..." )}  
-	KEY <= VALUE || KEY <= LHS,RHS  
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [#EXPR || TeX] OP= [#EXPR || TeX]  
+	\${ KEY } || \${ EXPR } || \${doc( EXPR , "IDX, ..." )}  
+	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
 
 `,
 
@@ -412,7 +412,6 @@ Usecase documentation markdown:
 		},
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
-		// until pyminifier can be reseeded, python code will always get a new license
 			
 			function returnLicense(pub) {
 				var
@@ -475,6 +474,7 @@ Usecase documentation markdown:
 						switch (opt.name) {
 							case "engine":
 							case "tou":
+							case "inits":
 							case "wrap":
 								return opt({
 									path: pathname,
@@ -573,7 +573,7 @@ Usecase documentation markdown:
 							sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
 					});
 
-				if ( inits = mod.inits || mod.initial || mod.initialize ) 
+				if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
 					inits.forEach( function (init, idx) {
 						sql.query("INSERT INTO app.?? SET ?", init);
 					});
@@ -640,25 +640,9 @@ Usecase documentation markdown:
 			}
 			
 			CP.exec(`cd ${name}.d; sh publish.sh`);
-			//`cd ${path}; sh ${filename}.sh "${now}" "${ver}" "${product}"`, (err) => {
-			/*
-			FS.access( pathname+".distro", FS.F_OK, (err) => {
-				if (!err) 
-					CP.exec(`
-cd ${name}.distro
-curl "${site.urls.master}/${name}.tou" >README.md
-git commit -am "revised ToU"
-git push origin master
-`, 
-						(err, out) => {
-							Log("DISTRO PUB", err);
-					});
-			}); */
 		},
 		
 		genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
-		// until pyminifier can be reseeded, python code will always get a new license
-
 			//Log("gen lic", secret);
 			if (secret)
 				switch (type) {
@@ -699,7 +683,8 @@ git push origin master
 
 					case "py":
 						// cb(null); break;
-						// problematic with python code as -O obvuscator cant be reseeded
+						// minifying python problematic (as -O obvuscator has no reseeded) so 
+						// pyminifier was modified to reseed its rv generator.
 						var pyTmp = "./temps/" + product;
 
 						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
