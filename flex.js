@@ -359,7 +359,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 					master: site.urls.master,
 					worker: site.urls.worker,
 					product: site.urls.worker + "/" + name,
-					repo: "https://sc.appdev.proj.coe.ic.gov/analyticmodelling/"
+					repo: ENV.PLUGIN_REPO
 				};
 			
 			return This = Copy( keys || {}, {
