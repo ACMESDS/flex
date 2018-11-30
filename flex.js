@@ -162,7 +162,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchUsers = function (rec, cb) {
-							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() ) );
+							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() || [] ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
@@ -509,7 +509,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 				defs = {   // defaults
 					tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
 					envs: {
-						js: "nodejs 5.x, [jslab](https://sc.appdev.prov.coe.ic.gov://acmesds/jslab)",
+						js: "nodejs 5.x, [jslab](https://sc.appdev.proj.coe.ic.gov://acmesds/jslab)",
 						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
 						m: "matlab R18, odbc, simulink, stateflow"
 					},
@@ -898,7 +898,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 
 					sql.getJsonKeys( host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
-						cb( keys.parseJSON( ctx, null ) );
+						cb( keys.parseJSON( ctx ) );
 					});
 				}
 
