@@ -5208,4 +5208,11 @@ function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
 }
 
+//======================= unit tests
+
+switch ( process.argv[2] ) { //< unit tests
+	case "?":
+		Log("no unit tests defined");
+}
+
 // UNCLASSIFIED
