@@ -308,6 +308,9 @@ Use case documentation <a href="/api.view">markdown</a>:
 							});
 						}
 
+						/*
+						May want to rework this to simply use eng.Code by priming the Code in the publish phase
+						*/
 						FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
 							var code = err ? eng.Code : srcCode;
 									
