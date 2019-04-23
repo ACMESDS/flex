@@ -877,7 +877,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 		execute: {}, 
 	
 		fetcher: () => {Trace("data fetcher not configured");},  //< data fetcher
-		uploader: () => {Trace("file uploader not configured");},  //< file uploader
+		//uploader: () => {Trace("file uploader not configured");},  //< file uploader
 		emitter: () => {Trace("client emitter not configured");},  //< client syncer
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
 		skinner: () => {Trace("site skinner not configured");},  //< site skinner
@@ -893,13 +893,13 @@ Use case documentation <a href="/api.view">markdown</a>:
 				}
 			}
 			
-			sql.forFirst("", "SELECT * FROM ?? WHERE least(?,1) LIMIT 1", [host,where], function (ctx) {
+			sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,where], function (ctx) {
 				
 				if (ctx) {
 					ctx.Host = host;
 					if ( ctx.Config ) config(ctx.Config, ctx);
 
-					sql.getJsonKeys( host, [], function (keys) {  // parse json keys
+					sql.getJsonKeys( "app."+host, [], function (keys) {  // parse json keys
 						//Log("json keys", keys);
 						cb( keys.parseJSON( ctx ) );
 					});
@@ -926,7 +926,7 @@ Use case documentation <a href="/api.view">markdown</a>:
 		*/
 			
 			//Log("run req",req);
-			FLEX.getContext( req.sql, req.group+"."+req.table, req.query, function (ctx) {
+			FLEX.getContext( req.sql, req.table, req.query, function (ctx) {
 				
 				//Log("get ctx", ctx);	
 				if (ctx) {
@@ -2520,132 +2520,7 @@ function Xselect(req, res) {
 	}
 }
 
-UPDATE.stores = 
-UPDATE.uploads = 
-UPDATE.uploads = 
-INSERT.uploads = 
-function Xupdate(req, res) {
-	
-	var 
-		sql = req.sql, 
-		query = req.query, 
-		body = req.body,
-		client = req.client,
-		canvas = body.canvas || {objects:[]},
-		attach = [],
-		now = new Date(),
-		image = body.image,
-		area = req.table,
-		files = image ? [{
-			name: name, // + ( files.length ? "_"+files.length : ""), 
-			size: image.length/8, 
-			image: image
-		}] : body.files || [],
-		tags = Copy(query.tag || {}, {Location: query.location || "POINT(0 0)"});
-
-	/*
-	Log({
-		q: query,
-		b: body,
-		f: files,
-		a: area,
-		l: geoloc
-	});*/
-					
-	canvas.objects.each(function (n,obj) {
-		
-		switch (obj.type) {
-			case "image": // ignore blob
-				break;
-				
-			case "rect":
-			
-				attach.push(obj);
-
-				sql.query("REPLACE INTO proofs SET ?", {
-					top: obj.top,
-					left: obj.left,
-					width: obj.width,
-					height: obj.height,
-					label: tag,
-					made: now,
-					name: area+"."+name
-				});
-				break;			
-		}
-	});
-
-	res(SUBMITTED);
-
-	Each(files, function (n, file) {
-
-		var 
-			buf = new Buffer(file.data,"base64"),
-			srcStream = new STREAM.Readable({  // source stream for event ingest
-				objectMode: true,
-				read: function () {  // return null if there are no more events
-					this.push( buf );
-					buf = null;
-				}
-			});
-
-		Trace(`UPLOAD ${file.filename} INTO ${area} FOR ${client}`, sql);
-
-		FLEX.uploader( client, srcStream, area+"/"+file.filename, tags, function (fileID) {
-
-			if (false)
-			sql.query(	// this might be generating an extra geo=null record for some reason.  works thereafter.
-				   "INSERT INTO ??.files SET ?,Location=GeomFromText(?) "
-				+ "ON DUPLICATE KEY UPDATE Client=?,Added=now(),Revs=Revs+1,Location=GeomFromText(?)", [ 
-					req.group, {
-							Client: req.client,
-							Name: file.filename,
-							Area: area,
-							Added: new Date(),
-							Classif: query.classif || "",
-							Revs: 1,
-							Ingest_Size: file.size,
-							Ingest_Tag: query.tag || ""
-						}, geoloc, req.client, geoloc
-					]);
-
-			if (false)
-			sql.query( // credit the client
-				"UPDATE openv.profiles SET Credit=Credit+?,useDisk=useDisk+? WHERE ?", [ 
-					1000, file.size, {Client: req.client} 
-				]);
-
-			if (false) //(file.image)
-				switch (area) {
-					case "proofs": 
-
-						sql.query("REPLACE INTO proofs SET ?", {
-							top: 0,
-							left: 0,
-							width: file.Width,
-							height: file.Height,
-							label: tag,
-							made: now,
-							name: area+"."+name
-						});
-
-						sql.query(
-							"SELECT detectors.ID, count(ID) AS counts FROM app.detectors LEFT JOIN proofs ON proofs.label LIKE detectors.PosCases AND proofs.name=? HAVING counts",
-							[area+"."+name]
-						)
-						.on("result", function (det) {
-							sql.query("UPDATE detectors SET Dirty=Dirty+1");
-						});
-
-						break;
-
-				}
-		});
-	});
-	
-	Log("flex done uploading");
-}
-
+/*
 EXECUTE.uploads = function Xexecute(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	
@@ -2684,7 +2559,7 @@ EXECUTE.uploads = function Xexecute(req, res) {
 			});
 			
 	});
-}
+}*/
 
 // CRUDE interfaces
 // PLUGIN usecase editors
@@ -5034,16 +4909,6 @@ function sysKill(req,res) {
 
 		CP.exec("kill "+job.pid);
 	});
-}
-
-SELECT.ping = function sysPing(req,res) {
-/**
-@method sysPing
-Totem(req,res) endpoint to test client connection
-@param {Object} req Totem request
-@param {Function} res Totem response
-*/
-	res("hello "+req.client);			
 }
 
 SELECT.help = function sysHelp(req,res) {
