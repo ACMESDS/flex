@@ -78,26 +78,32 @@ var
 			Ingest: "switch ingests engine results into the database",
 			Share: "switch returns engine results to the status area",
 			Pipe: `
-Contains optional keys:
+Use:
 
-	file: "/DATASET?QUERY" || "PLUGIN.CASE" || "FILENAME" || "FILE.jpg" || "FILE.json"  
-	group: "KEY, ..."  
-	where: { KEY: VALUE, ...}  
-	order: "KEY, ..."  
-	limit: NUMBER  
-	aoi: "NAME" || [ [lat,lon], ... ]  
-	batch: NUMBER  
-	symbols: [ NUMBER, ... ]  
-	keys: [ "KEY", ... ]  
-	steps: NUMBER   
-	actors: NUMBER
+	Pipe = "/DATASET?QUERY"
 
-to regulate an event *file* through the plugin's supervisor.  A *batch*=0 will disable the supervisor's
-MLE batching.  The values specified for *steps*, *keys*, *symbols*, and *actors* will override default 
-values determined when the *file* was ingested.
+to load a json DATASET directly into your plugin, or:
+
+	Pipe = "PLUGIN.CASE?QUERY" 
+
+to place your plugin in a supervised stream of events that were ingested by the specified 
+PLUGIN.CASE under QUERY:
+
+	group = "KEY, ..."  
+	where = { KEY: VALUE, ...}  
+	order = "KEY, ..."  
+	limit = NUMBER  
+	aoi = "NAME" || [ [lat,lon], ... ]  
+	batch = NUMBER  
+	symbols = [ NUMBER, ... ]  
+	keys = [ "KEY", ... ]  
+	steps = NUMBER   
+	actors = NUMBER
+
 `,
+
 			Description: `
-Use case documentation <a href="/api.view">markdown</a>:
+Use Description to document your usecase using markdown tags:
 
 	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=BASE$X & y=BASE$Y & OPTS ) || BASE,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
@@ -4221,15 +4227,14 @@ function selectDS(req,res) {
 		sql = req.sql,							// sql connection
 		flags = req.flags,
 		query = req.query,
-		index = req.index;
+		index = flags.index || req.index;
 	
 	/*
 	if ( filters = flags.filters )
 		filters.forEach( function (filter) {
 			query[filter.property] = filter.value;
 		}); */
-
-	sql.run( Copy( flags, {
+	sql.runQuery({
 		crud: req.action,
 		from: req.table,
 		db: req.group || "app",
@@ -4237,7 +4242,7 @@ function selectDS(req,res) {
 		index: index,
 		having: {},
 		client: req.client
-	}), null, function (err,recs) {
+	}, null, function (err,recs) {
 
 		res( err || recs );
 
@@ -4252,13 +4257,13 @@ function insertDS(req, res) {
 		body = req.body,
 		query = req.query;
 
-	sql.run( Copy( flags, {
+	sql.runQuery({
 		crud: req.action,
 		from: req.table,
 		db: req.group || "app",
 		set: body,
 		client: req.client
-	}), FLEX.emitter, function (err,info) {
+	}, FLEX.emitter, function (err,info) {
 
 		//Log(info);
 		res( err || info );
@@ -4275,13 +4280,13 @@ function deleteDS(req, res) {
 		query = req.query;
 
 	if ( query.ID )
-		sql.run( Copy( flags, {
+		sql.runQuery({
 			crud: req.action,
 			from: req.table,
 			db: req.group || "app",
 			where: query,
 			client: req.client
-		}), FLEX.emitter, function (err,info) {
+		}, FLEX.emitter, function (err,info) {
 
 			//Log(info);
 			res( err || info );
@@ -4308,14 +4313,14 @@ function updateDS(req, res) {
 	
 	else
 	if ( query.ID )
-		sql.run( Copy( flags, {
+		sql.runQuery({
 			crud: req.action,
 			from: req.table,
 			db: req.group || "app",
 			where: query,
 			set: body,
 			client: req.client
-		}), FLEX.emitter, function (err,info) {
+		}, FLEX.emitter, function (err,info) {
 
 			//Log(info);
 			res( err || info );
@@ -4749,10 +4754,10 @@ SELECT.filestats = function (req,res) {
 		+ "HAVING voxels.ID",
 		[], function (err,recs) {
 			
-		Log(err);
+		//Log(err);
 		res( err || recs );
 	});
-	Log(q.sql);	
+	//Log(q.sql);	
 }
 
 /*
