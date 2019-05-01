@@ -86,19 +86,18 @@ to load a json DATASET directly into your plugin, or:
 
 	Pipe = "PLUGIN.CASE?QUERY" 
 
-to place your plugin in a supervised stream of events that were ingested by the specified 
-PLUGIN.CASE under QUERY:
+to stream events ingested by PLUGIN.CASE to your plugin under QUERY filter:
 
 	group = "KEY, ..."  
 	where = { KEY: VALUE, ...}  
 	order = "KEY, ..."  
 	limit = NUMBER  
 	aoi = "NAME" || [ [lat,lon], ... ]  
-	batch = NUMBER  
+	batch = NUMBER  // 0 disables
 	symbols = [ NUMBER, ... ]  
 	keys = [ "KEY", ... ]  
-	steps = NUMBER   
-	actors = NUMBER
+	steps = NUMBER   // overrides file defaults
+	actors = NUMBER  // overrides file defaults
 
 `,
 
@@ -168,7 +167,7 @@ Use Description to document your usecase using markdown tags:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchUsers = function (rec, cb) {
-							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() || [] ) );
+							fetcher(rec._EndService, null, (info) => cb( info.parseJSON() || [] ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
@@ -456,7 +455,7 @@ Use Description to document your usecase using markdown tags:
 			}
 			
 			if (endService = pub._EndService)
-				FLEX.fetcher( endService, null, null, (info) => {  // validate end service
+				FLEX.fetcher( endService, null, (info) => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -973,7 +972,7 @@ Use Description to document your usecase using markdown tags:
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // out-source request
-				fetcher(agent.tag( "?", Copy(query,{push:thread})), function (jobid) {
+				fetcher(agent.tag( "?", Copy(query,{push:thread})), null, function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -991,7 +990,7 @@ Use Description to document your usecase using markdown tags:
 
 								Trace("POLLING AGENT FOR job"+jobid);
 
-								fetcher(req.agent+"?pull="+jobid, function (ctx) {
+								fetcher(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
 
 									if ( ctx = ctx.parseJSON() )
 										FLEX.thread( function (sql) {
