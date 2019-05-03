@@ -167,7 +167,7 @@ Use Description to document your usecase using markdown tags:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchUsers = function (rec, cb) {
-							fetcher(rec._EndService, null, null, (info) => cb( info.parseJSON() || [] ) );
+							fetcher(rec._EndService, null, (info) => cb( info.parseJSON() || [] ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
@@ -455,7 +455,7 @@ Use Description to document your usecase using markdown tags:
 			}
 			
 			if (endService = pub._EndService)
-				FLEX.fetcher( endService, null, null, (info) => {  // validate end service
+				FLEX.fetcher( endService, null, (info) => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -972,7 +972,7 @@ Use Description to document your usecase using markdown tags:
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // out-source request
-				fetcher(agent.tag( "?", Copy(query,{push:thread})), null, null, function (jobid) {
+				fetcher(agent.tag( "?", Copy(query,{push:thread})), null, function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -990,7 +990,7 @@ Use Description to document your usecase using markdown tags:
 
 								Trace("POLLING AGENT FOR job"+jobid);
 
-								fetcher(req.agent.tag("?",{pull:jobid}), null, null, function (ctx) {
+								fetcher(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
 
 									if ( ctx = ctx.parseJSON() )
 										FLEX.thread( function (sql) {
@@ -4563,7 +4563,7 @@ SELECT.wms = function (req,res) {
 	res("ok");
 	
 	if ( url = ENV[`WMS_${src.toUpperCase()}`] ) 
-		fetcher(url.tag("?", query), null, null, function (rtn) {
+		fetcher(url.tag("?", query), null, function (rtn) {
 			Log("wms stat", rtn);
 		});
 }
@@ -4589,7 +4589,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	delete query.ring;
 	
 	if ( url = ENV[`WFS_${src}`] )
-		fetcher( url.tag("?", query), null, null, function (cat) {  // query catalog for desired data channel
+		fetcher( url.tag("?", query), null, function (cat) {  // query catalog for desired data channel
 
 			if ( cat = cat.parseJSON() ) {
 				switch ( src ) {  // normalize cat response to ess
