@@ -818,7 +818,7 @@ Use Description to document your usecase using markdown tags:
 			noLicense: new Error("Failed to prepare a product license"),
 			badRequest: new Error("bad/missing request parameter(s)"),
 			noBody: new Error("no body keys"),
-			noID: new Error("missing record ID"),
+			//noID: new Error("missing record ID"),
 			badBaseline: new Error("baseline could not reset change journal"),
 			disableEngine: new Error("requested engine must be disabled to prime"),
 			noEngine: new Error("requested engine does not exist"),
@@ -875,15 +875,15 @@ Use Description to document your usecase using markdown tags:
 		},
 		
 		// CRUDE interface
-		select: {ds: selectDS}, 
-		delete: {ds: deleteDS}, 
-		update: {ds: updateDS}, 
-		insert: {ds: insertDS}, 
+		select: {}, 
+		delete: {}, 
+		update: {}, 
+		insert: {}, 
 		execute: {}, 
-	
+		
 		fetcher: () => {Trace("data fetcher not configured");},  //< data fetcher
 		//uploader: () => {Trace("file uploader not configured");},  //< file uploader
-		emitter: () => {Trace("client emitter not configured");},  //< client syncer
+		//emitter: () => {Trace("client emitter not configured");},  //< client syncer
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
 		skinner: () => {Trace("site skinner not configured");},  //< site skinner
 
@@ -4219,6 +4219,7 @@ function executeData(req, cb) {
 }
 */
 
+/*
 //============  Database CRUDE interface
 
 function selectDS(req,res) {
@@ -4228,11 +4229,6 @@ function selectDS(req,res) {
 		query = req.query,
 		index = flags.index || req.index;
 	
-	/*
-	if ( filters = flags.filters )
-		filters.forEach( function (filter) {
-			query[filter.property] = filter.value;
-		}); */
 	sql.runQuery({
 		crud: req.action,
 		from: req.table,
@@ -4339,6 +4335,7 @@ function updateDS(req, res) {
 		res( FLEX.errors.noID );
 	
 }
+*/
 
 //============ misc 
 
@@ -4734,10 +4731,12 @@ SELECT.help = function (req,res) {
 	
 }
 
+/*
 function isEmpty(opts) {
 	for ( var key in opts ) return false;
 	return true;
 }
+*/
 
 SELECT.filestats = function (req,res) {
 	var 
