@@ -554,31 +554,33 @@ Use Description to document your usecase using markdown tags:
 
 				if ( modkeys )
 					Each( modkeys, function (key,type) {
+						var keyId = sql.escapeId(key);
 						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
-								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type} comment ?`, [html] );
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
 							});
 
 						else								
 						if (mod._mods)
 							if (key.charAt(0) == "_")
-								sql.query( `ALTER TABLE app.${name} CHANGE ${key.substr(1)} ${key} ${type}`, (err) => Log(err) );
+								sql.query( `ALTER TABLE app.${name} CHANGE ${key.substr(1)} {keyId} ${type}`, (err) => Log(err) );
 							else
-								sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
 						else							
-							sql.query( `ALTER TABLE app.${name} MODIFY ${key} ${type}` );
+							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
 					});
 
 				else
 				if ( addkeys)
 					Each( addkeys, function (key,type) {
+						var keyId = sql.escapeId(key);
 						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
-								sql.query( `ALTER TABLE app.${name} ADD ${key} ${type} comment ?`, [html] );
+								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
 							});
 
 						else
-							sql.query( `ALTER TABLE app.${name} ADD ${key} ${type}` );
+							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type}` );
 					});
 
 				if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
