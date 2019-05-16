@@ -104,13 +104,15 @@ to stream events ingested by PLUGIN.CASE to your plugin under QUERY filter:
 			Description: `
 Use Description to document your usecase using markdown tags:
 
-	[ post ] ( SKIN.view ? w=WIDTH & h=HEIGHT & x=BASE$X & y=BASE$Y & OPTS ) || BASE,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
-	[ image ] ( PATH.jpg ? w=WIDTH & h=HEIGHT )  
-	[ LINK ]( URL )  ||  [ FONT ]( TEXT )  ||  [ ]( URL )  ||  [TOPIC]( )  
+	[ post ] ( /SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$X & y=KEY$Y & ... ) || [ SKIN ]( ? ... )  
+	[ image ] ( /PATH.jpg ? w=WIDTH & h=HEIGHT )  
+	[ fetch || get ]( URL )  
+	[ LINK ]( URL )  ||  [ COLOR ]( TEXT )  
+	[ # ]( TOPIC ? starts=DATE & ends=DATE )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [#EXPR || TeX] OP= [#EXPR || TeX]  
 	\${ KEY } || \${ EXPR } || \${doc( EXPR , "IDX, ..." )}  
+	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
-
 `,
 
 			Config: "js-script defines a usecase context  ",
@@ -275,6 +277,7 @@ Use Description to document your usecase using markdown tags:
 					break;
 					
 				case "tou":
+				case "help":
 					(eng.ToU||"").Xfetch( (html) => html.Xjade( {}, proxy, product, (html) => cb(html) ));
 					break;
 
@@ -416,7 +419,6 @@ Use Description to document your usecase using markdown tags:
 					relinfo: paths.master + "/releases.html?product=" + product
 				}
 			}, ".");
-			
 		},
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
@@ -437,14 +439,14 @@ Use Description to document your usecase using markdown tags:
 							_License: license,
 							_EndServiceID: FLEX.serviceID( pub._EndService ),
 							_Copies: 1
-						}, pub) );
+						}, pub),  sql );
 
 						sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
 						
 						sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
 							Master: minCode,
-							_License: license,
-							_EndServiceID: pub._EndServiceID
+							License: license,
+							EndServiceID: pub._EndServiceID
 						}, {Master: minCode} ] );		
 					}
 
