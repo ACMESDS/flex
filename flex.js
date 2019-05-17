@@ -109,7 +109,7 @@ Use Description to document your usecase using markdown tags:
 	[ fetch || get ]( URL )  
 	[ LINK ]( URL )  ||  [ COLOR ]( TEXT )  
 	[ # ]( TOPIC ? starts=DATE & ends=DATE )  
-	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [#EXPR || TeX] OP= [#EXPR || TeX]  
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [JSON || #DOC || TeX] OP= [JSON || #DOC || TeX]  
 	\${ KEY } || \${ EXPR } || \${doc( EXPR , "IDX, ..." )}  
 	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
