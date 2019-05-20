@@ -98,7 +98,6 @@ to stream events ingested by PLUGIN.CASE to your plugin under QUERY filter:
 	keys = [ "KEY", ... ]  
 	steps = NUMBER   // overrides file defaults
 	actors = NUMBER  // overrides file defaults
-
 `,
 
 			Description: `
