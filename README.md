@@ -77,7 +77,7 @@ Clone [ATOMIC cloud compute](https://github.com/acmesds/atomic) into your PROJEC
 
 	npm run [ edit || start ]			# Configure environment
 	npm test [ ? || X1 || X2 ... ]			# unit test
-	npm run [ prmprep || prmload ]		# Revice PRM
+	npm run [ prmprep || prmload ]		# Revise PRM
 	
 ## Contributing
 
