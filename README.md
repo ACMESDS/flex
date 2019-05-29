@@ -73,11 +73,11 @@ Clone [ATOMIC cloud compute](https://github.com/acmesds/atomic) into your PROJEC
 
 * openv.X and app.X datasets as required by virtual tables
 
-### Configure environment and Unit test
+### Manage 
 
-	npm run edit
-	npm run start
-	npm test [ ? || X1 || X2 ... ]
+	npm run [ edit || start ]			# Configure environment
+	npm test [ ? || X1 || X2 ... ]			# unit test
+	npm run [ prmprep || prmload ]		# Revice PRM
 	
 ## Contributing
 
