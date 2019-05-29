@@ -4,6 +4,8 @@
   "description": "FLEX framework for totem",
   "main": "flex.js",
   "scripts": {
+	  "prmprep": "source ./maint.sh prmput",
+	  "prmload": "source ./maint.sh prmget",	  
 	  "edit": "vi ./config.sh",
 	  "start": "source ./config.sh",
     "test": "node flex.js  "
