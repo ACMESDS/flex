@@ -4,7 +4,9 @@
   "description": "FLEX framework for totem",
   "main": "flex.js",
   "scripts": {
-    "test": "node test.js"
+	  "edit": "vi ./config.sh",
+	  "start": "source ./config.sh",
+    "test": "node flex.js  "
   },
   "repository": {
     "type": "git",
@@ -17,13 +19,13 @@
   "license": "ISC",
   "dependencies": {
     "feed": "^1.1.1",
-    "html-minifier": "^3.5.19",
+    "html-minifier": "^3.5.21",
     "imap": "^0.8.19",
-    "jshint": "^2.9.6",
-    "nodemailer": "^4.6.7",
+    "jshint": "^2.10.2",
+    "nodemailer": "^4.7.0",
     "nodemailer-smtp-transport": "^2.7.4",
     "prettydiff": "^99.0.1",
-    "uglify-js": "^3.4.6"
+    "uglify-js": "^3.5.15"
   },
   "devDependencies": {}
 }

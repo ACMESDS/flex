@@ -5086,7 +5086,7 @@ function Trace(msg,sql) {
 
 switch ( process.argv[2] ) { //< unit tests
 	case "?":
-		Log("no unit tests defined");
+		Log("no unit tests defined for flex.js");
 }
 
 // UNCLASSIFIED

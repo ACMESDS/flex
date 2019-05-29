@@ -63,7 +63,6 @@ Access and configure FLEX like this:
 where [its configuration keys](https://totem.west.ile.nga.ic.gov/shares/prm/flex/index.html) follow 
 the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
-
 ## Installation
 
 Clone [FLEX plugin interface](https://github.com/acmesds/flex) into your PROJECT/flex folder.  
@@ -74,6 +73,12 @@ Clone [ATOMIC cloud compute](https://github.com/acmesds/atomic) into your PROJEC
 
 * openv.X and app.X datasets as required by virtual tables
 
+### Configure environment and Unit test
+
+	npm run edit
+	npm run start
+	npm test [ ? || X1 || X2 ... ]
+	
 ## Contributing
 
 To contribute to this module, see our [issues](https://totem.west.ile.nga.ic.gov/issues.view)
