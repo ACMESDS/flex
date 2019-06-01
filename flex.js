@@ -109,7 +109,7 @@ Use Description to document your usecase using markdown tags:
 	[ LINK ]( URL )  ||  [ COLOR ]( TEXT )  
 	[ # ]( TOPIC ? starts=DATE & ends=DATE )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [JSON || #DOC || TeX] OP= [JSON || #DOC || TeX]  
-	\${ KEY } || \${ EXPR } || \${doc( EXPR , "IDX, ..." )}  
+	$ { KEY } || $ { EXPR } || $ {doc( EXPR , "IDX, ..." )}  
 	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
 `,
@@ -306,7 +306,7 @@ Use Description to document your usecase using markdown tags:
 									cb( errors.noLicense );
 								
 								else
-									cb( pre + terms.parseJS( Copy({
+									cb( pre + terms.parseEMAC( Copy({
 										"urls.service": pub._EndService,
 										license: pub._License,
 										published: pub._Published,
@@ -616,7 +616,7 @@ Use Description to document your usecase using markdown tags:
 					rev = {
 						Code: code,
 						Wrap: getter( mod.wrap ) || "",
-						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseJS(subkeys),
+						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
 						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
 					};
 
