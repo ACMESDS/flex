@@ -103,13 +103,12 @@ to stream events ingested by PLUGIN.CASE to your plugin under QUERY filter:
 			Description: `
 Use Description to document your usecase using markdown tags:
 
-	[ post ] ( /SKIN.view ? w=WIDTH & h=HEIGHT & x=KEY$X & y=KEY$Y & ... ) || [ SKIN ]( ? ... )  
-	[ image ] ( /PATH.jpg ? w=WIDTH & h=HEIGHT )  
-	[ fetch || get ]( URL )  
-	[ LINK ]( URL )  ||  [ COLOR ]( TEXT )  
-	[ # ]( TOPIC ? starts=DATE & ends=DATE )  
-	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$ || [JSON || #DOC || TeX] OP= [JSON || #DOC || TeX]  
-	$ { KEY } || $ { EXPR } || $ {doc( EXPR , "IDX, ..." )}  
+	[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
+	[ TEXT ]( COLOR )  
+	[ TOPIC ]( ? starts=DATE & ends=DATE )  
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
+	[JS || #JS || TeX] OP= [JS || #JS || TeX]  
+	$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
 	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
 `,
@@ -643,7 +642,7 @@ Use Description to document your usecase using markdown tags:
 												Name: name,
 												Type: type,
 												Enabled: 1
-											}), rev ]);
+											}), rev ] );
 								});									
 						});
 					});	
