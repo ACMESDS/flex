@@ -78,27 +78,28 @@ var
 			Ingest: "switch ingests engine results into the database",
 			Share: "switch returns engine results to the status area",
 			Pipe: `
-Place a DATASET into a supervised workflow using the *Pipe*:
+Place a DATASET into a supervised workflow using the Pipe:
 
 	"DATASET.TYPE?QUERY"  
 	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
-where the { ... } form generates usecases over the specified context KEYs, and where
-TYPE = json || jpg || CASE selects the workflow.   CASE workflows accept [QUERY filters](/api.view) 
-and provide addition [context keys](/api.view).
-`,
+where the form generates usecases over the specified context KEYs, and where
+TYPE = json || jpg || CASE selects the workflow.  CASE workflows accept [QUERY filters](/api.view)
+and provide [additional context key](/api.view).
+`, 
 
 			Description: `
-Use Description to document your usecase using markdown tags:
+Document your usecase using markdown tags:
 
 	[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
-	[ TEXT ]( COLOR )  
-	[ TOPIC ]( ? starts=DATE & ends=DATE )  
+	[ TEXT ] ( COLOR )  
+	[ TOPIC ] ( ? starts=DATE & ends=DATE )  
 	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
 	[JS || #JS || TeX] OP= [JS || #JS || TeX]  
 	$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
 	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
 	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
+
 `,
 
 			Config: "js-script defines a usecase context  ",
