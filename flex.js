@@ -78,26 +78,14 @@ var
 			Ingest: "switch ingests engine results into the database",
 			Share: "switch returns engine results to the status area",
 			Pipe: `
-Use:
+Place a DATASET into a supervised workflow using the *Pipe*:
 
-	Pipe = "/DATASET?QUERY"
+	"DATASET.TYPE?QUERY"  
+	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
-to load a json DATASET directly into your plugin, or:
-
-	Pipe = "PLUGIN.CASE?QUERY" 
-
-to stream events ingested by PLUGIN.CASE to your plugin under QUERY filter:
-
-	group = "KEY, ..."  
-	where = { KEY: VALUE, ...}  
-	order = "KEY, ..."  
-	limit = NUMBER  
-	aoi = "NAME" || [ [lat,lon], ... ]  
-	batch = NUMBER  // 0 disables
-	symbols = [ NUMBER, ... ]  
-	keys = [ "KEY", ... ]  
-	steps = NUMBER   // overrides file defaults
-	actors = NUMBER  // overrides file defaults
+where the { ... } form generates usecases over the specified context KEYs, and where
+TYPE = json || jpg || CASE selects the workflow.   CASE workflows accept [QUERY filters](/api.view) 
+and provide addition [context keys](/api.view).
 `,
 
 			Description: `
@@ -238,7 +226,7 @@ Use Description to document your usecase using markdown tags:
 						});
 
 						/*
-						// extend list of suitors with already  etc
+						// Extend list of suitors with already  etc
 						sql.query(
 							"SELECT endService FROM app.releases GROUP BY endServiceID", 
 							[],  (err,recs) => {
