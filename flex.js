@@ -83,9 +83,9 @@ Place a DATASET into a supervised workflow using the Pipe:
 	"DATASET.TYPE?QUERY"  
 	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
-where the form generates usecases over the specified context KEYs, and where
-TYPE = json || jpg || CASE selects the workflow.  CASE workflows accept [QUERY filters](/api.view)
-and provide [additional context key](/api.view).
+The {}-form generates usecases over the specified context KEYs.  The ""-form selects the
+workflow based on TYPE = json || jpg || CASE.  The PLUGIN.CASE workflow reads ingested
+events under the [QUERY filter](/api.view) and provides [additional context key](/api.view).
 `, 
 
 			Description: `
@@ -542,8 +542,23 @@ Document your usecase using markdown tags:
 				[], function (err) {
 
 				if ( modkeys )
-					Each( modkeys, function (key,type) {
-						var keyId = sql.escapeId(key);
+					Each( modkeys, (key,type) => {
+						var 
+							keyId = sql.escapeId(key),
+							doc = dockeys[key] || "" ,
+							comment = "",
+							
+						type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+							comment = com;
+							return "";
+						});
+						
+						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
+							//Log(`ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, comment, html.length);
+							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
+						});
+						
+						/*
 						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
 								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
@@ -557,12 +572,27 @@ Document your usecase using markdown tags:
 								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
 						else							
 							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
+						*/
 					});
 
 				else
 				if ( addkeys)
 					Each( addkeys, function (key,type) {
-						var keyId = sql.escapeId(key);
+						var 
+							keyId = sql.escapeId(key),
+							doc = dockeys[key],
+							comment = "";
+
+						type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+							comment = com;
+							return "";
+						});
+						
+						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
+							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
+						});
+						
+						/*
 						if ( doc = dockeys[key] )
 							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
 								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
@@ -570,6 +600,8 @@ Document your usecase using markdown tags:
 
 						else
 							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type}` );
+						*/
+						
 					});
 
 				if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
