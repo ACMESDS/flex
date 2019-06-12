@@ -125,7 +125,7 @@ Document your usecase using markdown tags:
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
-				keys = FLEX.pluginKeys(product),
+				keys = blogKeys(product),
 				urls = keys.urls;
 			
 			urls.proxy = urls.tou.tag("?", {proxy: proxy});
@@ -346,67 +346,11 @@ Document your usecase using markdown tags:
 					cb( null );
 			}
 		},
-				
-		pluginKeys: function (product, keys) {
-			var 
-				site = FLEX.site,
-				parts = product.split("."),
-				type = parts.pop(),
-				name = parts.pop(),
-				paths = {  
-					master: site.urls.master,
-					worker: site.urls.worker,
-					product: site.urls.worker + "/" + name,
-					repo: ENV.PLUGIN_REPO
-				};
 			
-			return This = Copy( keys || {}, {
-				Name: name.toUpperCase(),
-				name: name,
-				product: product,
-				by: "[NGA/Research](https://nga.research.ic.gov)",
-				register: `<!---parms endservice=https://myserivce/${product}--->`,
-				input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
-				fetch: (req, opts, input) => { 
-					var 
-						url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
-						tags = { product: product };
-
-					//Log(urls, url);
-
-					if (opts)
-						Each(opts, ( key, val ) => {
-							tags[key] = val;
-						});
-
-					return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
-				},
-				gridify: site.gridify,
-				tag: site.tag,
-				pocs: null,
-				request: (req) => This.pocs 
-					? "[NGA/Research]( " + This.pocs.mailify({subject: name+" request", body: req}, "error") + ")"
-					: "no POCs",
-				
-				now: (new Date())+"",
-				urls: {
-					loopback:  `${paths.worker}/${product}?endservice=${paths.product}.users`,
-					license: `${paths.worker}/${product}?endservice=`,
-					product: paths.product,
-					status: paths.product + ".status",
-					md: paths.product + ".md",
-					suitors: paths.product + ".suitors",
-					Totem: paths.worker,
-					totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
-					run: paths.product + ".run",
-					tou: paths.product + ".tou",
-					pub: paths.product + ".pub",
-					repo: paths.repo + name,
-					repoat: paths.repo + name + "/raw/master",
-					relinfo: paths.master + "/releases.html?product=" + product
-				}
-			}, ".");
-		},
+		/*
+		pluginKeys: function (product, keys) {
+			return This = Copy( keys || {}, blogKeys(product), ".");
+		},  */
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
 			
@@ -515,7 +459,7 @@ Document your usecase using markdown tags:
 				dockeys = Copy( defs.docs, mod.docs || mod.dockeys || {}),
 				modkeys = mod.mods || mod.modkeys || mod._mods,
 				addkeys = mod.adds || mod.addkeys || mod.keys,
-				subkeys = FLEX.pluginKeys(product, Copy( mod.subs || {} , {
+				subkeys = blogKeys(product, Copy( mod.subs || {} , {
 					summary: "tbd",
 					reqts: defs.envs[type] || "tbd",
 					ver: "tbd",
@@ -5096,10 +5040,95 @@ SELECT.test = function(req,res) {
 	req.sql.serialize([{save: "news"},{save:"lookups"}, {save:"/news"} ], {}, res );
 } 
 
+INSERT.blog = function (req,res) {
+	var
+		query = req.query;
+	
+	switch (req.type) {
+		case "mu":
+			res( req.post.parseEMAC( blogKeys( "nill", query ) ) );
+			break;
+			
+		case "":
+			req.post.Xblog(req, query.ds || "nada?id=0", {}, blogKeys( "nill", query) , {}, false, html => res(html) );
+			break;
+			
+		case "py":
+		case "js":
+			res( "not implemented" );
+			break;
+			
+	}			
+}
+
 //===================== execution tracing
 
 function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
+}
+
+function blogKeys(product, prime) {
+	var
+		site = FLEX.site,
+		parts = product.split("."),
+		type = parts.pop() || "",
+		name = parts.pop() || "",
+		paths = {  
+			master: ENV.SERVICE_MASTER_URL,
+			worker: ENV.SERVICE_WORKER_URL,
+			product: ENV.SERVICE_WORKER_URL + "/" + name,
+			repo: ENV.PLUGIN_REPO
+		};
+	
+	return This = Copy(prime || {}, {
+		Name: name.toUpperCase(),
+		name: name,
+		product: product,
+		by: "[NGA/Research](https://nga.research.ic.gov)",
+		register: `<!---parms endservice=https://myserivce/${product}--->`,
+		input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
+		fetch: (req, opts, input) => { 
+			var 
+				url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
+				tags = { product: product };
+
+			//Log(urls, url);
+
+			if (opts)
+				Each(opts, ( key, val ) => {
+					tags[key] = val;
+				});
+
+			return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
+		},
+		gridify: site.gridify,
+		tag: site.tag,
+		get: site.get,
+		match: site.match,
+		replace: site.replace,
+		pocs: "",
+		request: (req) => This.pocs 
+			? "[NGA/Research]( " + This.pocs.mailify({subject: name+" request", body: req}, "error") + ")"
+			: "no POCs",
+
+		now: (new Date())+"",
+		urls: {
+			loopback:  `${paths.worker}/${product}?endservice=${paths.product}.users`,
+			license: `${paths.worker}/${product}?endservice=`,
+			product: paths.product,
+			status: paths.product + ".status",
+			md: paths.product + ".md",
+			suitors: paths.product + ".suitors",
+			Totem: paths.worker,
+			totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
+			run: paths.product + ".run",
+			tou: paths.product + ".tou",
+			pub: paths.product + ".pub",
+			repo: paths.repo + name,
+			repofiles: paths.repo + name + "/raw/master",
+			relinfo: paths.master + "/releases.html?product=" + product
+		}
+	}, ".");
 }
 
 //======================= unit tests
