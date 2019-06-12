@@ -15,6 +15,7 @@
 @requires enum
 @requires atomic
 @requires reader
+@requires man
 
 @requires uglify-js
 @requires html-minifier
@@ -29,7 +30,7 @@
 */
  
 var 	
-	// globalsini
+	// globals
 	TRACE = "X>",
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted",
@@ -57,6 +58,7 @@ var
 	//RSS = require('feed-read'), 		// RSS / ATOM news reader
 
 	// totem bindings
+	$ = require("man"), 			// matrix minipulaor
 	ATOM = require("atomic"), 		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 	READ = require("reader");
@@ -498,25 +500,9 @@ Document your usecase using markdown tags:
 						});
 						
 						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
-							//Log(`ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, comment, html.length);
 							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
 						});
 						
-						/*
-						if ( doc = dockeys[key] )
-							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
-								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
-							});
-
-						else								
-						if (mod._mods)
-							if (key.charAt(0) == "_")
-								sql.query( `ALTER TABLE app.${name} CHANGE ${key.substr(1)} {keyId} ${type}`, (err) => Log(err) );
-							else
-								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
-						else							
-							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type}` );
-						*/
 					});
 
 				else
@@ -535,16 +521,6 @@ Document your usecase using markdown tags:
 						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
 							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
 						});
-						
-						/*
-						if ( doc = dockeys[key] )
-							doc.Xblog(req, "", {}, {}, subkeys, false, function (html) {
-								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
-							});
-
-						else
-							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type}` );
-						*/
 						
 					});
 
@@ -566,7 +542,7 @@ Document your usecase using markdown tags:
 						_Published: new Date(),
 						_Product: product,
 						Path: pathname
-					}, (pub) => {
+					}, pub => {
 
 						if (pub)
 							Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
@@ -577,6 +553,7 @@ Document your usecase using markdown tags:
 					to = mod.to || from,
 					fromFile = pathname + "." + from,
 					toFile = pathname + "." + to,
+					jsCode = {},
 					rev = {
 						Code: code,
 						Wrap: getter( mod.wrap ) || "",
@@ -586,13 +563,19 @@ Document your usecase using markdown tags:
 
 				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
-				if ( from == to )  // use code as-is
+				if ( from == to )  { // use code as-is
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
 							Name: name,
 							Type: type,
 							Enabled: 1
 						}), rev ] );
+					
+					if (from == "js") {	// import js function into $
+						jsCode[name] = mod.engine || mod.code;
+						$(jsCode);
+					}
+				}
 				
 				else  // convert code to requested type
 					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
