@@ -68,6 +68,7 @@ the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 Clone [FLEX plugin interface](https://github.com/acmesds/flex) into your PROJECT/flex folder.  
 Clone [ENUM basic enumerators](https://github.com/acmesds/enum) into your PROJECT/enum folder.  
 Clone [ATOMIC cloud compute](https://github.com/acmesds/atomic) into your PROJECT/atomic folder.  
+Clone [MAN matrix manipulator](https://github.com/acmesds/atomic) into your PROJECT/man folder.  
 
 ### Required MySQL Databases
 
