@@ -563,6 +563,16 @@ Document your usecase using markdown tags:
 
 				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
+				sql.query("INSERT INTO app.publist SET ?", {
+					Name: `${name}.${type}`,
+					Run: `/${name}.run`.tag("a",{href: `/${name}.run`}),
+					View: `/${name}.view`.tag("a",{href: `/${name}.view`}),
+					ToU: `/${name}.tou`.tag("a",{href: `/${name}.tou`}),
+					Publish: `/${name}.pub`.tag("a",{href: `/${name}.pub`}),
+					Source: `/public/${type}/${name}.js`,
+					Download: `/${name}.${type}`.tag("a",{href: `/${name}.${type}`})
+				});
+					
 				if ( from == to )  { // use code as-is
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
