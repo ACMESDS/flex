@@ -29,7 +29,7 @@
 @requires prettydiff
 */
  
-var 	
+var 
 	// globals
 	TRACE = "X>",
 	ENV = process.env, 					// external variables
@@ -223,7 +223,7 @@ Document your usecase using markdown tags:
 						"SELECT Name,Path FROM app.lookups WHERE ?",
 						{Ref: product}, (err,recs) => {
 
-						recs.forEach( (rec) => {
+						recs.forEach( rec => {
 							rtns.push( `<a href="${urls.license}${rec.Path}">${rec.Name}</a>` );
 							sites[rec.Path] = rec.Name;
 						});
@@ -563,6 +563,7 @@ Document your usecase using markdown tags:
 
 				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
+				/*
 				sql.query("INSERT INTO app.publist SET ?", {
 					Name: `${name}.${type}`,
 					Run: `/${name}.run`.tag("a",{href: `/${name}.run`}),
@@ -571,7 +572,7 @@ Document your usecase using markdown tags:
 					Publish: `/${name}.pub`.tag("a",{href: `/${name}.pub`}),
 					Source: `/public/${type}/${name}.js`,
 					Download: `/${name}.${type}`.tag("a",{href: `/${name}.${type}`})
-				});
+				});  */
 					
 				if ( from == to )  { // use code as-is
 					sql.query( 
@@ -2289,14 +2290,24 @@ SELECT.plugins = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 	var plugins = [];
 	
-	sql.query("SELECT Name FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
+	sql.query("SELECT Name,Type FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
 		
 		if ( err )
-			res( plugins );
+			res( err );
 		
-		else
-			engs.each(function (n,eng) {
-
+		else {
+			engs.forEach( (eng,n) => {
+				plugins.push({
+					ID: plugins.length+1,
+					Name: `${eng.Name}.${eng.Type}`,
+					Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
+					View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
+					ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
+					Publish: `/${eng.Name}.pub`.tag("a",{href: `/${eng.Name}.pub`}),
+					Source: `/public/${eng.Type}/${eng.Name}.js`,
+					Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`})
+				});
+				/*
 				sql.query("SHOW TABLES FROM ?? WHERE ?", [
 					req.group, {tables_in_app: eng.Name}
 				], function (err,recs) {
@@ -2308,8 +2319,10 @@ SELECT.plugins = function Xselect(req,res) {
 						});
 
 					if (n == engs.length-1) res( plugins );
-				});
+				}); */
 			});
+			res( plugins );
+		}
 	});
 	
 }
@@ -2455,7 +2468,8 @@ function Xselect(req, res) {
 			for (var area in {uploads:1, stores:1, shares:1} )
 				FLEX.indexer( `./public/${area}`, function (n,file) {
 
-					var link = `/${area}/${file}`,
+					var 
+						link = `/${area}/${file}`,
 						stats = FS.statSync(`./public${link}`);
 
 					rtns.push({
