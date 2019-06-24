@@ -63,7 +63,7 @@ var
 	//RAN = require("randpr"), 		// random process
 	READ = require("reader");
 
-const { Copy,Each,Log } = require("enum");
+const { Copy,Each,Log,isObject,isString } = require("enum");
 
 var
 	FLEX = module.exports = {
@@ -158,7 +158,7 @@ Document your usecase using markdown tags:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchUsers = function (rec, cb) {
-							fetcher(rec._EndService, null, (info) => cb( info.parseJSON() || [] ) );
+							fetcher(rec._EndService, null, info => cb( info.parseJSON() || [] ) );
 						},
 						fetchMods = function (rec, cb) {
 							sql.query(
@@ -390,7 +390,7 @@ Document your usecase using markdown tags:
 			}
 			
 			if (endService = pub._EndService)
-				FLEX.fetcher( endService, null, (info) => {  // validate end service
+				FLEX.fetcher( endService, null, info => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -563,17 +563,6 @@ Document your usecase using markdown tags:
 
 				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
-				/*
-				sql.query("INSERT INTO app.publist SET ?", {
-					Name: `${name}.${type}`,
-					Run: `/${name}.run`.tag("a",{href: `/${name}.run`}),
-					View: `/${name}.view`.tag("a",{href: `/${name}.view`}),
-					ToU: `/${name}.tou`.tag("a",{href: `/${name}.tou`}),
-					Publish: `/${name}.pub`.tag("a",{href: `/${name}.pub`}),
-					Source: `/public/${type}/${name}.js`,
-					Download: `/${name}.${type}`.tag("a",{href: `/${name}.${type}`})
-				});  */
-					
 				if ( from == to )  { // use code as-is
 					sql.query( 
 						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
@@ -2290,23 +2279,32 @@ SELECT.plugins = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 	var plugins = [];
 	
-	sql.query("SELECT Name,Type FROM ??.engines WHERE Enabled", req.group, function (err,engs) {		
+	sql.query(
+		"SELECT Name, Type, JIRA, RAS, Task "
+		+ "FROM ??.engines LEFT JOIN openv.milestones ON milestones.Plugin=engines.Name "
+		+ "WHERE Enabled ORDER BY Type,Name", 
+		[req.group], (err,engs) => {
 		
 		if ( err )
 			res( err );
 		
 		else {
 			engs.forEach( (eng,n) => {
-				plugins.push({
-					ID: plugins.length+1,
-					Name: `${eng.Name}.${eng.Type}`,
-					Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
-					View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
-					ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
-					Publish: `/${eng.Name}.pub`.tag("a",{href: `/${eng.Name}.pub`}),
-					Source: `/public/${eng.Type}/${eng.Name}.js`,
-					Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`})
-				});
+				if ( eng.Type != "jade" && eng.Name.indexOf("demo")<0 )
+					plugins.push({
+						ID: plugins.length+1,
+						Name: `${eng.Name}.${eng.Type}`,
+						Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
+						View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
+						ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
+						Publish: `/${eng.Name}.pub`.tag("a",{href: `/${eng.Name}.pub`}),
+						Source: `/public/${eng.Type}/${eng.Name}.js`,
+						Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`}),
+						Brief: `/briefs.view?options=${eng.Name}`.tag("a",{href: `/briefs.view?options=${eng.Name}`}),
+						JIRA: (eng.JIRA||"").tag("a",{href:"https://jira"}),
+						RAS: (eng.RAS||"").tag("a",{href:"https://ras"}),
+						Task: (eng.Task||"").tag("a",{href:"/milestones.view"})
+					});
 				/*
 				sql.query("SHOW TABLES FROM ?? WHERE ?", [
 					req.group, {tables_in_app: eng.Name}
@@ -5136,6 +5134,94 @@ function blogKeys(product, prime) {
 			relinfo: paths.master + "/releases.html?product=" + product
 		}
 	}, ".");
+}
+
+SELECT.info = function (req,res) {
+	function toSchema( urlpre, path, obj ) {
+		
+		if ( isObject(obj) ) {
+			var objs = [];
+			Each(obj, (key,val) => {
+				objs.push({
+					name: key, 
+					size: 10,
+					doc: (isString(val) && val.charAt(0)=="<") ? (path+"/"+key) + ": " + val : (path+"/"+key).tag("a", {href: isObject(val) ? "" : urlpre+val }),
+					children: toSchema(urlpre, path+"/"+key, val)
+				});
+			});
+			return objs;
+		}
+		
+		else 
+			return [];
+			
+	}
+	
+	var
+		query = req.query,
+		sql = req.sql,
+		urlpre = FLEX.site.urls.master,
+		fetcher = FLEX.fetcher;
+		
+	fetcher( "/plugins", null, info => {
+		var plugs = {};
+		
+		info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
+		
+		res( toSchema( urlpre, "", {
+			root: {
+				providers: {
+					"s/w": {
+						github: {
+							Stanford: "stanford.edu",
+							CMU: "cmu.edu"
+						},
+						npm: {
+							Stanford: "stanford.edu",
+							CMU: "cmu.edu"
+						}
+					},
+					data: {
+						SON: {
+							a: "https://a.nro.ic.gov",
+							b: "https://b.nro.ic.gov"
+						},
+						"ctr Narc": {
+							proton: "https://proton.ic.gov",
+							tbd: "https://tbd.ic.gov"
+						},
+						NTM: {
+							ESS: "https://nga.ess.com"
+						}
+					},
+					ISP: {
+						dev: {
+							"RLE High": "mailto:poc",
+							"RLE Low": "mailto:poc"
+						},
+						"target op": {
+							blitz: "https://blitz.ic.gov",
+							proton: "https://protoon.ic.gov"
+						}
+					}
+				},
+				project: {
+					plugins: plugs,
+					RTP: "/rtpsqd.view?task=seppfm",
+					JIRA: "https://jira.ic.gov",
+					RAS: "https://research.ras.ic.gov"
+				},
+				system: {
+					api: "/api.view",
+					"skinning guide": "/skinguide.view",
+					requirements: "/project.view",
+					prm: "/public/html/prms/"
+				},
+				plugins: plugs
+			}
+		}) );
+	});
+	
 }
 
 //======================= unit tests
