@@ -2301,8 +2301,8 @@ SELECT.plugins = function Xselect(req,res) {
 						Source: `/public/${eng.Type}/${eng.Name}.js`,
 						Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`}),
 						Brief: `/briefs.view?options=${eng.Name}`.tag("a",{href: `/briefs.view?options=${eng.Name}`}),
-						JIRA: (eng.JIRA||"").tag("a",{href:"https://jira"}),
-						RAS: (eng.RAS||"").tag("a",{href:"https://ras"}),
+						JIRA: (eng.JIRA||"").tag("a",{href:ENV.JIRA}),
+						RAS: (eng.RAS||"").tag("a",{href:ENV.RAS}),
 						Task: (eng.Task||"").tag("a",{href:"/milestones.view"})
 					});
 				/*
@@ -5177,8 +5177,8 @@ SELECT.info = function (req,res) {
 							CMU: "cmu.edu"
 						},
 						npm: {
-							Stanford: "stanford.edu",
-							CMU: "cmu.edu"
+							Stanford: "STANFORD",
+							CMU: "CMU"
 						}
 					},
 					data: {
@@ -5187,11 +5187,11 @@ SELECT.info = function (req,res) {
 							b: "https://b.nro.ic.gov"
 						},
 						"ctr Narc": {
-							proton: "https://proton.ic.gov",
+							proton: "PROTON",
 							tbd: "https://tbd.ic.gov"
 						},
 						NTM: {
-							ESS: "https://nga.ess.com"
+							ESS: "ESS"
 						}
 					},
 					ISP: {
@@ -5208,8 +5208,8 @@ SELECT.info = function (req,res) {
 				project: {
 					plugins: plugs,
 					RTP: "/rtpsqd.view?task=seppfm",
-					JIRA: "https://jira.ic.gov",
-					RAS: "https://research.ras.ic.gov"
+					JIRA: "JIRA",
+					RAS: "RAS"
 				},
 				system: {
 					api: "/api.view",
