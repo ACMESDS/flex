@@ -63,7 +63,7 @@ var
 	//RAN = require("randpr"), 		// random process
 	READ = require("reader");
 
-const { Copy,Each,Log,isObject,isString } = require("enum");
+const { Copy,Each,Log,isObject,isString,isArray } = require("enum");
 
 var
 	FLEX = module.exports = {
@@ -5134,6 +5134,20 @@ function blogKeys(product, prime) {
 			relinfo: paths.master + "/releases.html?product=" + product
 		}
 	}, ".");
+}
+
+SELECT.xgen = function (req,res) {	
+	var 
+		query = req.query,
+		beta = query.beta,
+		N = query.N, 
+		seed = query.seed,
+		beta0 = beta[0],
+		beta1 = beta[1];
+
+	Log("xgen", N,beta,seed);
+
+	res( $.xgen( N, beta0, beta1, seed ) );
 }
 
 SELECT.info = function (req,res) {
