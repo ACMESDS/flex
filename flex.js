@@ -743,6 +743,7 @@ Document your usecase using markdown tags:
 								break;
 								
 							case "jade":
+								/*
 								FS.readFile( path + file, "utf8", (err,code) => {
 									if (!err)
 										sql.query( 
@@ -753,7 +754,7 @@ Document your usecase using markdown tags:
 												Enabled: 1
 											}, code
 										]);	
-								});
+								});*/
 								break;
 								
 						}
