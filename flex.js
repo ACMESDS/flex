@@ -743,6 +743,7 @@ Document your usecase using markdown tags:
 								break;
 								
 							case "jade":
+								/*
 								FS.readFile( path + file, "utf8", (err,code) => {
 									if (!err)
 										sql.query( 
@@ -753,7 +754,7 @@ Document your usecase using markdown tags:
 												Enabled: 1
 											}, code
 										]);	
-								});
+								});*/
 								break;
 								
 						}
@@ -5225,11 +5226,22 @@ SELECT.info = function (req,res) {
 					JIRA: "JIRA",
 					RAS: "RAS"
 				},
-				system: {
+				totem: {
 					api: "/api.view",
 					"skinning guide": "/skinguide.view",
 					requirements: "/project.view",
-					prm: "/public/html/prms/"
+					developers: {
+						repos: "http:/gitadv.sc.proj.ic.gov/acmesds",
+						login: "/shares/devlogin.rdp",
+						prm: {
+							debe: "/shares/prm/debe/index.html",
+							totem: "/shares/prm/totem/index.html",
+							atomic: "/shares/prm/atomic/index.html",
+							man: "/shares/prm/man/index.html",
+							flex: "/shares/prm/flex/index.html",
+							geohack: "/shares/geohack/man/index.html"
+						}
+					}
 				},
 				plugins: plugs
 			}
