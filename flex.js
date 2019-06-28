@@ -5115,6 +5115,7 @@ SELECT.info = function (req,res) {
 }
 
 SELECT.gen = function (req, res) {
+	Log("req", req.query);
 	$.gen(req.query, evs => res(evs) );
 }
 
