@@ -63,7 +63,7 @@ var
 	//RAN = require("randpr"), 		// random process
 	READ = require("reader");
 
-const { Copy,Each,Log,isObject,isString } = require("enum");
+const { Copy,Each,Log,isObject,isString,isFunction } = require("enum");
 
 var
 	FLEX = module.exports = {
@@ -3781,135 +3781,6 @@ Delivery of  "+swap._Product+" is conditional on NGA/OCIO acceptance of this dev
 	
 }
 
-/*
-// legacy JSON editor for mysql cluster < 7.5
-
-SELECT.json = 
-UPDATE.json = 
-DELETE.json = 
-INSERT.json = 
-
-function (req,res) {
-	
-	var sql = req.sql,
-		query = req.query,
-		body = req.body,
-		flags = req.flags,
-		keys = (query.key||body.key||"nokey").split("."),
-		db = "openv." + keys[0];
-
-	delete query.key; 
-	delete body.key;
-	
-Log({
-	q: query,
-	f: flags,
-	d: db,
-	k: keys,
-	b: body});
-			
-	sql.query(
-		"SELECT ??,ID,count(ID) as Counts FROM ?? WHERE ? LIMIT 0,1", 
-		[keys[2] || "ID", db, {Nick: keys[1]}])
-	
-	.on("error", function (err) {
-		res(err);
-	})
-	
-	.on("result", function (dbInfo) {
-
-		if (dbInfo.Counts) {
-			
-			var rtns = [], Info = (dbInfo[keys[2]] || "").parse({}), ID = 0;
-			
-			for (recs=Info,n=3,N=keys.length; n<N; n++) 
-				if (val = recs[keys[n]])
-					recs = val;
-				else
-					recs = recs[keys[n]] = [];
-
-			if (recs.constructor == Array) {
-				recs.each(function (i,rec) {
-					
-					var match = true;
-					for (var x in query) 
-						if (query[x] != rec[x]) match = false;
-						
-					if (rec.ID > ID) ID = rec.ID;
-					if (match) rtns.push( rec );
-					
-				});
-		
-				switch (req.action) {
-					case "select": 
-						
-						res(rtns);
-						break;
-						
-					case "update": 
-						
-						rtns.each( function (i,rec) {
-							for (var x in body) rec[x] = body[x];
-						});
-						
-						sql.query("UPDATE ?? SET ? WHERE ?", [
-							db,
-							{Info: JSON.stringify(Info)},
-							{ID:dbInfo.ID}
-						]);
-						
-						res({});
-						break;
-						
-					case "delete":
-
-						for (var j=k=0; j<recs.length && k<rtns.length; )
-							if (recs[j] == rtns[k]) {
-								recs.splice(j,1);
-								k++;
-							}
-							else
-								j++;
-								
-						sql.query("UPDATE ?? SET ? WHERE ?", [
-							db,
-							{Info: JSON.stringify(Info)},
-							{ID:dbInfo.ID}
-						]);
-						
-						res({});
-						break;
-
-					case "insert":
-						var rec = {ID: ID+1};
-						for (var x in query) rec[x] = query[x];
-						for (var x in body) rec[x] = body[x];
-						
-						recs.push(rec);
-
-						sql.query("UPDATE ?? SET ? WHERE ?", [
-							db,
-							{Info: JSON.stringify(Info)},
-							{ID:dbInfo.ID}
-						]);
-						
-						res({insertId: rec.ID});
-						break;
-				}
-
-			}
-			else
-				res(recs);
-			
-		}
-		else 
-			res([]);
-
-	});
-	
-}
-*/
-
 /**
  @private
  * */		
@@ -4704,13 +4575,6 @@ SELECT.help = function (req,res) {
 	
 }
 
-/*
-function isEmpty(opts) {
-	for ( var key in opts ) return false;
-	return true;
-}
-*/
-
 SELECT.filestats = function (req,res) {
 	var 
 		sql = req.sql,
@@ -4740,15 +4604,14 @@ function sysAgent(req,res) {
 	Log("AGENT", query);
 	cb(0);
 }
-*/
 
 function sysConfig(req,res) {
-/**
+/ **
 @method sysConfig
 @deprecated
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	function Guard(query, def) {
 		for (var n in query) return query;
 		return def;
@@ -4763,23 +4626,23 @@ function sysConfig(req,res) {
 }
 
 function sysCheckpt(req,res) {
-/*
+/ **
 @method sysCheckpt
 @deprecated
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	CP.exec('source maint.sh checkpoint "checkpoint"');
 	res("Checkpointing database");
 }
 
 function sysStart(req, res) {
-/*
+/ **
 @method sysStart
 @deprecated
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	req.sql.query("select * from openv.apps where least(?)",{Enabled:true,Name:req.query.name||"node0"})
 	.on("result",function (app) {
 		if (false)
@@ -4795,12 +4658,12 @@ function sysStart(req, res) {
 }
 
 function sysBIT(req, res) {
-/**
+/ **
 @method sysBIT
 Totem(req,res) endpoint for builtin testing
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	var 
 		N = req.query.N || 20,
 		lambda = req.query.lambda || 2;
@@ -4854,23 +4717,23 @@ Totem(req,res) endpoint for builtin testing
 }
 
 function sysCodes(req,res) {
-/**
+/ **
 @method sysCodes
 @deprecated
 Totem(req,res) endpoint to return html code for testing connection
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	res( HTTP.STATUS_CODES );
 }
 
 function sysKill(req,res) {
-/*
+/ **
 @method sysKill
 @deprecated
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	var killed = [];
 
 	res("Killing jobs");
@@ -4886,14 +4749,16 @@ function sysKill(req,res) {
 		CP.exec("kill "+job.pid);
 	});
 }
+*/
 
+/*
 SELECT.help = function sysHelp(req,res) {
-/**
+/ **
 @method sysHelp
 Totem(req,res) endpoint to return all sys endpoints
 @param {Object} req Totem request
 @param {Function} res Totem response
-*/
+* /
 	res(
 		  "/ping.sys check client-server connectivity<br>"
 		+ "/bit.sys built-in test with &N client connections at rate &lambda=events/s<br>"
@@ -4902,6 +4767,7 @@ Totem(req,res) endpoint to return all sys endpoints
 		+ "/stop.sys stops server with client alert &msg<br>"
 	);
 }
+*/
 
 EXECUTE.gitreadme = function(req,res) {
 	res("git commiting and push");
@@ -5042,9 +4908,10 @@ SELECT.status = function (req,res) {
 	
 }
 
+/*
 SELECT.test = function(req,res) {
 	req.sql.serialize([{save: "news"},{save:"lookups"}, {save:"/news"} ], {}, res );
-} 
+} */
 
 INSERT.blog = function (req,res) {
 	var
@@ -5139,23 +5006,31 @@ function blogKeys(product, prime) {
 
 SELECT.info = function (req,res) {
 	function toSchema( urlpre, path, obj ) {
-		
 		if ( isObject(obj) ) {
 			var objs = [];
 			Each(obj, (key,val) => {
-				objs.push({
-					name: key, 
-					size: 10,
-					doc: (isString(val) && val.charAt(0)=="<") ? (path+"/"+key) + ": " + val : (path+"/"+key).tag("a", {href: isObject(val) ? "" : urlpre+val }),
-					children: toSchema(urlpre, path+"/"+key, val)
-				});
+				if (val)
+					if ( isFunction(val) )
+						objs.push({
+							name: key, 
+							size: 10,
+							doc: (path+"/"+key).tag( "/api.view" ),
+							children: []
+						});
+
+					else
+						objs.push({
+							name: key, 
+							size: 10,
+							doc: (isString(val) && val.charAt(0)=="<") ? (path+"/"+key) + ": " + val : (path+"/"+key).tag( isObject(val) ? "" : urlpre+val ),
+							children: toSchema(urlpre, path+"/"+key, val)
+						});
 			});
 			return objs;
 		}
 		
 		else 
 			return [];
-			
 	}
 	
 	var
@@ -5229,11 +5104,18 @@ SELECT.info = function (req,res) {
 						}
 					}
 				},
-				plugins: plugs
+				plugins: {
+					libs: $.extensions,
+					published: plugs
+				}
 			}
 		}) );
 	});
 	
+}
+
+SELECT.gen = function (req, res) {
+	$.gen(req.query, evs => res(evs) );
 }
 
 //======================= unit tests
