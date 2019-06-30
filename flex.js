@@ -5037,8 +5037,34 @@ SELECT.info = function (req,res) {
 		query = req.query,
 		sql = req.sql,
 		urlpre = FLEX.site.urls.master,
-		fetcher = FLEX.fetcher;
-		
+		fetcher = FLEX.fetcher,
+		libs = {
+			misc: {},
+			generators: {},
+			regressors: {
+				train: {},
+				predict: {}
+			}
+		};
+	
+	Each( $.extensions, (name,ex) => {		
+		if ( isFunction(ex) ) {
+			var 
+				parts = name.split("_"),
+				reg = libs.regressors[ parts.pop() ];
+			
+			if ( reg ) 
+				reg[ name ] = name;
+			
+			else
+			if ( name.endsWith( "dev" ) )
+				libs.generators[ name ] = name;
+			
+			else					
+				libs.misc[ name ] = name;
+		}
+	});
+	
 	fetcher( "/plugins", null, info => {
 		var plugs = {};
 		
@@ -5047,28 +5073,25 @@ SELECT.info = function (req,res) {
 		res( toSchema( urlpre, "", {
 			root: {
 				providers: {
+					research: {
+						stanford: "www.stanford.edu",
+						cmu: "www.cmu.edu",
+						psu: "www.penstateind.com",
+						oxu: "www.ox.ac.uk/",
+						fsu: "www.fsu.edu"
+					},
 					"s/w": {
-						github: {
-							Stanford: "stanford.edu",
-							CMU: "cmu.edu"
-						},
-						npm: {
-							Stanford: "STANFORD",
-							CMU: "CMU"
-						}
+						anaconda: "http://anaconda.com/distribution",							
+						MSgithub: "https://github.com/996icu/996.ICU",
+						npm: "https://www.npmjs.com/"				
 					},
 					data: {
-						SON: {
-							a: "https://a.nro.ic.gov",
-							b: "https://b.nro.ic.gov"
-						},
-						"ctr Narc": {
-							proton: "PROTON",
-							tbd: "https://tbd.ic.gov"
-						},
-						NTM: {
-							ESS: "ESS"
-						}
+						blitz: "https://blitz.ilabs.ic.gov",
+						usaf: "https://b.nro.ic.gov",
+						proton: "tbd",
+						icon: "tbd",
+						chrome: "tbd",
+						ess: "https://ess.nga.ic.gov"
 					},
 					ISP: {
 						dev: {
@@ -5105,7 +5128,7 @@ SELECT.info = function (req,res) {
 					}
 				},
 				plugins: {
-					libs: $.extensions,
+					libs: libs,
 					published: plugs
 				}
 			}
