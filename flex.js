@@ -5074,24 +5074,73 @@ SELECT.info = function (req,res) {
 			root: {
 				providers: {
 					research: {
-						stanford: "www.stanford.edu",
-						cmu: "www.cmu.edu",
-						psu: "www.penstateind.com",
-						oxu: "www.ox.ac.uk/",
-						fsu: "www.fsu.edu"
+						StanfordUniv: "www.stanford.edu",
+						CarnegieMellonUniv: "www.cmu.edu",
+						PennStateUnic: "www.penstateind.com",
+						OxfordUniv: "www.ox.ac.uk/",
+						FloridaStateUnic: "www.fsu.edu",
+						UnivMaryland: "https://www.umuc.edu",
+						KoreaAgencyForDefenseDevelopment: "https://en.wikipedia.org/wiki/Agency_for_Defense_Development"
 					},
 					"s/w": {
+						opencv: {
+							torch: "https://pytorch.org/",
+							tensorflow: "https://www.tensorflow.org/",
+							caffe: "https://caffe.berkeleyvision.org/"
+						},
 						anaconda: "http://anaconda.com/distribution",							
 						MSgithub: "https://github.com/996icu/996.ICU",
 						npm: "https://www.npmjs.com/"				
 					},
 					data: {
-						blitz: "https://blitz.ilabs.ic.gov",
-						usaf: "https://b.nro.ic.gov",
-						proton: "tbd",
-						icon: "tbd",
-						chrome: "tbd",
-						ess: "https://ess.nga.ic.gov"
+						high: {
+							blitz: "https://blitz.ilabs.ic.gov",
+							usaf: "https://b.nro.ic.gov",
+							bvi: "https://bvi.ilabs.ic.gov",
+							proton: "tbd",
+							icon: "tbd",
+							chrome: "tbd",
+							irevents: "https://tada.ic.gov",
+							ess: "https://ess.nga.ic.gov"
+						},
+						low: {
+						}
+					},
+					DTOs: {
+						mexican: {
+							guadalajara: "x",
+							sinola: {
+								colima: "x",
+								sonora: "x",
+								artistas: "x",
+								"gente nueva": "x",
+								"los antrax": "x"
+							},
+							"beltran-leyva": {
+								"los negros": "x",
+								"south pacific": "x",
+								"del centro": "x",
+								"independence de acapulco": "x",
+								"la barredora": "x",
+								"el comando del diablo": "x",
+								"la mano con ojos": "x",
+								"la nueva administracion": "x",
+								"la oficina": "x"
+							},
+							gulf: {
+								"los zetas": "x",
+								"la familia michoacana": "x",
+								"knights templar" : "x",
+								"los caballeros": "x"
+							},
+							juarez: "x",
+							tijuana: "x",
+							"barrio azteca": "x",
+							"milenio": {
+								"la resistancia": "x",
+								"jalisco new generation": "x"
+							}
+						}
 					},
 					ISP: {
 						dev: {
