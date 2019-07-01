@@ -85,9 +85,9 @@ Place a DATASET into a supervised workflow using the Pipe:
 	"DATASET.TYPE?QUERY"  
 	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
-The {}-form generates usecases over the specified context KEYs.  The ""-form selects the
-workflow based on TYPE = json || jpg || CASE.  The PLUGIN.CASE workflow reads ingested
-events under the [QUERY filter](/api.view) and provides [additional context key](/api.view).
+The 2nd-form generates usecases over the specified context KEYs.  The 1st-form selects the
+workflow based on TYPE = json || jpg || stream || CASE using TYPE-specific [QUERY filter keys](/api.view) 
+and TYPE-specific [supervisor context keys](/api.view).
 `, 
 
 			Description: `
@@ -157,23 +157,25 @@ Document your usecase using markdown tags:
 				case "status":
 					var 
 						fetcher = FLEX.fetcher,
-						fetchUsers = function (rec, cb) {
-							fetcher(rec._EndService, null, info => cb( info.parseJSON() || [] ) );
+						fetchUsers = function (rec, cb) {	// callback with endservice users
+							fetcher(rec._EndService, null, info => cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) );
 						},
-						fetchMods = function (rec, cb) {
+						fetchMods = function (rec, cb) {	// callback with endservice moderators
 							sql.query(
-								"SELECT group_concat(DISTINCT _Partner) AS _Mods FROM app.releases WHERE ? LIMIT 1",
+								"SELECT group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Mods FROM app.releases WHERE ? LIMIT 1",
 								{ _Product: rec.Name+".html" },
 								(err, mods) => { 
+
 									if ( mod = mods[0] || { _Mods: "" } )
 										cb( mod._Mods || "" );
+									
 								});
 						};
 
 					sql.query(
 						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
 						+ " 'fail' AS _Status, _Fails, "
-						+ "group_concat(DISTINCT _Partner) AS _Partners, sum(_Copies) AS _Copies "
+						+ "group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Partners, sum(_Copies) AS _Copies "
 						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _License ORDER BY _Published",
 
 						[ {_Product: product}], (err,recs) => {
@@ -183,7 +185,8 @@ Document your usecase using markdown tags:
 							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 								if (rec) {
 									if ( users )
-										rec._Users = users.mailify();
+										rec._Users = users.mailify( "users", {subject: name+" request"});
+									
 									else 
 										sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
 
@@ -194,16 +197,15 @@ Document your usecase using markdown tags:
 									rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
 									rec._Product = rec._Product.tag("a", {href:urls.run});
 									rec._Status = "pass";
-									rec._Partners = rec._Partners.split(",").mailify();
+									rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
 									rec._EndService = host.tag("a",{href:rec._EndService});
 									delete rec._EndServiceID;
 								}
 
 								else
 									recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
-										if (rec) {
-											rec._Mods = mods.split(",").mailify();
-										}
+										if (rec) 
+											rec._Mods = mods.mailify( "moderators", {subject: name+" request"});
 
 										else 
 											cb( recs.gridify() );
@@ -267,7 +269,7 @@ Document your usecase using markdown tags:
 					
 				case "tou":
 				case "help":
-					(eng.ToU||"").Xfetch( (html) => html.Xjade( {}, proxy, product, (html) => cb(html) ));
+					(eng.ToU||"").Xfetch( html => html.Xjade( {}, proxy, product, html => cb(html) ));
 					break;
 
 				case "js":
@@ -465,7 +467,7 @@ Document your usecase using markdown tags:
 					summary: "tbd",
 					reqts: defs.envs[type] || "tbd",
 					ver: "tbd",
-					pocs: ["brian.d.james@coe.ic.gov"],
+					//pocs: ["brian.d.james@coe.ic.gov"],
 					interface: () => {
 						var ifs = [];
 						Each( Copy( modkeys, Copy( addkeys, {} ) ), (key, type) => {
@@ -2046,16 +2048,17 @@ SELECT.health = function Xselect(req, res) {
 }
 
 SELECT.likeus = function Xselect(req, res) {
-	var sql = req.sql, log = req.log, query = req.query, pocs = FLEX.site.pocs;
+	var 
+		sql = req.sql, 
+		log = req.log, 
+		query = req.query, 
+		pocs = FLEX.site.pocs || {};
 
-	Log(pocs);
-	
-	if ( pocs.admin )
-		sendMail({
-			to:  pocs.admin,
-			subject: req.client + " likes " + FLEX.site.title + " !!",
-			body: "Just saying"
-		}, sql);
+	sendMail({
+		to: pocs.admin || "admin@undefined.ic.gov",
+		subject: req.client + " likes " + FLEX.site.title + " !!", 
+		body: "Just saying"
+	});
 
 	var user = {
 		expired: "your subscription has expired",
@@ -3988,9 +3991,7 @@ function sendMail(opts, sql) {
 
 	if (opts.to) 
 		if ( email = send = FLEX.mailer.TX.TRAN )
-			email.sendMail(opts, function (err) {
-				//Trace("MAIL "+ (err || opts.to) );
-			});
+			email.sendMail(opts, err => Trace("MAIL "+ (err || opts.to) ) );
 }
 
 /*
@@ -4205,6 +4206,7 @@ SELECT.login = function(req,res) {
 		sql = req.sql, 
 		query = req.query,
 		site = FLEX.site,
+		pocs = site.pocs || {},
 		url = site.urls.worker,
 		nick = site.nick,
 		nickref = nick.tag("a",{href:url}),
@@ -4217,8 +4219,8 @@ SELECT.login = function(req,res) {
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
 		isp = {
 			machine: "totem.west.ile.nga.ic.gov",
-			admin: "totemadmin@coe.ic.gov",
-			ps: "brian.d.james@coe.ic.gov",
+			admin: pocs.admin || "admin@undefined.ic.gov",
+			ps: pocs.ps || "projectscientist@undefined.ic.gov",
 			remotein: `${logins}/${user}.rdp`,
 			sudos: [
 				`adduser ${user} -M --gid ${group} -p ${ENV.LOGIN_PASS}`,
@@ -4294,7 +4296,7 @@ To connect to ${nickref} from Windows:
 					sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
 					sendMail({
 						to: client,
-						cc: [isp.ps,isp.admin].join(";"),
+						cc: `${isp.ps};${isp.admin}`,
 						subject: `${nick} login established`,
 						body: notice
 					});
@@ -4979,10 +4981,16 @@ function blogKeys(product, prime) {
 		get: site.get,
 		match: site.match,
 		replace: site.replace,
-		pocs: "",
-		request: (req) => This.pocs 
-			? "[NGA/Research]( " + This.pocs.mailify({subject: name+" request", body: req}, "error") + ")"
-			: "no POCs",
+		pocs: FLEX.site.pocs || {},
+		request: req => {
+			var
+				parts = (req || "").split("/"),
+				label = parts[0] || "request",
+				body = parts[1] || "request for information",
+				pocs = This.pocs || {};
+			
+			return (pocs.admin||"").mailify( label, {subject: name+" request", body: body} );
+		},
 
 		now: (new Date())+"",
 		urls: {
@@ -5190,7 +5198,13 @@ SELECT.info = function (req,res) {
 SELECT.gen = function (req, res) {
 	Log("req", req.query);
 	$.gen(req.query, evs => res(evs) );
-}
+};
+
+[
+	function mailify( label, tags ) {
+		return this ? label.tag( "mailto:"+this.tag("?", tags || {}) ) : "missing email list";
+	}
+].Extend(String);
 
 //======================= unit tests
 
