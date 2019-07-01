@@ -5101,7 +5101,8 @@ SELECT.info = function (req,res) {
 							icon: "tbd",
 							chrome: "tbd",
 							irevents: "https://tada.ic.gov",
-							ess: "https://ess.nga.ic.gov"
+							ess: "https://ess.nga.ic.gov",
+							thresher: "https://thresher.ilabs.ic.gov"
 						},
 						low: {
 						}
