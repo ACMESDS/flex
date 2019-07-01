@@ -454,7 +454,7 @@ Document your usecase using markdown tags:
 				defs = {   // defaults
 					tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
 					envs: {
-						js: "nodejs 5.x, [jslab](https://sc.appdev.proj.coe.ic.gov://acmesds/jslab)",
+						js: "nodejs 8.9.x and [man](https://sc.appdev.proj.coe.ic.gov://acmesds/man)",
 						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
 						m: "matlab R18, odbc, simulink, stateflow"
 					},
@@ -4959,7 +4959,7 @@ function blogKeys(product, prime) {
 		Name: name.toUpperCase(),
 		name: name,
 		product: product,
-		by: "[NGA/Research](https://nga.research.ic.gov)",
+		by: ENV.BYLINE,
 		register: `<!---parms endservice=https://myserivce/${product}--->`,
 		input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 		fetch: (req, opts, input) => { 
@@ -5173,8 +5173,8 @@ SELECT.info = function (req,res) {
 					"skinning guide": "/skinguide.view",
 					requirements: "/project.view",
 					developers: {
-						repos: "http:/gitadv.sc.proj.ic.gov/acmesds",
-						login: "/shares/devlogin.rdp",
+						repos: ENV.PLUGIN_REPO,
+						login: "/shares/winlogin.rdp",
 						prm: {
 							debe: "/shares/prm/debe/index.html",
 							totem: "/shares/prm/totem/index.html",

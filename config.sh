@@ -11,5 +11,6 @@ export STANFORD=http://stanford.edu
 export CMU=http://cmu.edu
 export ESS=
 export PROTON=
+export BYLINE="[NGA/Research](https://research.nga.ic.gov)"
 
 # UNCLASSIFIED when IP addresses and passwords are undefined
