@@ -186,35 +186,39 @@ Document your usecase using markdown tags:
 
 							Log("status", err, recs.length, q.sql);
 							
-							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
-								if (rec) {
-									if ( users )
-										rec._Users = users.mailify( "users", {subject: name+" request"});
-									
-									else 
-										sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
-
-									var 
-										url = URL.parse(rec._EndService),
-										host = url.host.split(".")[0];
-
-									rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
-									rec._Product = rec._Product.tag("a", {href:urls.run});
-									rec._Status = "pass";
-									rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
-									rec._EndService = host.tag("a",{href:rec._EndService});
-									delete rec._EndServiceID;
-								}
-
-								else
-									recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
-										if (rec) 
-											rec._Mods = mods.mailify( "moderators", {subject: name+" request"});
+							if ( recs.length )
+								recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
+									if (rec) {
+										if ( users )
+											rec._Users = users.mailify( "users", {subject: name+" request"});
 
 										else 
-											cb( recs.gridify() );
-									});
-							});
+											sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
+
+										var 
+											url = URL.parse(rec._EndService),
+											host = url.host.split(".")[0];
+
+										rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
+										rec._Product = rec._Product.tag("a", {href:urls.run});
+										rec._Status = "pass";
+										rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
+										rec._EndService = host.tag("a",{href:rec._EndService});
+										delete rec._EndServiceID;
+									}
+
+									else
+										recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
+											if (rec) 
+												rec._Mods = mods.mailify( "moderators", {subject: name+" request"});
+
+											else 
+												cb( recs.gridify() );
+										});
+								});
+							
+							else
+								cb( "no transitions found" );
 					});
 					
 					break;
