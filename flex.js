@@ -158,7 +158,10 @@ Document your usecase using markdown tags:
 					var 
 						fetcher = FLEX.fetcher,
 						fetchUsers = function (rec, cb) {	// callback with endservice users
-							fetcher(rec._EndService, null, info => cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) );
+							fetcher(rec._EndService, null, info => { 
+								//Log("status users", info);
+								cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) ;
+							});
 						},
 						fetchMods = function (rec, cb) {	// callback with endservice moderators
 							sql.query(
@@ -166,13 +169,14 @@ Document your usecase using markdown tags:
 								{ _Product: rec.Name+".html" },
 								(err, mods) => { 
 
+									//Log("status mods", err, mods);
 									if ( mod = mods[0] || { _Mods: "" } )
 										cb( mod._Mods || "" );
 									
 								});
 						};
 
-					sql.query(
+					var q = sql.query(
 						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
 						+ " 'fail' AS _Status, _Fails, "
 						+ "group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Partners, sum(_Copies) AS _Copies "
@@ -180,7 +184,7 @@ Document your usecase using markdown tags:
 
 						[ {_Product: product}], (err,recs) => {
 
-							//Log("plugin status", err);
+							Log("status", err, recs.length, q.sql);
 							
 							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
 								if (rec) {
@@ -269,9 +273,11 @@ Document your usecase using markdown tags:
 					
 				case "tou":
 				case "help":
-					(eng.ToU || "ToU undefined").Xspoof( {}, proxy, product, html => {
+					( eng.ToU || "ToU undefined" ).Xspoof( name, html => cb(html) );
+						
+					/*.Xspoof( {}, proxy, product, html => { 
 						cb(html);
-					});
+					}); */
 					break;
 
 				case "js":
@@ -466,9 +472,9 @@ Document your usecase using markdown tags:
 				modkeys = mod.mods || mod.modkeys || mod._mods,
 				addkeys = mod.adds || mod.addkeys || mod.keys,
 				subkeys = blogKeys(product, Copy( mod.subs || {} , {
-					summary: "tbd",
-					reqts: defs.envs[type] || "tbd",
-					ver: "tbd",
+					summary: "summary tbd",
+					reqts: defs.envs[type] || "reqts tbd",
+					ver: "ver tbd",
 					//pocs: ["brian.d.james@coe.ic.gov"],
 					interface: () => {
 						var ifs = [];
@@ -552,8 +558,11 @@ Document your usecase using markdown tags:
 							Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
 					});
 
+				// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+				
 				(getter( mod.tou || mod.readme ) || defs.tou)
-				.Xblog(null, "", {}, {}, subkeys, false, ToUhtml => {
+				.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
+				.Xblog(null, `${name}?name=test2`, {}, {}, subkeys, false, tou => {
 
 					var 
 						from = type,
@@ -564,7 +573,7 @@ Document your usecase using markdown tags:
 						rev = {
 							Code: code,
 							Wrap: getter( mod.wrap ) || "",
-							ToU: ToUhtml,
+							ToU: tou,
 								// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
 							State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
 						};
@@ -730,8 +739,8 @@ Document your usecase using markdown tags:
 				paths = FLEX.paths.publish;
 			
 			Each( paths, (type, path) => { 		// get plugin file types to publish	
-				FLEX.indexer( path, (files) => {	// get plugin file names to publish
-					files.forEach( (file) => {
+				FLEX.indexer( path, files => {	// get plugin file names to publish
+					files.forEach( file => {
 						var
 							product = file,
 							parts = product.split("."),
@@ -2309,6 +2318,7 @@ SELECT.plugins = function Xselect(req,res) {
 						Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
 						View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
 						ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
+						TxStatus: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.status`}),
 						Publish: `/${eng.Name}.pub`.tag("a",{href: `/${eng.Name}.pub`}),
 						Source: `/public/${eng.Type}/${eng.Name}.js`,
 						Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`}),
@@ -4969,20 +4979,20 @@ function blogKeys(product, prime) {
 		product: product,
 		by: ENV.BYLINE,
 		register: `<!---parms endservice=https://myserivce/${product}--->`,
-		input: (tags) => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
+		input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 		fetch: (req, opts, input) => { 
 			var 
 				url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
-				tags = { product: product };
+				tags = { };
 
 			//Log(urls, url);
 
 			if (opts)
-				Each(opts, ( key, val ) => {
-					tags[key] = val;
-				});
+				Each(opts, ( key, val ) => tags[key] = val );
 
-			return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
+			var rtn = "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
+			Log(">>>>fetch", rtn);
+			return rtn;
 		},
 		gridify: site.gridify,
 		tag: site.tag,
