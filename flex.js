@@ -75,7 +75,7 @@ var
 			RX: {}
 		},
 		
-		defDocs: {
+		defaultDocs: {	// default plugin docs (db key comments)
 			Export: "switch writes engine results into a file [api](/api.view)",
 			Ingest: "switch ingests engine results into the database",
 			Share: "switch returns engine results to the status area",
@@ -86,7 +86,7 @@ Place a DATASET into a supervised workflow using the Pipe:
 	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
 The 2nd-form generates usecases over the specified context KEYs.  The 1st-form selects the
-workflow based on TYPE = json || jpg || stream || CASE using TYPE-specific [QUERY filter keys](/api.view) 
+workflow based on TYPE = json || jpg || stream || txt || CASE using TYPE-specific [QUERY filter keys](/api.view) 
 and TYPE-specific [supervisor context keys](/api.view).
 `, 
 
@@ -269,7 +269,9 @@ Document your usecase using markdown tags:
 					
 				case "tou":
 				case "help":
-					(eng.ToU||"").Xfetch( html => html.Xjade( {}, proxy, product, html => cb(html) ));
+					(eng.ToU || "ToU undefined").Xspoof( {}, proxy, product, html => {
+						cb(html);
+					});
 					break;
 
 				case "js":
@@ -458,7 +460,7 @@ Document your usecase using markdown tags:
 						py: "anconda 4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
 						m: "matlab R18, odbc, simulink, stateflow"
 					},
-					docs: FLEX.defDocs || {}
+					docs: FLEX.defaultDocs || {}
 				},
 				dockeys = Copy( defs.docs, mod.docs || mod.dockeys || {}),
 				modkeys = mod.mods || mod.modkeys || mod._mods,
@@ -487,7 +489,7 @@ Document your usecase using markdown tags:
 
 			sql.query( 
 				`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
-				[], function (err) {
+				[], err => {
 
 				if ( modkeys )
 					Each( modkeys, (key,type) => {
@@ -550,53 +552,59 @@ Document your usecase using markdown tags:
 							Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
 					});
 
-				var 
-					from = type,
-					to = mod.to || from,
-					fromFile = pathname + "." + from,
-					toFile = pathname + "." + to,
-					jsCode = {},
-					rev = {
-						Code: code,
-						Wrap: getter( mod.wrap ) || "",
-						ToU: (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-						State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-					};
+				(getter( mod.tou || mod.readme ) || defs.tou)
+				.Xblog(null, "", {}, {}, subkeys, false, ToUhtml => {
 
-				Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
+					var 
+						from = type,
+						to = mod.to || from,
+						fromFile = pathname + "." + from,
+						toFile = pathname + "." + to,
+						jsCode = {},
+						rev = {
+							Code: code,
+							Wrap: getter( mod.wrap ) || "",
+							ToU: ToUhtml,
+								// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+							State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+						};
 
-				if ( from == to )  { // use code as-is
-					sql.query( 
-						"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-							Name: name,
-							Type: type,
-							Enabled: 1
-						}), rev ] );
-					
-					if (from == "js") {	// import js function into $
-						jsCode[name] = mod.engine || mod.code;
-						$(jsCode);
+					// Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
+
+					if ( from == to )  { // use code as-is
+						sql.query( 
+							"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+								Name: name,
+								Type: type,
+								Enabled: 1
+							}), rev ] );
+
+						if (from == "js") {	// import js function into $
+							jsCode[name] = mod.engine || mod.code;
+							$(jsCode);
+						}
 					}
-				}
-				
-				else  // convert code to requested type
-					//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], function (err) {
-					FS.writeFile( fromFile, code, "utf8", (err) => {
-						CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-							if (!err) 
-								FS.readFile( toFile, "utf8", function (err,code) {
-									rev.Code = code;
-									if (!err)
-										sql.query( 
-											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-												Name: name,
-												Type: type,
-												Enabled: 1
-											}), rev ] );
-								});									
-						});
-					});	
+
+					else  // convert code to requested type
+						//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+						FS.writeFile( fromFile, code, "utf8", err => {
+							CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+								if (!err) 
+									FS.readFile( toFile, "utf8", (err,code) => {
+										rev.Code = code;
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+													Name: name,
+													Type: type,
+													Enabled: 1
+												}), rev ] );
+									});									
+							});
+						});	
 			
+				});
+				
 			}
 			
 			CP.exec(`cd ${name}.d; sh publish.sh`);
@@ -619,7 +627,7 @@ Document your usecase using markdown tags:
 							e6Tmp = "./temps/e6/" + product,
 							e5Tmp = "./temps/e5/" + product;
 
-						FS.writeFile(e6Tmp, code, "utf8", (err) => {
+						FS.writeFile(e6Tmp, code, "utf8", err => {
 							CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
 								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
 									Log("jsmin>>>>", err);
@@ -647,7 +655,7 @@ Document your usecase using markdown tags:
 						// pyminifier was modified to reseed its rv generator.
 						var pyTmp = "./temps/" + product;
 
-						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", (err) => {					
+						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", err => {					
 							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
 								Log("pymin>>>>", err);
 								
@@ -681,8 +689,8 @@ Document your usecase using markdown tags:
 							mTmp = "./temps/matsrc/" + product,
 							pyTmp = "./temps/matout/" + product;
 
-						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", (err) => {
-							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], (err) => {	
+						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
+							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
 								Log("matmin>>>>", err);
 								
 								if (err)
@@ -1014,7 +1022,7 @@ Document your usecase using markdown tags:
 					email.TRAN = {
 						sendMail: function (opts, cb) {
 							Log(opts);
-							CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, function (err) {
+							CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, err => {
 								cb( err );
 								//Trace("MAIL "+ (err || opts.to) );
 							});
@@ -1086,7 +1094,7 @@ Document your usecase using markdown tags:
 							  host: email.HOST,
 							  port: email.PORT,
 							  secure: true,
-							  //debug: function (err) { console.warn(ME+">"+err); } ,
+							  //debug: err => { console.warn(ME+">"+err); } ,
 							  connTimeout: 10000
 							});
 					
@@ -1489,8 +1497,8 @@ DELETE.files = function Xselect(req,res) {
 			arch = `${pub}/${path}`,
 			zip = `${arch}.zip`;
 
-		CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
-		CP.exec(`rm ${arch}`, function (err) {
+		CP.exec(`zip ${zip} ${arch}; git commit -am "archive ${path}"; git push github master; rm ${zip}`, err => {
+		CP.exec(`rm ${arch}`, err => {
 			//sql.query("DELETE FROM app.files WHERE ?",{ID:query.ID});
 
 			sql.query("UPDATE app.files SET State='archived' WHERE least(?)", {Area:file.Area, Name:file.Name});
@@ -1523,7 +1531,7 @@ EXECUTE.files = function Xselect(req,res) {
 			arch = `${pub}/${path}`,
 			zip = `*.zip`;
 
-		CP.exec(`git commit -am "archive ${path}"; git push github master; rm ${zip}`, function (err) {
+		CP.exec(`git commit -am "archive ${path}"; git push github master; rm ${zip}`, err => {
 		});
 	});
 	
@@ -1914,7 +1922,7 @@ SELECT.health = function Xselect(req, res) {
 		+ "round(sum(Transfer)*1e-9,2) AS tot_GB, "
 		+ "count(ID) AS logs "
 		+ "FROM app.dblogs")
-	.on("error", function (err) {
+	.on("error", err => {
 		Log(err);
 	})
 	.on("result", function (lstats) {
@@ -1927,7 +1935,7 @@ SELECT.health = function Xselect(req, res) {
 		+ "avg(datediff(ifnull(departed,now()),arrived)) AS avg_wait_DAYS, "
 		+ "sum(Age)*? AS cost_$ "
 		+ "FROM app.queues",[4700])
-	.on("error", function (err) {
+	.on("error", err => {
 		Log(err);
 	})
 	.on("result", function (qstats) {
@@ -2553,7 +2561,7 @@ DELETE.keyedit = function Xdelete(req, res) {
 		sql.query(
 			"ALTER TABLE ??.?? DROP ??", 
 			[req.group, query.ds, query.ID],
-			function (err) {
+			err => {
 				res( {data: {}, success:true, msg:"ok"}  );
 		});
 	}
@@ -2572,7 +2580,7 @@ INSERT.keyedit = function Xinsert(req, res) {
 		sql.query(
 			"ALTER TABLE ??.?? ADD ?? "+body.Type,
 			[req.group, query.ds, body.Key],
-			function (err) {
+			err => {
 				res( {data: {insertID: body.Key}, success:true, msg:"ok"} );
 		});
 	}
@@ -2590,7 +2598,7 @@ UPDATE.keyedit = function Xupdate(req, res) {
 		sql.query(
 			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
 			[req.group, query.ds, query.ID, query.ID],
-			function (err) {
+			err => {
 				res( {data: {}, success:true, msg:"ok"}  );
 		});
 	}
@@ -2732,7 +2740,7 @@ EXECUTE.engines = function Xexecute(req, res) {
 			"SELECT *,count(ID) AS Count FROM engines WHERE LEAST(?) LIMIT 0,1",
 			{Engine:Engine,Name:Name}
 		)
-		.on("error", function (err) {
+		.on("error", err => {
 			res(err);
 		})
 		.on("result", function (eng) {
@@ -2771,7 +2779,7 @@ EXECUTE.engines = function Xexecute(req, res) {
 										sql.query("UPDATE engines SET ? WHERE ?", [
 											{Code: buf, Updated: new Date()}, 
 											{ID:eng.ID}
-										], function (err) {
+										], err => {
 											res(err || "ok");
 										});
 								});
@@ -2803,7 +2811,7 @@ EXECUTE.engines = function Xexecute(req, res) {
 							Name: Name,
 							Updated: new Date(),
 							Engine: Engine
-						}, function (err) {
+						}, err => {
 							res(err || "primed");
 						});
 							
@@ -2817,7 +2825,7 @@ EXECUTE.engines = function Xexecute(req, res) {
 								Enabled: 0,
 								Name: Name,
 								Engine: "js"
-							}, function (err) {
+							}, err => {
 								res(err || "primed");
 							});
 							
@@ -2833,7 +2841,7 @@ EXECUTE.engines = function Xexecute(req, res) {
 										Enabled: 0,
 										Name: Name,
 										Engine: Engine
-									}, function (err) {
+									}, err => {
 										res(err || "primed");
 									});
 							});
@@ -2856,7 +2864,7 @@ EXECUTE.milestones = function Xexecute(req, res) {
 	FLEX.RDR.xlsx(sql,"milestones.xlsx","stores",function (rec) {
 		for (var n in map) map[n] = rec[n] || "";
 		
-		sql.query("INSERT INTO openv.milestones SET ?",map, function (err) {
+		sql.query("INSERT INTO openv.milestones SET ?",map, err => {
 			if (err) Log(err);
 		});
 	});
@@ -3640,7 +3648,7 @@ EXECUTE.searches = function Xexecute(req, res) {
 			+ "WHERE Count>=? AND Returned<=? "
 			+ "HAVING datediff(now(),made)<= ?"
 			+ "ORDER BY openv.profiles.QoS,openv.profiles.Client" , [1,1,0,30]
-		).on("error", function (err) {
+		).on("error", err => {
 			Trace(err);
 		}).on("result", function (make) {
 			if (make.ID)
@@ -3748,7 +3756,7 @@ Delivery of  "+swap._Product+" is conditional on NGA/OCIO acceptance of this dev
 			for (var n in form_map)
 				swap_map[form_map[n]] = swap[n];
 
-			/*PDF.fillForm( form_template, form_final, swap_map, function (err) {
+			/*PDF.fillForm( form_template, form_final, swap_map, err => {
 				if (err) Log(`SWAP ${package} err`);
 			});*/
 			
@@ -3756,7 +3764,7 @@ Delivery of  "+swap._Product+" is conditional on NGA/OCIO acceptance of this dev
 			PDF.mapForm2PDF( swap, form_conv, function (err,swap_map) {
 				Log("map="+err);
 				
-				PDF.fillForm( form_template, form_final, swap_map, function (err) {
+				PDF.fillForm( form_template, form_final, swap_map, err => {
 					Log("fill="+err);
 				});
 			});
@@ -4346,7 +4354,7 @@ SELECT.proctor = function (req,res) {  //< grade quiz results
 		Score: query.score,
 		Pass: query.pass,
 		Taken: new Date()
-	}], function (err) {
+	}], err => {
 		
 		sql.forAll(
 			"",
@@ -4622,7 +4630,7 @@ function sysConfig(req,res) {
 	var query = Guard(req.query,false);
 	
 	if (query)
-		req.sql.query("UPDATE config SET ?", query, function (err) {
+		req.sql.query("UPDATE config SET ?", query, err => {
 			res( err || "parameter set" );
 		});
 }
