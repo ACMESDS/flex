@@ -4994,9 +4994,7 @@ function blogKeys(product, prime) {
 			if (opts)
 				Each(opts, ( key, val ) => tags[key] = val );
 
-			var rtn = "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
-			Log(">>>>fetch", rtn);
-			return rtn;
+			return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
 		},
 		gridify: site.gridify,
 		tag: site.tag,
@@ -5035,26 +5033,60 @@ function blogKeys(product, prime) {
 }
 
 SELECT.info = function (req,res) {
-	function toSchema( urlpre, path, obj ) {
+	function toSchema( path, obj ) {
 		if ( isObject(obj) ) {
 			var objs = [];
 			Each(obj, (key,val) => {
+				var next = path+"/"+key;
+				
 				if (val)
-					if ( isFunction(val) )
-						objs.push({
-							name: key, 
-							size: 10,
-							doc: (path+"/"+key).tag( "/api.view" ),
-							children: []
-						});
-
-					else
-						objs.push({
-							name: key, 
-							size: 10,
-							doc: (isString(val) && val.charAt(0)=="<") ? (path+"/"+key) + ": " + val : (path+"/"+key).tag( isObject(val) ? "" : urlpre+val ),
-							children: toSchema(urlpre, path+"/"+key, val)
-						});
+					switch (val.constructor.name) {
+						case "String":
+							objs.push({
+								name: key, 
+								size: 10,
+								doc: next + ": " + (val.charAt(0)=="<") 
+									? val 
+									: key.tag( 
+										( val.startsWith("http") || val.startsWith("mailto") )
+											? val
+											: pathPrefix+val 
+								),
+								children: toSchema(next, val)
+							}); break;
+							
+						case "Array":
+							objs.push({
+								name: key + `[${val.length}]`, 
+								size: 10,
+								doc: next,
+								children: toSchema(next, val)
+							}); break;
+						
+						case "Object":
+							objs.push({
+								name: key + ".", 
+								size: 10,
+								doc: next,
+								children: toSchema(next, val)
+							}); break;
+						
+						case "Function":
+							objs.push({
+								name: key + "(...)", 
+								size: 10,
+								doc: next.tag( "/api.view" ),
+								children: []
+							}); break;
+							
+						default:
+							objs.push({
+								name: key, 
+								size: 10,
+								doc: "",
+								children: []
+							}); break;
+					}
 			});
 			return objs;
 		}
@@ -5066,7 +5098,7 @@ SELECT.info = function (req,res) {
 	var
 		query = req.query,
 		sql = req.sql,
-		urlpre = FLEX.site.urls.master,
+		pathPrefix = FLEX.site.urls.master,
 		fetcher = FLEX.fetcher,
 		libs = {
 			misc: {},
@@ -5100,15 +5132,15 @@ SELECT.info = function (req,res) {
 		
 		info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
 		
-		res( toSchema( urlpre, "", {
-			root: {
+		res( toSchema( "", {
+			totem: {
 				providers: {
 					research: {
-						StanfordUniv: "www.stanford.edu",
-						CarnegieMellonUniv: "www.cmu.edu",
-						PennStateUnic: "www.penstateind.com",
-						OxfordUniv: "www.ox.ac.uk/",
-						FloridaStateUnic: "www.fsu.edu",
+						StanfordUniv: "https:www.stanford.edu",
+						CarnegieMellonUniv: "https:www.cmu.edu",
+						PennStateUnic: "https:www.penstateind.com",
+						OxfordUniv: "https:www.ox.ac.uk/",
+						FloridaStateUnic: "https:www.fsu.edu",
 						UnivMaryland: "https://www.umuc.edu",
 						KoreaAgencyForDefenseDevelopment: "https://en.wikipedia.org/wiki/Agency_for_Defense_Development"
 					},
@@ -5119,7 +5151,7 @@ SELECT.info = function (req,res) {
 							caffe: "https://caffe.berkeleyvision.org/"
 						},
 						anaconda: "http://anaconda.com/distribution",							
-						MSgithub: "https://github.com/996icu/996.ICU",
+						github: "https://github.com/996icu/996.ICU",
 						npm: "https://www.npmjs.com/"				
 					},
 					data: {
@@ -5190,7 +5222,7 @@ SELECT.info = function (req,res) {
 					JIRA: "JIRA",
 					RAS: "RAS"
 				},
-				totem: {
+				service: {
 					api: "/api.view",
 					"skinning guide": "/skinguide.view",
 					requirements: "/project.view",
