@@ -184,7 +184,7 @@ Document your usecase using markdown tags:
 
 						[ {_Product: product}], (err,recs) => {
 
-							Log("status", err, recs.length, q.sql);
+							//Log("status", err, q.sql);
 							
 							if ( recs.length )
 								recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
@@ -226,16 +226,14 @@ Document your usecase using markdown tags:
 				case "suitors":
 				case "publist":
 					var 
-						sites = {},
-						rtns = [];
+						suits = [];
 
 					sql.query(
 						"SELECT Name,Path FROM app.lookups WHERE ?",
-						{Ref: product}, (err,recs) => {
+						{Ref: name}, (err,recs) => {
 
 						recs.forEach( rec => {
-							rtns.push( `<a href="${urls.license}${rec.Path}">${rec.Name}</a>` );
-							sites[rec.Path] = rec.Name;
+							suits.push( rec.Name.tag( `${urls.transfer}${rec.Path}/${name}` ));
 						});
 
 						/*
@@ -250,7 +248,7 @@ Document your usecase using markdown tags:
 										url = URL.parse(rec.endService),
 										name = (url.host||"none").split(".")[0];
 
-									rtns.push( `<a href="${urls.license}${rec.endService}">${name}</a>` );
+									rtns.push( `<a href="${urls.transfer}${rec.endService}">${name}</a>` );
 								}
 							});
 
@@ -263,25 +261,23 @@ Document your usecase using markdown tags:
 
 							cb( rtns.join(", ") );
 						}); */
-						rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
+						suits.push( "loopback".tag( urls.loopback ) );
 
 						if (proxy)
-							rtns.push( `<a href="${urls.proxy}">or other</a>` );
+							suits.push( "other".tag( urls.proxy ) );
 
-						//rtns.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
+						//suits.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
 
-						cb( rtns.join(", ") );
+						cb( suits.join(", ") );
 							
-					});					
+					});	
 					break;
 					
 				case "tou":
 				case "help":
-					( eng.ToU || "ToU undefined" ).Xspoof( name, html => cb(html) );
+					( eng.ToU || "ToU undefined" )
+						.Xfetch( html => html.Xparms( name, html => cb(html) ));
 						
-					/*.Xspoof( {}, proxy, product, html => { 
-						cb(html);
-					}); */
 					break;
 
 				case "js":
@@ -4977,14 +4973,26 @@ function blogKeys(product, prime) {
 			repo: ENV.PLUGIN_REPO
 		};
 	
-	return This = Copy(prime || {}, {
+	return ctx = Copy(prime || {}, {
 		Name: name.toUpperCase(),
 		name: name,
 		product: product,
 		by: ENV.BYLINE,
-		register: `<!---parms endservice=https://myserivce/${product}--->`,
+		
+		register: `<!---parms endservice=https://myserivce/${name}--->`,
 		input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
-		fetch: (req, opts, input) => { 
+		
+		status: (x) => ctx.fetch( paths.product + ".status" ),
+		toumd: (x) => ctx.fetch( paths.product + ".toumd" ),
+		suitors: (x) => ctx.fetch( paths.product + ".suitors" ),
+		users: (x) => ctx.fetch( paths.product + ".users" ),
+		fetch: (url,tags) => {
+			console.log(">>>>>", url);
+			return "<!---fetch " + url.tag("?", tags || {} ) + "--->";
+		},
+		
+		/*
+		fetch: (req, opts, input) => {
 			var 
 				url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
 				tags = { };
@@ -4995,7 +5003,7 @@ function blogKeys(product, prime) {
 				Each(opts, ( key, val ) => tags[key] = val );
 
 			return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
-		},
+		}, */
 		gridify: site.gridify,
 		tag: site.tag,
 		get: site.get,
@@ -5007,7 +5015,7 @@ function blogKeys(product, prime) {
 				parts = (req || "").split("/"),
 				label = parts[0] || "request",
 				body = parts[1] || "request for information",
-				pocs = This.pocs || {};
+				pocs = ctx.pocs || {};
 			
 			return (pocs.admin||"").mailify( label, {subject: name+" request", body: body} );
 		},
@@ -5015,16 +5023,16 @@ function blogKeys(product, prime) {
 		now: (new Date())+"",
 		urls: {
 			loopback:  `${paths.worker}/${product}?endservice=${paths.product}.users`,
-			license: `${paths.worker}/${product}?endservice=`,
+			transfer: `${paths.worker}/${product}?endservice=`,
 			product: paths.product,
 			status: paths.product + ".status",
 			md: paths.product + ".md",
 			suitors: paths.product + ".suitors",
-			Totem: paths.worker,
-			totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
 			run: paths.product + ".run",
 			tou: paths.product + ".tou",
 			pub: paths.product + ".pub",
+			Totem: paths.worker,
+			totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
 			repo: paths.repo + name,
 			repofiles: paths.repo + name + "/raw/master",
 			relinfo: paths.master + "/releases.html?product=" + product
@@ -5042,18 +5050,41 @@ SELECT.info = function (req,res) {
 				if (val)
 					switch (val.constructor.name) {
 						case "String":
-							objs.push({
-								name: key, 
-								size: 10,
-								doc: next + ": " + (val.charAt(0)=="<") 
-									? val 
-									: key.tag( 
-										( val.startsWith("http") || val.startsWith("mailto") )
-											? val
-											: pathPrefix+val 
-								),
-								children: toSchema(next, val)
-							}); break;
+							if ( val.startsWith("<") )
+								objs.push({
+									name: key, 
+									size: 10,
+									doc: next + ": " + val ,
+									children: toSchema(next, val)
+								});
+							
+							else
+							if ( val.startsWith("http") || val.startsWith("mailto") )
+								objs.push({
+									name: key, 
+									size: 10,
+									doc: next + ": " + key.tag( val ),
+									children: toSchema(next, val)
+								}); 
+							
+							else
+							if ( val.startsWith("/") )
+								objs.push({
+									name: key, 
+									size: 10,
+									doc: next + ": " + key.tag( val ),
+									children: toSchema(next, val)
+								}); 
+
+							else
+								objs.push({
+									name: key, 
+									size: 10,
+									doc: next + ": " + val,
+									children: toSchema(next, val)
+								}); 
+								
+							break;
 							
 						case "Array":
 							objs.push({
@@ -5229,7 +5260,7 @@ SELECT.info = function (req,res) {
 					developers: {
 						repos: ENV.PLUGIN_REPO,
 						login: "/shares/winlogin.rdp",
-						prm: {
+						prms: {
 							debe: "/shares/prm/debe/index.html",
 							totem: "/shares/prm/totem/index.html",
 							atomic: "/shares/prm/atomic/index.html",
