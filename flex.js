@@ -2318,7 +2318,7 @@ SELECT.plugins = function Xselect(req,res) {
 						Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
 						View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
 						ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
-						TxStatus: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.status`}),
+						TxStatus: `/${eng.Name}.status`.tag("a",{href: `/${eng.Name}.status`}),
 						Publish: `/${eng.Name}.pub`.tag("a",{href: `/${eng.Name}.pub`}),
 						Source: `/public/${eng.Type}/${eng.Name}.js`,
 						Download: `/${eng.Name}.${eng.Type}`.tag("a",{href: `/${eng.Name}.${eng.Type}`}),
@@ -5127,6 +5127,7 @@ SELECT.info = function (req,res) {
 	}
 	
 	var
+		sql = req.sql,
 		query = req.query,
 		sql = req.sql,
 		pathPrefix = FLEX.site.urls.master,
@@ -5138,7 +5139,9 @@ SELECT.info = function (req,res) {
 				train: {},
 				predict: {}
 			}
-		};
+		},
+		tables = {}, 
+		xtables = {};
 	
 	Each( $.extensions, (name,ex) => {		
 		if ( isFunction(ex) ) {
@@ -5158,126 +5161,142 @@ SELECT.info = function (req,res) {
 		}
 	});
 	
-	fetcher( "/plugins", null, info => {
-		var plugs = {};
+	sql.query("SHOW TABLES FROM app")
+	.on("result", rec => {
+		if ( name = rec.Tables_in_app )
+			if ( !name.startsWith("_") )
+				if ( name.indexOf("demo") < 0 )
+					tables[ name ] = name.tag( `/${name}` );
+	})
+	.on("end", (x) => {
+		Each( SELECT, table => {
+			xtables[ table ] = table.tag( `/${table}` );
+		});
 		
-		info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
-		
-		res( toSchema( "", {
-			totem: {
-				providers: {
-					research: {
-						StanfordUniv: "https:www.stanford.edu",
-						CarnegieMellonUniv: "https:www.cmu.edu",
-						PennStateUnic: "https:www.penstateind.com",
-						OxfordUniv: "https:www.ox.ac.uk/",
-						FloridaStateUnic: "https:www.fsu.edu",
-						UnivMaryland: "https://www.umuc.edu",
-						KoreaAgencyForDefenseDevelopment: "https://en.wikipedia.org/wiki/Agency_for_Defense_Development"
-					},
-					"s/w": {
-						opencv: {
-							torch: "https://pytorch.org/",
-							tensorflow: "https://www.tensorflow.org/",
-							caffe: "https://caffe.berkeleyvision.org/"
+		fetcher( "/plugins", null, info => {
+			var plugs = {};
+
+			info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
+
+			res( toSchema( "", {
+				totem: {
+					providers: {
+						research: {
+							StanfordUniv: "https:www.stanford.edu",
+							CarnegieMellonUniv: "https:www.cmu.edu",
+							PennStateUnic: "https:www.penstateind.com",
+							OxfordUniv: "https:www.ox.ac.uk/",
+							FloridaStateUnic: "https:www.fsu.edu",
+							UnivMaryland: "https://www.umuc.edu",
+							KoreaAgencyForDefenseDevelopment: "https://en.wikipedia.org/wiki/Agency_for_Defense_Development"
 						},
-						anaconda: "http://anaconda.com/distribution",							
-						github: "https://github.com/996icu/996.ICU",
-						npm: "https://www.npmjs.com/"				
-					},
-					data: {
-						high: {
-							blitz: "https://blitz.ilabs.ic.gov",
-							usaf: "https://b.nro.ic.gov",
-							bvi: "https://bvi.ilabs.ic.gov",
-							proton: "tbd",
-							icon: "tbd",
-							chrome: "tbd",
-							irevents: "https://tada.ic.gov",
-							ess: "https://ess.nga.ic.gov",
-							thresher: "https://thresher.ilabs.ic.gov"
+						"s/w": {
+							opencv: {
+								torch: "https://pytorch.org/",
+								tensorflow: "https://www.tensorflow.org/",
+								caffe: "https://caffe.berkeleyvision.org/"
+							},
+							anaconda: "http://anaconda.com/distribution",							
+							github: "https://github.com/996icu/996.ICU",
+							npm: "https://www.npmjs.com/"				
 						},
-						low: {
-						}
-					},
-					DTOs: {
-						mexican: {
-							guadalajara: "x",
-							sinola: {
-								colima: "x",
-								sonora: "x",
-								artistas: "x",
-								"gente nueva": "x",
-								"los antrax": "x"
+						data: {
+							high: {
+								blitz: "https://blitz.ilabs.ic.gov",
+								usaf: "https://b.nro.ic.gov",
+								bvi: "https://bvi.ilabs.ic.gov",
+								proton: "tbd",
+								icon: "tbd",
+								chrome: "tbd",
+								irevents: "https://tada.ic.gov",
+								ess: "https://ess.nga.ic.gov",
+								thresher: "https://thresher.ilabs.ic.gov"
 							},
-							"beltran-leyva": {
-								"los negros": "x",
-								"south pacific": "x",
-								"del centro": "x",
-								"independence de acapulco": "x",
-								"la barredora": "x",
-								"el comando del diablo": "x",
-								"la mano con ojos": "x",
-								"la nueva administracion": "x",
-								"la oficina": "x"
+							low: {
+							}
+						},
+						DTOs: {
+							mexican: {
+								guadalajara: "x",
+								sinola: {
+									colima: "x",
+									sonora: "x",
+									artistas: "x",
+									"gente nueva": "x",
+									"los antrax": "x"
+								},
+								"beltran-leyva": {
+									"los negros": "x",
+									"south pacific": "x",
+									"del centro": "x",
+									"independence de acapulco": "x",
+									"la barredora": "x",
+									"el comando del diablo": "x",
+									"la mano con ojos": "x",
+									"la nueva administracion": "x",
+									"la oficina": "x"
+								},
+								gulf: {
+									"los zetas": "x",
+									"la familia michoacana": "x",
+									"knights templar" : "x",
+									"los caballeros": "x"
+								},
+								juarez: "x",
+								tijuana: "x",
+								"barrio azteca": "x",
+								"milenio": {
+									"la resistancia": "x",
+									"jalisco new generation": "x"
+								}
+							}
+						},
+						ISP: {
+							dev: {
+								"RLE High": "mailto:poc",
+								"RLE Low": "mailto:poc"
 							},
-							gulf: {
-								"los zetas": "x",
-								"la familia michoacana": "x",
-								"knights templar" : "x",
-								"los caballeros": "x"
-							},
-							juarez: "x",
-							tijuana: "x",
-							"barrio azteca": "x",
-							"milenio": {
-								"la resistancia": "x",
-								"jalisco new generation": "x"
+							"target op": {
+								blitz: "https://blitz.ic.gov",
+								proton: "https://protoon.ic.gov"
 							}
 						}
 					},
-					ISP: {
-						dev: {
-							"RLE High": "mailto:poc",
-							"RLE Low": "mailto:poc"
+					project: {
+						plugins: plugs,
+						RTP: "/rtpsqd.view?task=seppfm",
+						JIRA: "JIRA",
+						RAS: "RAS"
+					},
+					service: {
+						api: "/api.view",
+						"skinning guide": "/skinguide.view",
+						requirements: "/project.view",
+						developers: {
+							repos: ENV.PLUGIN_REPO,
+							login: "/shares/winlogin.rdp",
+							prms: {
+								debe: "/shares/prm/debe/index.html",
+								totem: "/shares/prm/totem/index.html",
+								atomic: "/shares/prm/atomic/index.html",
+								man: "/shares/prm/man/index.html",
+								flex: "/shares/prm/flex/index.html",
+								geohack: "/shares/geohack/man/index.html"
+							}
 						},
-						"target op": {
-							blitz: "https://blitz.ic.gov",
-							proton: "https://protoon.ic.gov"
+						tables: {
+							flex: xtables,
+							sql: tables
 						}
+					},
+					plugins: {
+						libs: libs,
+						published: plugs
 					}
-				},
-				project: {
-					plugins: plugs,
-					RTP: "/rtpsqd.view?task=seppfm",
-					JIRA: "JIRA",
-					RAS: "RAS"
-				},
-				service: {
-					api: "/api.view",
-					"skinning guide": "/skinguide.view",
-					requirements: "/project.view",
-					developers: {
-						repos: ENV.PLUGIN_REPO,
-						login: "/shares/winlogin.rdp",
-						prms: {
-							debe: "/shares/prm/debe/index.html",
-							totem: "/shares/prm/totem/index.html",
-							atomic: "/shares/prm/atomic/index.html",
-							man: "/shares/prm/man/index.html",
-							flex: "/shares/prm/flex/index.html",
-							geohack: "/shares/geohack/man/index.html"
-						}
-					}
-				},
-				plugins: {
-					libs: libs,
-					published: plugs
 				}
-			}
-		}) );
-	});
-	
+			}) );
+		});
+	});	
 }
 
 SELECT.gen = function (req, res) {
