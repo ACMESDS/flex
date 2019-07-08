@@ -176,7 +176,7 @@ Document your usecase using markdown tags:
 								});
 						};
 
-					var q = sql.query(
+					sql.query(
 						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
 						+ " 'fail' AS _Status, _Fails, "
 						+ "group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Partners, sum(_Copies) AS _Copies "
@@ -443,10 +443,16 @@ Document your usecase using markdown tags:
 					return opt;
 			}
 			
+			function genToU( mod, toukeys, cb ) {
+				(getter( mod.tou || mod.readme ) || defs.tou)
+				.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
+				.Xblog(null, `${name}?name=test2`, {}, {}, toukeys, false, tou => {
+					cb( mod, tou );
+				});
+			}
+				
 			var 
-				sql = req.sql,
-				paths = FLEX.paths.publish,
-				pathname = paths[type] + name;
+				pathname = FLEX.paths.publish[type] + name;
 			
 			try {
 				var	mod = require(process.cwd() + pathname.substr(1));
@@ -457,7 +463,9 @@ Document your usecase using markdown tags:
 			}
 
 			var
-				resetAll = false,
+				sql = req.sql,
+				modkeys = mod.mods || mod.modkeys || mod._mods,
+				addkeys = mod.adds || mod.addkeys || mod.keys,
 				product = name + "." + type,
 				defs = {   // defaults
 					tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
@@ -468,17 +476,15 @@ Document your usecase using markdown tags:
 					},
 					docs: FLEX.defaultDocs || {}
 				},
-				dockeys = Copy( defs.docs, mod.docs || mod.dockeys || {}),
-				modkeys = mod.mods || mod.modkeys || mod._mods,
-				addkeys = mod.adds || mod.addkeys || mod.keys,
-				subkeys = blogKeys(product, Copy( mod.subs || {} , {
+				dockeys = Copy( mod.docs || mod.dockeys || {}, Copy( defs.docs, Copy( modkeys, Copy( addkeys, {} )))),
+				toukeys = blogKeys(product, {
 					summary: "summary tbd",
 					reqts: defs.envs[type] || "reqts tbd",
 					ver: "ver tbd",
 					//pocs: ["brian.d.james@coe.ic.gov"],
 					interface: () => {
 						var ifs = [];
-						Each( Copy( modkeys, Copy( addkeys, {} ) ), (key, type) => {
+						Each( dockeys, (key, type) => {
 							if ( !(key in defs.docs) )
 								 ifs.push({ 
 									 Key: key, 
@@ -488,135 +494,134 @@ Document your usecase using markdown tags:
 						});
 						return ifs.gridify();
 					}
-				}));	
-				
-			if ( mod.clear || mod.reset )
-				sql.query("DROP TABLE app.??", name);
-
-			sql.query( 
-				`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
-				[], err => {
-
-				if ( modkeys )
-					Each( modkeys, (key,type) => {
-						var 
-							keyId = sql.escapeId(key),
-							doc = dockeys[key] || "" ,
-							comment = "",
+				});
 							
-						type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-							comment = com;
-							return "";
-						});
-						
-						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
-							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
-						});
-						
-					});
+			genToU(mod, toukeys, (mod, tou) => {
 
-				else
-				if ( addkeys)
-					Each( addkeys, function (key,type) {
+				if ( mod.clear || mod.reset )
+					sql.query("DROP TABLE app.??", name);
+
+				sql.query( 
+					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
+					[], err => {
+
+					var
+						modkeys = mod.mods || mod.modkeys || mod._mods,
+						addkeys = mod.adds || mod.addkeys || mod.keys;
+
+					if ( modkeys )
+						Each( modkeys, (key,type) => {
+							var 
+								keyId = sql.escapeId(key),
+								doc = dockeys[key] || "" ,
+								comment = "",
+
+							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+								comment = com;
+								return "";
+							});
+
+							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
+							});
+
+						});
+
+					else
+					if ( addkeys)
+						Each( addkeys, function (key,type) {
+							var 
+								keyId = sql.escapeId(key),
+								doc = dockeys[key],
+								comment = "";
+
+							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+								comment = com;
+								return "";
+							});
+
+							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
+							});
+
+						});
+
+					if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
+						inits.forEach( function (init, idx) {
+							sql.query("INSERT INTO app.?? SET ?", init);
+						});
+
+					if  ( readme = mod.readme )
+						FS.writeFile( pathname+".xmd", readme, "utf8" );
+
+					if ( code = getter( mod.engine || mod.code) ) {
+
+						if ( relicense ) 
+							FLEX.licenseCode( sql, code, {
+								_Partner: "totem",
+								_EndService: ENV.SERVICE_MASTER_URL,
+								_Published: new Date(),
+								_Product: product,
+								Path: pathname
+							}, pub => {
+								if (pub)
+									Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
+							});
+
+						// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+
 						var 
-							keyId = sql.escapeId(key),
-							doc = dockeys[key],
-							comment = "";
+							from = type,
+							to = mod.to || from,
+							fromFile = pathname + "." + from,
+							toFile = pathname + "." + to,
+							jsCode = {},
+							rev = {
+								Code: code,
+								Wrap: getter( mod.wrap ) || "",
+								ToU: tou,
+									// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+								State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+							};
 
-						type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-							comment = com;
-							return "";
-						});
-						
-						(doc+"\n"+comment).Xblog(req, "", {}, {}, subkeys, false, html => {
-							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
-						});
-						
-					});
+						Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
-				if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
-					inits.forEach( function (init, idx) {
-						sql.query("INSERT INTO app.?? SET ?", init);
-					});
+						if ( from == to )  { // use code as-is
+							sql.query( 
+								"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+									Name: name,
+									Type: type,
+									Enabled: 1
+								}), rev ] );
 
-				if  ( readme = mod.readme )
-					FS.writeFile( pathname+".xmd", readme, "utf8" );
-			});
-
-			if ( code = getter( mod.engine || mod.code) ) {
-
-				if ( relicense ) 
-					FLEX.licenseCode( sql, code, {
-						_Partner: "totem",
-						_EndService: ENV.SERVICE_MASTER_URL,
-						_Published: new Date(),
-						_Product: product,
-						Path: pathname
-					}, pub => {
-
-						if (pub)
-							Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
-					});
-
-				// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
-				
-				(getter( mod.tou || mod.readme ) || defs.tou)
-				.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
-				.Xblog(null, `${name}?name=test2`, {}, {}, subkeys, false, tou => {
-
-					var 
-						from = type,
-						to = mod.to || from,
-						fromFile = pathname + "." + from,
-						toFile = pathname + "." + to,
-						jsCode = {},
-						rev = {
-							Code: code,
-							Wrap: getter( mod.wrap ) || "",
-							ToU: tou,
-								// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-							State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-						};
-
-					// Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
-
-					if ( from == to )  { // use code as-is
-						sql.query( 
-							"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-								Name: name,
-								Type: type,
-								Enabled: 1
-							}), rev ] );
-
-						if (from == "js") {	// import js function into $
-							jsCode[name] = mod.engine || mod.code;
-							$(jsCode);
+							if (from == "js") {	// import js function into $
+								jsCode[name] = mod.engine || mod.code;
+								$(jsCode);
+							}
 						}
+
+						else  // convert code to requested type
+							//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+							FS.writeFile( fromFile, code, "utf8", err => {
+								CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+									if (!err) 
+										FS.readFile( toFile, "utf8", (err,code) => {
+											rev.Code = code;
+											if (!err)
+												sql.query( 
+													"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+														Name: name,
+														Type: type,
+														Enabled: 1
+													}), rev ] );
+										});									
+								});
+							});	
 					}
 
-					else  // convert code to requested type
-						//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
-						FS.writeFile( fromFile, code, "utf8", err => {
-							CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-								if (!err) 
-									FS.readFile( toFile, "utf8", (err,code) => {
-										rev.Code = code;
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-													Name: name,
-													Type: type,
-													Enabled: 1
-												}), rev ] );
-									});									
-							});
-						});	
-			
+					// CP.exec(`cd ${name}.d; sh publish.sh`);
 				});
-				
-			}
-			
-			CP.exec(`cd ${name}.d; sh publish.sh`);
+			});	
 		},
 		
 		genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
@@ -2110,7 +2115,7 @@ SELECT.likeus = function Xselect(req, res) {
 SELECT.tips = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 
-	var q = sql.query(
+	sql.query(
 		"SELECT *, "
 		+ "count(detects.ID) AS weight, "
 		+ "concat('/tips/',chips.ID,'.jpg') AS tip, "
