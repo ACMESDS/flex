@@ -28,7 +28,11 @@
 @requires jshint
 @requires prettydiff
 */
- 
+/* 
++ Fix addterms.  If tou.txt does not need blog keys, then can simplify and
+move blogKeys to dep method.
+*/
+
 var 
 	// globals
 	TRACE = "X>",
@@ -1386,7 +1390,8 @@ SELECT.baseline = function Xselect(req, res) {
 /**
 @class EMAIL peer-to-peer email exchange interface
 */
-	
+
+/*
 SELECT.email = function Xselect(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
@@ -1397,7 +1402,7 @@ SELECT.email = function Xselect(req,res) {
 	});
 	
 }
-	
+
 EXECUTE.email = function Xexecute(req,res) {
 	var sql = req.sql, log = req.log, query = req.query, flags = req.flags;
 	
@@ -1412,7 +1417,7 @@ EXECUTE.email = function Xexecute(req,res) {
 		}, sql);
 	});
 	
-}
+}*/
 
 // Master catalog interface
 
@@ -2080,7 +2085,7 @@ SELECT.likeus = function Xselect(req, res) {
 		to: pocs.admin || "admin@undefined.ic.gov",
 		subject: req.client + " likes " + FLEX.site.title + " !!", 
 		body: "Just saying"
-	});
+	}, sql );
 
 	var user = {
 		expired: "your subscription has expired",
@@ -4004,17 +4009,35 @@ function openIMAP(cb) {
 
 function sendMail(opts, sql) {
 	
-	Trace(`MAIL ${opts.to} RE ${opts.subject}`, sql);
+	function send(opts) {
+		if ( email = FLEX.mailer.TX.TRAN ) {
+			opts.from = "totem@noreply.gov";
+			opts.alternatives = [{
+				contentType: 'text/html; charset="ISO-59-1"',
+				contents: ""
+			}];
 
-	opts.from = "totem@noreply.gov";
-	opts.alternatives = [{
-		contentType: 'text/html; charset="ISO-59-1"',
-		contents: ""
-	}];
-
+			email.sendMail(opts, err => Trace(`MAIL ${opts.to} re:${opts.subject} ` + (err||"ok") ) );
+		}
+	}
+		
 	if (opts.to) 
-		if ( email = send = FLEX.mailer.TX.TRAN )
-			email.sendMail(opts, err => Trace("MAIL "+ (err || opts.to) ) );
+		if ( sql ) 
+			sql.query("INSERT INTO app.email SET ?", {
+				To: opts.to,
+				Body: opts.body,
+				Subject: opts.subject,
+				Send: false,
+				Remove: false
+			}, err => {
+				
+				if (err) // no email buffer provided so send it
+					send(opts);
+			
+			});
+	
+		else
+			send(opts);
 }
 
 /*
@@ -4311,7 +4334,7 @@ To connect to ${nickref} from Windows:
 						cc: isp.ps,
 						subject: `${nick} login failed`,
 						body: err + `This is an automatted request from ${nick}.  Please provide ${isp.ps} "sudo" for ${prep} on ${isp.machine}`
-					});
+					}, sql);
 				}
 
 				else  {
@@ -4322,7 +4345,7 @@ To connect to ${nickref} from Windows:
 						cc: `${isp.ps};${isp.admin}`,
 						subject: `${nick} login established`,
 						body: notice
-					});
+					}, sql);
 				};
 			});
 		});
@@ -4399,7 +4422,7 @@ SELECT.proctor = function (req,res) {  //< grade quiz results
 						body: 
 							`you completed all ${topic} modules and may claim your `
 							+ "certificate".tag("a", {href:`/stores/cert_${topic}_${client}.pdf`})
-					});
+					}, sql );
 				}
 				
 		});
@@ -4590,7 +4613,7 @@ SELECT.help = function (req,res) {
 		from = query.from,
 		site = FLEX.site;
 	
-	res("email submitted");
+	res("your name has been added to the automatted, class-action remedy tickit");
 	switch (from) {
 		case "pmo":
 		case "asp":
