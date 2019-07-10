@@ -31,6 +31,7 @@
 /* 
 + Fix addterms.  If tou.txt does not need blog keys, then can simplify and
 move blogKeys to dep method.
+products, partner, published, license, urls (service, tou, repoat) and []() md
 */
 
 var 
