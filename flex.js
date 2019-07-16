@@ -4480,14 +4480,20 @@ SELECT.wms = function (req,res) {
 		});
 }
 
-SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog to induce image-spoofing in the chipper.
+SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	var 
 		sql = req.sql,
 		query = req.query,
 		fetcher = FLEX.fetcher,
 		site = FLEX.site,
-		ring = query.ring || [],
-		src = (query.src || "").toUpperCase();
+		chip = {	// chip attributes
+			width: query.width || 100, // chip pixels lat,
+			height: query.height || 100, // chip pixels lon,
+			srs: "epsg%3A4326",
+			format: "image/jpeg"
+		},
+		ring = query.ring || [],		// aoi ring
+		src = (query.src || "").toUpperCase();	// catalog service
 	
 	switch (src) {
 		case "DGLOBE":
@@ -4498,26 +4504,28 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			query.geometryPolygon = JSON.stringify({rings: ring});  // ring being monitored
 	}
 
-	delete query.ring;
+	delete query.ring; delete query.src;
 	
 	if ( url = ENV[`WFS_${src}`] )
-		fetcher( url.tag("?", query), null, function (cat) {  // query catalog for desired data channel
-
+		fetcher( url.tag("?", query), null, cat => {  // query catalog for desired data channel
 			if ( cat = cat.parseJSON() ) {
 				switch ( src ) {  // normalize cat response to ess
 					case "DGLOBE":
+						// tbd
 					case "OMAR":
+						// tbd
 					case "ESS":
 						var
-							res = ( cat.GetRecordsResponse || {SearchResults: {}} ).SearchResults,
-							collects = res.DatasetSummary || [],
+							recs = ( cat.GetRecordsResponse || {SearchResults: {}} ).SearchResults,
+							collects = recs.DatasetSummary || [],
 							sets = [];
 
-						collects.each( function (n,collect) {  // pull image collects from each catalog entry
+						collects.forEach( collect => {  // pull image collects from each catalog entry
 
 							//Log(collect);
 							var 
 								image = collect["Image-Product"].Image,
+								imageID = image.ImageId.replace(/ /g,""),
 								sun = image["Image-Sun-Characteristic"] || {SunElevationDim: "0", SunAzimuth: "0"},
 								restrict = collect["Image-Restriction"] || {Classification: "?", ClassificationSystemId: "?", LimitedDistributionCode: ["?"]},
 								raster = image["Image-Raster-Object-Representation"],
@@ -4530,7 +4538,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 								};
 
 							if (urls.wms)  // valid collects have a wms url
-								sets.push({
+								sets.push({	
 									imported: new Date(image.ImportDate),
 									collected: new Date(image.QualityRating),
 									mission: image.MissionId,
@@ -4540,22 +4548,22 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 									clouds: atm.CloudCoverPercentageRate,
 									country: region.CountryCode[0],
 									classif: restrict.ClassificationCode + "//" + restrict.LimitedDistributionCode[0],
-									imageID: image.ImageId.replace(/ /g,""),
+									imageID: imageID,
 											// "12NOV16220905063EA00000 270000EA530040"
 									mode: image.SensorCode,
 									bands: parseInt(image.BandCountQuantity),
 									gsd: parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
-									wms: 
-										urls.wms.replace(
-											"?REQUEST=GetCapabilities&VERSION=1.3.0",
-											"?request=GetMap&version=1.1.1") 
+									path: urls.wms
+											.replace("http:", "wget:")
+											.replace("https:", "wgets:")
+											.replace(
+												"?REQUEST=GetCapabilities&VERSION=1.3.0",
+												"?request=GetMap&version=1.1.1")
 
-										+ "".tag("?", {
-											width: aoi.lat.pixels,
-											height: aoi.lon.pixels,
-											srs: "epsg%3A4326",
-											format: "image/jpeg"
-										}).replace("?","&")
+											.tag("&", chip)
+									
+											+ "////"	// wget output path
+											+ "./images/"+imageID
 								});
 
 						});
@@ -4565,10 +4573,11 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			}
 
 			else
-				res( null );
+				res( "" );
 		});	
 	
 	else
+	if ( src == "SPOOF" ) // spoof
 		res([{			
 			imported: new Date(),
 			collected: new Date(),
@@ -4616,6 +4625,9 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			}
 		} */
 		}]);
+	
+	else
+		res( "" );
 
 }
 
