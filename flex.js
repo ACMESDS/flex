@@ -4475,9 +4475,7 @@ SELECT.wms = function (req,res) {
 	res("ok");
 	
 	if ( url = ENV[`WMS_${src.toUpperCase()}`] ) 
-		fetcher(url.tag("?", query), null, function (rtn) {
-			Log("wms stat", rtn);
-		});
+		fetcher(url.tag("?", query), null, rtn => Log("wms returned", rtn) )
 }
 
 SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
@@ -4504,7 +4502,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			query.geometryPolygon = JSON.stringify({rings: ring});  // ring being monitored
 	}
 
-	delete query.ring; delete query.src;
+	delete query.src;
 	
 	if ( url = ENV[`WFS_${src}`] )
 		fetcher( url.tag("?", query), null, cat => {  // query catalog for desired data channel
@@ -4593,7 +4591,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			mode: "XX", //image.SensorCode,
 			bands: 0, //parseInt(image.BandCountQuantity),
 			gsd: 0, //parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
-			wms: site.urls.master+"/shares/images/spoof.jpg"			
+			wms: ""+"////" + "./images/spoof.jpg"	
 			/*{
 			GetRecordsResponse: {
 				SearchResults: {
