@@ -81,10 +81,10 @@ var
 		},
 		
 		defaultDocs: {	// default plugin docs (db key comments)
-			Export: "switch writes engine results into a file [api](/api.view)",
-			Ingest: "switch ingests engine results into the database",
-			Share: "switch returns engine results to the status area",
-			Pipe: `
+			export: "switch writes engine results into a file [api](/api.view)",
+			ingest: "switch ingests engine results into the database",
+			share: "switch returns engine results to the status area",
+			pipe: `
 Place a DATASET into a supervised workflow using the Pipe:
 
 	"DATASET.TYPE?QUERY"  
@@ -95,7 +95,7 @@ workflow based on TYPE = json || jpg || stream || txt || CASE using TYPE-specifi
 and TYPE-specific [supervisor context keys](/api.view).
 `, 
 
-			Description: `
+			description: `
 Document your usecase using markdown tags:
 
 	[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
@@ -109,13 +109,14 @@ Document your usecase using markdown tags:
 
 `,
 
-			Config: "js-script defines a usecase context  ",
-			Save: "json aggregates engine results not captured in other Save_KEYs  ",
-			Entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
-			Exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
-			Batch: "value overrides the supervisor's batch size  (0 disabled)  ",
-			Symbols: "json overrides the supervisor's state symbols (null defaults)  ",
-			Steps: "value overrides the supervisor's observation interval (0 defaults) "
+			donfig: "js-script defines a usecase context  ",
+			save: "json aggregates engine results not captured in other Save_KEYs  ",
+			entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
+			exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
+			batch: "value overrides the supervisor's batch size  (0 disabled)  ",
+			symbols: "json overrides the supervisor's state symbols (null defaults)  ",
+			steps: "value overrides the supervisor's observation interval (0 defaults) ",
+			ring: "[[lat,lon], ...] in degs 4+ length vector defining an aoi"
 		},
 
 		licenseOnDownload: true,
@@ -247,7 +248,7 @@ Document your usecase using markdown tags:
 							"SELECT endService FROM app.releases GROUP BY endServiceID", 
 							[],  (err,recs) => {
 
-							recs.forEach( (rec) => {
+							recs.forEach( rec => {
 								if ( !sites[rec.endService] ) {
 									var 
 										url = URL.parse(rec.endService),
@@ -487,7 +488,7 @@ Document your usecase using markdown tags:
 			// default dockeys
 			
 			for ( var key in prokeys )
-				dockeys[key] = dockeys[key] || defs.docs[key] || "";
+				dockeys[key] = dockeys[key] || defs.docs[key.toLowerCase()] || "";
 			
 			// strip comments from product keys
 			
@@ -844,8 +845,9 @@ Document your usecase using markdown tags:
 		},
 		
 		paths: {
-			status: "./public/shares/status.xlsx",
-			logins: "./public/shares/logins",
+			chips: "./stash/images/chips/",
+			status: "./shares/status.xlsx",
+			logins: "./shares/logins",
 			publish: {
 				js: "./public/js/",
 				py: "./public/py/",
@@ -4561,7 +4563,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 											.tag("&", chip)
 									
 											+ "////"	// wget output path
-											+ "./images/"+imageID
+											+ FLEX.paths.chips+imageID
 								});
 
 						});
@@ -4883,22 +4885,22 @@ SELECT.status = function (req,res) {
 	
 	Log(year,week,from,to);
 	
-	READ.xlsx(sql, FLEX.paths.status, function (recs) {
+	READ.xlsx(sql, FLEX.paths.status, recs => {
 
 		if (recs ) {			
 			Each( recs[0], (key,val) => {  // remove cols outside this year
 				if ( key.startsWith("_") )
 					if ( !key.startsWith(_year) )
-						recs.forEach( (rec) => delete rec[key] );
+						recs.forEach( rec => delete rec[key] );
 			});
 				
 			if (from) 	// remove cols before from-week
 				for (var n=1,N=from; n<N; n++)  
-					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
+					recs.forEach( rec => delete rec[ _year+"-"+n] );
 
 			if (to)		// remove cols after to-week
 				for (var n=to+1, N=99; n<N; n++)
-					recs.forEach( (rec) => delete rec[ _year+"-"+n] );
+					recs.forEach( rec => delete rec[ _year+"-"+n] );
 
 			var fill = new Object(recs[0]);
 			
@@ -4983,7 +4985,7 @@ SELECT.status = function (req,res) {
 		}
 		
 		else
-			res( new Error("could not find status.xlsx") );
+			res( new Error( `could not find ${FLEX.paths.status}` ) );
 		
 	});
 	
