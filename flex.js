@@ -87,11 +87,11 @@ var
 			pipe: `
 Place a DATASET into a supervised workflow using the Pipe:
 
-	"DATASET.TYPE?QUERY"  
-	{ "path": "DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
+	"/DATASET.TYPE?QUERY"  
+	{ "path": "/DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
 The 2nd-form generates usecases over the specified context KEYs.  The 1st-form selects the
-workflow based on TYPE = json || jpg || stream || txt || CASE using TYPE-specific [QUERY filter keys](/api.view) 
+workflow based on TYPE = json || jpg || stream || txt || aoi using TYPE-specific [QUERY keys](/api.view) 
 and TYPE-specific [supervisor context keys](/api.view).
 `, 
 
@@ -845,7 +845,7 @@ Document your usecase using markdown tags:
 		},
 		
 		paths: {
-			chips: "./stash/images/chips/",
+			chips: "./chips/",
 			status: "./shares/status.xlsx",
 			logins: "./shares/logins",
 			publish: {
@@ -4493,6 +4493,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			format: "image/jpeg"
 		},
 		ring = query.ring || [],		// aoi ring
+		chipper = "wms",  // wms || jpip || wmts
 		src = (query.src || "").toUpperCase();	// catalog service
 	
 	switch (src) {
@@ -4553,7 +4554,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 									mode: image.SensorCode,
 									bands: parseInt(image.BandCountQuantity),
 									gsd: parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
-									path: urls.wms
+									wms: urls[chipper]
 											.replace("http:", "wget:")
 											.replace("https:", "wgets:")
 											.replace(
@@ -4561,9 +4562,8 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 												"?request=GetMap&version=1.1.1")
 
 											.tag("&", chip)
-									
 											+ "////"	// wget output path
-											+ FLEX.paths.chips+imageID
+											+ FLEX.paths.chips + imageID
 								});
 
 						});
@@ -4588,12 +4588,12 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 			clouds: 0, //atm.CloudCoverPercentageRate,
 			country: "XX", //region.CountryCode[0],
 			classif: "", //restrict.ClassificationCode + "//" + restrict.LimitedDistributionCode[0],
-			imageID: "debug",
+			imageID: "ddxxxyymmmmxxxxxEAnnnnn xxxxxEAnnnnnn",
 					// "12NOV16220905063EA00000 270000EA530040"
 			mode: "XX", //image.SensorCode,
 			bands: 0, //parseInt(image.BandCountQuantity),
 			gsd: 0, //parseFloat(image.MeanGroundSpacingDistanceDim)*25.4e-3,
-			wms: ""+"////" + "./images/spoof.jpg"	
+			wms: "" + "////" + FLEX.paths.chips + "spoof.jpg"	
 			/*{
 			GetRecordsResponse: {
 				SearchResults: {
@@ -4636,9 +4636,7 @@ SELECT.matlab = function (req,res) {
 		sql = req.sql,
 		query = req.query;
 	
-	
-	res("flushed");
-		
+	res("matlab queue flushed");		
 }
 
 SELECT.help = function (req,res) {
