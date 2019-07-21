@@ -4,10 +4,10 @@
   "description": "FLEX framework for totem",
   "main": "flex.js",
   "scripts": {
-	  "prmprep": "source ./maint.sh prmput",
-	  "prmload": "source ./maint.sh prmget",	  
-	  "edit": "vi ./config.sh",
-	  "start": "source ./config.sh",
+    "prmprep": "source ./maint.sh prmput",
+    "prmload": "source ./maint.sh prmget",
+    "edit": "vi ./config.sh",
+    "start": "source ./config.sh",
     "test": "node flex.js  "
   },
   "repository": {
@@ -24,6 +24,7 @@
     "html-minifier": "^3.5.21",
     "imap": "^0.8.19",
     "jshint": "^2.10.2",
+    "neo4j": "^2.0.0-RC2",
     "nodemailer": "^4.7.0",
     "nodemailer-smtp-transport": "^2.7.4",
     "prettydiff": "^99.0.1",

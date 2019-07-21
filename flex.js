@@ -27,6 +27,7 @@
 @requires feed-read
 @requires jshint
 @requires prettydiff
+@requires neo4j
 */
 /* 
 + Fix addterms.  If tou.txt does not need blog keys, then can simplify and
@@ -53,8 +54,9 @@ var
 	OS = require('os'),					// OS utilitites
 
 	// 3rd party bindings
+	NEO = require("neo4j"),			// light-weight graph database
 	JSMIN = require("uglify-js"), 			// code minifier
-	HTMLMIN = require("html-minifier"), // html minifier
+	HMIN = require("html-minifier"), // html minifier
 	//PDF = require('pdffiller'), 		// pdf form processing
 	MAIL = require('nodemailer'),		// MAIL mail sender
 	SMTP = require('nodemailer-smtp-transport'),
@@ -657,7 +659,7 @@ Document your usecase using markdown tags:
 			if (secret)
 				switch (type) {
 					case "html":
-						var minCode = HTMLMIN.minify(code.replace(/<br>/g,""), {
+						var minCode = HMIN.minify(code.replace(/<br>/g,""), {
 							removeAttributeQuotes: true
 						});
 						cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
@@ -889,7 +891,7 @@ Document your usecase using markdown tags:
 		//uploader: () => {Trace("file uploader not configured");},  //< file uploader
 		//emitter: () => {Trace("client emitter not configured");},  //< client syncer
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
-		skinner: () => {Trace("site skinner not configured");},  //< site skinner
+		//skinner: () => {Trace("site skinner not configured");},  //< site skinner
 
 		getContext: function ( sql, host, where, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 			
@@ -5375,7 +5377,29 @@ SELECT.gen = function (req, res) {
 
 switch ( process.argv[2] ) { //< unit tests
 	case "?":
-		Log("no unit tests defined for flex.js");
+		Log("F1");
+		break;
+		
+	case "F1":
+		var db = new NEO.GraphDatabase('http://root:NGA@localhost:7474');
+ 
+		Log("db", db);
+		db.cypher({
+			query: 'MATCH (u:User {email: {email}}) RETURN u',
+			params: {
+				email: 'alice@example.com',
+			},
+			}, function (err, results) {
+				if (err) throw err;
+				var result = results[0];
+				if (!result) {
+					console.log('No user found.');
+				} else {
+					var user = result['u'];
+					console.log(JSON.stringify(user, null, 4));
+				}
+			});
+		
 }
 
 // UNCLASSIFIED
