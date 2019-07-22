@@ -5393,7 +5393,7 @@ switch ( process.argv[2] ) { //< unit tests
 				if (err) throw err;
 				var result = results[0];
 				if (!result) {
-					console.log('No user found.');
+					console.log('db search returned no records.');
 				} else {
 					var user = result['u'];
 					console.log(JSON.stringify(user, null, 4));
