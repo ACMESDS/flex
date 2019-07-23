@@ -42,6 +42,8 @@ var
 	SUBMITTED = "submitted",
 
 	// nodejs bindings
+	READ = require("reader"),	// must require before others due  to NLP module issues
+	
 	VM = require('vm'), 				// V8 JS compiler
 	STREAM = require("stream"), 	// pipe-able streams
 	CLUSTER = require('cluster'),		// Support for multiple cores	
@@ -54,7 +56,6 @@ var
 	OS = require('os'),					// OS utilitites
 
 	// 3rd party bindings
-	NEO = require("neo4j"),			// light-weight graph database
 	JSMIN = require("uglify-js"), 			// code minifier
 	HMIN = require("html-minifier"), // html minifier
 	//PDF = require('pdffiller'), 		// pdf form processing
@@ -66,9 +67,8 @@ var
 
 	// totem bindings
 	$ = require("man"), 			// matrix minipulaor
-	ATOM = require("atomic"), 		// tauif simulation engines
+	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
-	READ = require("reader");
 
 const { Copy,Each,Log,isObject,isString,isFunction,Serialize } = require("enum");
 
@@ -81,6 +81,8 @@ var
 			TX: {},
 			RX: {}
 		},
+		
+		reader: READ.reader,
 		
 		defaultDocs: {	// default plugin docs (db key comments)
 			export: "switch writes engine results into a file [api](/api.view)",
@@ -1074,8 +1076,8 @@ Document your usecase using markdown tags:
 						}
 					};
 			
-			if (FLEX.thread)
-			FLEX.thread( function (sql) {				
+			if ( sqlThread = FLEX.thread)
+			sqlThread( sql => {				
 				READ.config(sql);			
 				
 				if (CLUSTER.isMaster)   					
@@ -3956,6 +3958,7 @@ function feedNews(sql, engine) {
 
 	sql.query("UPDATE features SET Ad=1 WHERE NOT ad");
     
+	/*
 	READ(FLEX.NEWREAD.URL, function(err, articles) {
 		if (err)
 			console.info("Ignoring news reader "+FLEX.NEWREAD.URL);
@@ -3972,7 +3975,7 @@ function feedNews(sql, engine) {
 				if (FLEX.NEWREAD.JOB)
 					FLEX.NEWREAD.JOB( sql, "feed", article.link);
 			});
-	});
+	}); */
 }
 
 /*
@@ -4885,6 +4888,7 @@ SELECT.status = function (req,res) {
 	
 	Log(year,week,from,to);
 	
+	/*
 	READ.xlsx(sql, FLEX.paths.status, recs => {
 
 		if (recs ) {			
@@ -4988,7 +4992,7 @@ SELECT.status = function (req,res) {
 			res( new Error( `could not find ${FLEX.paths.status}` ) );
 		
 	});
-	
+	*/
 }
 
 /*
@@ -5379,27 +5383,6 @@ switch ( process.argv[2] ) { //< unit tests
 	case "?":
 		Log("F1");
 		break;
-		
-	case "F1":
-		var db = new NEO.GraphDatabase('http://root:NGA@localhost:7474');
- 
-		Log("db", db);
-		db.cypher({
-			query: 'MATCH (u:User {email: {email}}) RETURN u',
-			params: {
-				email: 'alice@example.com',
-			},
-			}, function (err, results) {
-				if (err) throw err;
-				var result = results[0];
-				if (!result) {
-					console.log('db search returned no records.');
-				} else {
-					var user = result['u'];
-					console.log(JSON.stringify(user, null, 4));
-				}
-			});
-		
 }
 
 // UNCLASSIFIED
