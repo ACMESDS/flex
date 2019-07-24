@@ -82,8 +82,6 @@ var
 			RX: {}
 		},
 		
-		reader: READ.reader,
-		
 		defaultDocs: {	// default plugin docs (db key comments)
 			export: "switch writes engine results into a file [api](/api.view)",
 			ingest: "switch ingests engine results into the database",
@@ -4888,111 +4886,113 @@ SELECT.status = function (req,res) {
 	
 	Log(year,week,from,to);
 	
-	/*
-	READ.xlsx(sql, FLEX.paths.status, recs => {
+	if ( reader = READ.readers.xls_Reader )
+		reader(sql, FLEX.paths.status, recs => {
 
-		if (recs ) {			
-			Each( recs[0], (key,val) => {  // remove cols outside this year
-				if ( key.startsWith("_") )
-					if ( !key.startsWith(_year) )
-						recs.forEach( rec => delete rec[key] );
-			});
-				
-			if (from) 	// remove cols before from-week
-				for (var n=1,N=from; n<N; n++)  
-					recs.forEach( rec => delete rec[ _year+"-"+n] );
+			if (recs ) {			
+				Each( recs[0], (key,val) => {  // remove cols outside this year
+					if ( key.startsWith("_") )
+						if ( !key.startsWith(_year) )
+							recs.forEach( rec => delete rec[key] );
+				});
 
-			if (to)		// remove cols after to-week
-				for (var n=to+1, N=99; n<N; n++)
-					recs.forEach( rec => delete rec[ _year+"-"+n] );
+				if (from) 	// remove cols before from-week
+					for (var n=1,N=from; n<N; n++)  
+						recs.forEach( rec => delete rec[ _year+"-"+n] );
 
-			var fill = new Object(recs[0]);
-			
-			recs.forEach( (rec,idx) => {  // scan all records
-				if (idx) {	// not the header record
-					var task = "", use = true, testable = false;
+				if (to)		// remove cols after to-week
+					for (var n=to+1, N=99; n<N; n++)
+						recs.forEach( rec => delete rec[ _year+"-"+n] );
 
-					if (interp)   // interpolate missing keys
-						Each(fill, (key,val) => {
-							if ( key.startsWith(".") )
-								if ( val = rec[key] )
-									fill[key] = val;
-								
-								else
-									rec[key] = fill[key];
-						});
+				var fill = new Object(recs[0]);
 
-					Each(rec, (key,val) => {  // see if this record can be used
-						if ( key.startsWith(".") ) {
-							testable = true;
-							if ( test = query[ key.substr(1).toLowerCase() ] ) 
-								if ( val ) 
-									use = test.toLowerCase() == val.toLowerCase();
-								else
-									use = false;
-						}
-					});
+				recs.forEach( (rec,idx) => {  // scan all records
+					if (idx) {	// not the header record
+						var task = "", use = true, testable = false;
 
-					if (use && testable) 
-						if (compress)   // produce compressed output
-							Each(rec, (key,val) => {
-								if (val)
-									switch (key) {
-										case "ID":
-										case "sheet":
-											break;
+						if (interp)   // interpolate missing keys
+							Each(fill, (key,val) => {
+								if ( key.startsWith(".") )
+									if ( val = rec[key] )
+										fill[key] = val;
 
-										default:
-											Each( acts, (act, sub) => {  // expand shortcuts
-												val = val.replace( new RegExp(act,"g"), sub);
-											});
-											
-											if ( key.startsWith("_") && task )
-												switch (compress) {
-													case "robot":
-														rtn[key] += `> ${task}: ${val}`;
-														break;
-
-													case "human":
-														var 
-															parts = task.split("."),
-															object = parts.pop(),
-															type = parts.pop(),
-															service = parts.pop(),
-															effort = parts.pop();
-
-														//Log(task, parts);
-
-														rtn[key] += `> ${val} the ${object} ${type} for the ${effort} ${service} effort`;
-														break;
-														
-													default:
-														rtn[key] = "invalid compress option";														
-												}
-
-											else
-												task += "."+val;
-									}
+									else
+										rec[key] = fill[key];
 							});
 
-						else	// append record to returned
-							rtns.push( new Object(rec) );
-				}
+						Each(rec, (key,val) => {  // see if this record can be used
+							if ( key.startsWith(".") ) {
+								testable = true;
+								if ( test = query[ key.substr(1).toLowerCase() ] ) 
+									if ( val ) 
+										use = test.toLowerCase() == val.toLowerCase();
+									else
+										use = false;
+							}
+						});
 
-				else  // use header record to prime returns
-					Each(rec, (key,val) => {
-						if ( key.startsWith("_") ) rtn[key] = "";
-					});
-			});
+						if (use && testable) 
+							if (compress)   // produce compressed output
+								Each(rec, (key,val) => {
+									if (val)
+										switch (key) {
+											case "ID":
+											case "sheet":
+												break;
 
-			res( compress ? [rtn] : rtns );
-		}
-		
-		else
-			res( new Error( `could not find ${FLEX.paths.status}` ) );
-		
-	});
-	*/
+											default:
+												Each( acts, (act, sub) => {  // expand shortcuts
+													val = val.replace( new RegExp(act,"g"), sub);
+												});
+
+												if ( key.startsWith("_") && task )
+													switch (compress) {
+														case "robot":
+															rtn[key] += `> ${task}: ${val}`;
+															break;
+
+														case "human":
+															var 
+																parts = task.split("."),
+																object = parts.pop(),
+																type = parts.pop(),
+																service = parts.pop(),
+																effort = parts.pop();
+
+															//Log(task, parts);
+
+															rtn[key] += `> ${val} the ${object} ${type} for the ${effort} ${service} effort`;
+															break;
+
+														default:
+															rtn[key] = "invalid compress option";														
+													}
+
+												else
+													task += "."+val;
+										}
+								});
+
+							else	// append record to returned
+								rtns.push( new Object(rec) );
+					}
+
+					else  // use header record to prime returns
+						Each(rec, (key,val) => {
+							if ( key.startsWith("_") ) rtn[key] = "";
+						});
+				});
+
+				res( compress ? [rtn] : rtns );
+			}
+
+			else
+				res( new Error( `could not find ${FLEX.paths.status}` ) );
+
+		});
+	
+	else
+		res( new Error( "missing xls reader" ));
 }
 
 /*
