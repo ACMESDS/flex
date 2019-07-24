@@ -41,8 +41,8 @@ var
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted",
 
-	// nodejs bindings
-	READ = require("reader"),	// must require before others due  to NLP module issues
+	// totem bindings required before others due to dependent module issues
+	READ = require("reader"),	
 	
 	VM = require('vm'), 				// V8 JS compiler
 	STREAM = require("stream"), 	// pipe-able streams
