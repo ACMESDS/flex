@@ -93,7 +93,7 @@ Place a DATASET into a supervised workflow using the Pipe:
 	{ "path": "/DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
 
 The 2nd-form generates usecases over the specified context KEYs.  The 1st-form selects the
-workflow based on TYPE = json || jpg || stream || txt || aoi using TYPE-specific [QUERY keys](/api.view) 
+workflow based on TYPE = json || jpg || stream || txt || aoi || db using TYPE-specific [QUERY keys](/api.view) 
 and TYPE-specific [supervisor context keys](/api.view).
 `, 
 
