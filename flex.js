@@ -164,9 +164,9 @@ Document your usecase using markdown tags:
 					
 				case "status":
 					var 
-						fetcher = FLEX.fetcher,
+						getSite = FLEX.getSite,
 						fetchUsers = function (rec, cb) {	// callback with endservice users
-							fetcher(rec._EndService, null, info => { 
+							getSite(rec._EndService, null, info => { 
 								//Log("status users", info);
 								cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) ;
 							});
@@ -408,7 +408,7 @@ Document your usecase using markdown tags:
 			}
 			
 			if (endService = pub._EndService)
-				FLEX.fetcher( endService, null, info => {  // validate end service
+				FLEX.getSite( endService, null, info => {  // validate end service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -774,7 +774,7 @@ Document your usecase using markdown tags:
 				paths = FLEX.paths.publish;
 			
 			Each( paths, (type, path) => { 		// get plugin file types to publish	
-				FLEX.indexer( path, files => {	// get plugin file names to publish
+				FLEX.getIndex( path, files => {	// get plugin file names to publish
 					files.forEach( file => {
 						var
 							product = file,
@@ -887,7 +887,7 @@ Document your usecase using markdown tags:
 		insert: {}, 
 		execute: {}, 
 		
-		fetcher: () => {Trace("data fetcher not configured");},  //< data fetcher
+		getSite: () => {Trace("data getSite not configured");},  //< data getSite
 		//uploader: () => {Trace("file uploader not configured");},  //< file uploader
 		//emitter: () => {Trace("client emitter not configured");},  //< client syncer
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
@@ -970,7 +970,7 @@ Document your usecase using markdown tags:
 		**/
 
 			var
-				fetcher = FLEX.fetcher,
+				getSite = FLEX.getSite,
 				sql = req.sql,
 				query = req.query,
 				thread = "totem."+ req.client + "." + req.table + "." + (query.Name || query.ID || 0);
@@ -978,7 +978,7 @@ Document your usecase using markdown tags:
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // out-source request
-				fetcher(agent.tag( "?", Copy(query,{push:thread})), null, function (jobid) {
+				getSite(agent.tag( "?", Copy(query,{push:thread})), null, function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -996,7 +996,7 @@ Document your usecase using markdown tags:
 
 								Trace("POLLING AGENT FOR job"+jobid);
 
-								fetcher(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
+								getSite(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
 
 									if ( ctx = ctx.parseJSON() )
 										FLEX.thread( function (sql) {
@@ -1646,7 +1646,7 @@ SELECT.views = function Xselect(req, res) {
 	var views = [];
 	var path = `./public/jade/`;
 	
-	FLEX.indexer( path , function (files) {
+	FLEX.getIndex( path , function (files) {
 		
 		files.each(function (n,file) {
 		
@@ -1674,7 +1674,7 @@ SELECT.links = function Xselect(req, res) {
 			})
 		}];
 
-	FLEX.indexer( path, function (files) {
+	FLEX.getIndex( path, function (files) {
 
 		files.each(function (n,file) {
 		
@@ -1682,7 +1682,7 @@ SELECT.links = function Xselect(req, res) {
 			
 			if (stats.isDirectory()) 
 				if (file.charAt(0) == ".") 
-					FLEX.indexer( path+file, function (subs) {
+					FLEX.getIndex( path+file, function (subs) {
 						subs.each(function (n,name) {
 							links.push({
 								ID: id++,
@@ -1696,7 +1696,7 @@ SELECT.links = function Xselect(req, res) {
 				
 				else 
 				if (false)
-					FLEX.indexer( path+file, function (subs) {
+					FLEX.getIndex( path+file, function (subs) {
 						subs.each(function (n,sub) {
 							var name = sub.replace(".jade","");
 							links.push({
@@ -1731,7 +1731,7 @@ SELECT.themes = function (req, res) {
 	var themes = [];
 	var path = ENV.THEMES;
 
-	FLEX.indexer( path , function (files) {
+	FLEX.getIndex( path , function (files) {
 		files.each( function (n,file) {
 			//var stats = FS.statSync(path + "/"+file);
 
@@ -2070,7 +2070,7 @@ SELECT.health = function Xselect(req, res) {
 		var maxage = age = vol = files = 0;
 		
 		for (var area in {UPLOADS:1, STORES:1, SHARES:1} )
-			FLEX.indexer( ENV[area], function (n,file) {
+			FLEX.getIndex( ENV[area], function (n,file) {
 				var stats = FS.statSync(ENV[area] + file);
 		
 				age += (now.getTime()-stats.atime.getTime())*1e-3/3600/24;
@@ -2469,7 +2469,7 @@ function Xselect(req, res) {
 		case "proofs":
 		case "shares":
 		
-			FLEX.indexer( path, function (files) {
+			FLEX.getIndex( path, function (files) {
 				
 				files.each( function (n,file) {
 					var link = `/${area}/${file}`;
@@ -2523,7 +2523,7 @@ function Xselect(req, res) {
 		case "dir": 
 		
 			for (var area in {uploads:1, stores:1, shares:1} )
-				FLEX.indexer( `./public/${area}`, function (n,file) {
+				FLEX.getIndex( `./public/${area}`, function (n,file) {
 
 					var 
 						link = `/${area}/${file}`,
@@ -4467,7 +4467,7 @@ SELECT.wms = function (req,res) {
 	var 
 		sql = req.sql,
 		query = req.query,
-		fetcher = FLEX.fetcher,
+		getSite = FLEX.getSite,
 		src = query.src || "";
 	
 	switch (src) {
@@ -4480,14 +4480,14 @@ SELECT.wms = function (req,res) {
 	res("ok");
 	
 	if ( url = ENV[`WMS_${src.toUpperCase()}`] ) 
-		fetcher(url.tag("?", query), null, rtn => Log("wms returned", rtn) )
+		getSite(url.tag("?", query), null, rtn => Log("wms returned", rtn) )
 }
 
 SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	var 
 		sql = req.sql,
 		query = req.query,
-		fetcher = FLEX.fetcher,
+		getSite = FLEX.getSite,
 		site = FLEX.site,
 		chip = {	// chip attributes
 			width: query.width || 100, // chip pixels lat,
@@ -4511,7 +4511,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	delete query.src;
 	
 	if ( url = ENV[`WFS_${src}`] )
-		fetcher( url.tag("?", query), null, cat => {  // query catalog for desired data channel
+		getSite( url.tag("?", query), null, cat => {  // query catalog for desired data channel
 			if ( cat = cat.parseJSON() ) {
 				switch ( src ) {  // normalize cat response to ess
 					case "DGLOBE":
@@ -5198,7 +5198,7 @@ SELECT.info = function (req,res) {
 		query = req.query,
 		sql = req.sql,
 		pathPrefix = FLEX.site.urls.master,
-		fetcher = FLEX.fetcher,
+		getSite = FLEX.getSite,
 		libs = {
 			misc: {},
 			generators: {},
@@ -5240,7 +5240,7 @@ SELECT.info = function (req,res) {
 			xtables[ table ] = table.tag( `/${table}` );
 		});
 		
-		fetcher( "/plugins", null, info => {
+		getSite( "/plugins", null, info => {
 			var plugs = {};
 
 			info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
