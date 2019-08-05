@@ -413,7 +413,7 @@ Document your usecase using markdown tags:
 						valid = false, 
 						users = info.parseJSON() || [] ;
 					
-					users.forEach( (user) => { 
+					users.forEach( user => { 
 						if (user == pub._Partner) valid = true;
 					});
 					
@@ -576,7 +576,7 @@ Document your usecase using markdown tags:
 							});
 
 						if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
-							inits.forEach( function (init, idx) {
+							inits.forEach( init => {
 								sql.query("INSERT INTO app.?? SET ?", init);
 							});
 
@@ -1390,14 +1390,14 @@ SELECT.baseline = function Xselect(req, res) {
 			res(err);
 		else
 			FS.readFile("gitlog", "utf-8", function (err,logs) {
-				var recs = [], id=0;
+				var recs = [];
 
-				logs.split("\n").each( function (n,log) {
+				logs.split("\n").forEach( (log,id) => {
 
 					var	parts = log.split("||");
 
 					recs.push({	
-						ID: id++,
+						ID: id,
 						hash: parts[0], 
 						author: parts[1],
 						email: parts[2],
@@ -1497,7 +1497,7 @@ EXECUTE.catalog = function Xexecute(req, res) {
 		
 		Trace("FLATTEN CATALOG RECS "+recs.length, sql);
 		
-		recs.each( function (n,rec) {
+		recs.forEach( rec => {
 			sql.query("INSERT INTO catalog SET ?",rec);
 		});
 
@@ -1512,7 +1512,7 @@ SELECT.tasks = function Xselect(req,res) {
 	sql.query("SELECT Task FROM openv.milestones GROUP BY Task", function (err,miles) {
 		
 		if ( !err )
-			miles.each(function (n,mile) {
+			miles.forEach( mile => {
 				tasks.push({
 					ID: tasks.length,
 					Name: mile.Task.tag("a",{href: "/task.view?options="+mile.Task})
@@ -1605,7 +1605,7 @@ SELECT.activity = function Xselect(req, res) {
 		[],
 		function (err,acts) {
 			
-			attrs.each( function (n,dsattr) {
+			attrs.forEach( dsattr => {
 				var rec = recs[dsattr.Table];
 				
 				if (!rec) rec = {
@@ -1619,7 +1619,7 @@ SELECT.activity = function Xselect(req, res) {
 				Copy( dsattr, rec );
 			});
 			
-			acts.each( function (n,act) {
+			acts.forEach( act => {
 				var rec = recs[act.Table];
 				
 				if (!rec) rec = recs[act.Table] = {
@@ -1648,7 +1648,7 @@ SELECT.views = function Xselect(req, res) {
 	
 	FLEX.getIndex( path , function (files) {
 		
-		files.each(function (n,file) {
+		files.forEach( (file,n) => {
 		
 			var stats = FS.statSync(path + file);		
 			
@@ -1676,14 +1676,14 @@ SELECT.links = function Xselect(req, res) {
 
 	FLEX.getIndex( path, function (files) {
 
-		files.each(function (n,file) {
+		files.forEach( file => {
 		
 			var stats = FS.statSync(path + file);
 			
 			if (stats.isDirectory()) 
 				if (file.charAt(0) == ".") 
 					FLEX.getIndex( path+file, function (subs) {
-						subs.each(function (n,name) {
+						subs.forEach( name => {
 							links.push({
 								ID: id++,
 								Name: (name + " &rrarr; "+name).tag("a",{
@@ -1697,7 +1697,7 @@ SELECT.links = function Xselect(req, res) {
 				else 
 				if (false)
 					FLEX.getIndex( path+file, function (subs) {
-						subs.each(function (n,sub) {
+						subs.forEach( sub => {
 							var name = sub.replace(".jade","");
 							links.push({
 								ID: id++,
@@ -1790,12 +1790,12 @@ SELECT.config = function Xselect(req, res) {
 	CP.exec("df -h /dev/mapper/centos-root", function (err,dfout,dferr) {
 	CP.exec("netstat -tns", function (err,nsout,nserr) {
 	CP.exec("npm list", function (err,swconfig) {
-		swconfig.split("\n").forEach( (sw) => {
+		swconfig.split("\n").forEach( sw => {
 			info.push({ID: ID++, Type: "sw", Config: sw, Classif: "(U)"});
 		});
 		
 		var type="";
-		nsout.split("\n").forEach( (ns) => {
+		nsout.split("\n").forEach( ns => {
 			if (ns.endsWith(":"))
 				type = ns;
 			else
@@ -1995,7 +1995,7 @@ SELECT.health = function Xselect(req, res) {
 	sql.query("SHOW VARIABLES LIKE 'version'")
 	.on("result", function (vstats) {
 	
-		dstats.each( function (n,stat) { 
+		dstats.forEach( stat => { 
 			if ( stat.Variable_name in dbstats )
 				dbstats[stat.Variable_name] = stat.Value; 
 		});
@@ -2050,7 +2050,7 @@ SELECT.health = function Xselect(req, res) {
 			//temp: ATOM.temp()  // unavail on vms
 		};
 	
-		nouts.each(function (n,nstat) {
+		nouts.forEach( (nstat,n) => {
 			if (n > 1)
 				stats[nstat.substr(naddr,13)] = "connected";
 		});
@@ -2170,8 +2170,8 @@ SELECT.tips = function Xselect(req, res) {
 			if (err)
 				Log("tips",[err,q.sql]);
 			else
-				recs.each(function(n,rec) {
-					rec.ID = n;
+				recs.forEach( (rec,id) => {
+					rec.ID = id;
 					rec.lat = rec.address[0][0].x*180/Math.PI;
 					rec.lon = rec.address[0][0].y*180/Math.PI;
 					//delete rec.address;
@@ -2278,7 +2278,7 @@ SELECT.history = function Xselect(req,res) {
 								log, log.Earnings, log.Comment, log.Reviewed, log.Datasets] );
 						
 						if (query.Datasets) // reset journalled updates
-						query.Datasets.split(",").each( function (n,dataset) {
+						query.Datasets.split(",").forEach( dataset => {
 							sql.query(
 								"UPDATE openv.journal SET Updates=0 WHERE least(?)", {
 									Hawk: query.Hawk,
@@ -2292,10 +2292,10 @@ SELECT.history = function Xselect(req,res) {
 
 							var to=[], cc=[];
 
-							ghawk.each(function (n,hawk) {
+							ghawk.forEach( hawk => {
 								to.push( hawk.client );
 							});
-							lhawk.each(function (n,hawk) {
+							lhawk.forEach( hawk => {
 								cc.push( hawk.client );
 							});
 
@@ -2347,10 +2347,10 @@ SELECT.plugins = function Xselect(req,res) {
 			res( err );
 		
 		else {
-			engs.forEach( (eng,n) => {
+			engs.forEach( (eng,id) => {
 				if ( eng.Type != "jade" && eng.Name.indexOf("demo")<0 )
 					plugins.push({
-						ID: plugins.length+1,
+						ID: id,
 						Name: `${eng.Name}.${eng.Type}`,
 						Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
 						View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
@@ -2471,7 +2471,7 @@ function Xselect(req, res) {
 		
 			FLEX.getIndex( path, function (files) {
 				
-				files.each( function (n,file) {
+				files.forEach( (file,id) => {
 					var link = `/${area}/${file}`;
 
 					switch (area) {
@@ -2491,7 +2491,7 @@ function Xselect(req, res) {
 											}) 	+ 
 												"".tag("img",{src:link, width: 32, height: 32}),
 										File	: file,
-										ID		: n
+										ID		: id
 									});
 									break;
 									
@@ -2499,7 +2499,7 @@ function Xselect(req, res) {
 									rtns.push({
 										Name	: file.tag("a",{href:link}),
 										File	: file,
-										ID		: n
+										ID		: id
 									});
 							}
 							break;
@@ -2508,7 +2508,7 @@ function Xselect(req, res) {
 							rtns.push({
 								Name	: file.tag("a",{href:link}),
 								File	: file,
-								ID		: n
+								ID		: id
 							});
 							break;
 					}
@@ -2670,7 +2670,7 @@ SELECT.keyedit = function Xselect(req, res) {
 				Samples:0, Dist:"gaus", Parms:"[0,1]" 
 			}];
 			
-			parms.each ( function (n,parm) {
+			parms.forEach( parm => {
 				if ( parm.Field != "ID" )
 					recs.push( {
 							ID: parm.Field, Ds: query.ds, Key: parm.Field, Type: parm.Type, 
@@ -3304,7 +3304,7 @@ EXECUTE.events = function Xexecute(req, res) {
 								sql.query("DELETE FROM app.jobstats WHERE ?", {label:label});
 								
 								if ( levels )  		// save delay times at prescibed levels of confidence
-									levels.each( function (n, level) {
+									levels.forEach( level => {
 										Each( stats, function (bin, x) {
 											if ( (1 - x.pr) < level ) {
 												sql.query("INSERT INTO app.jobstats SET ?", {
@@ -3622,7 +3622,7 @@ EXECUTE.lookups = function Xexecute(req, res) {
 
 	res(SUBMITTED);
 	
-	langs.each(function (n,lang) {
+	langs.forEach( lang => {
 		sql.query("INSERT INTO lookups SET ?",{
 			Enabled: 1,
 			Ref: "language",
@@ -3638,7 +3638,7 @@ EXECUTE.lookups = function Xexecute(req, res) {
 		"aria", "classic", "classic-sandbox", "crisp", "crisp-touch", "gray", "neptune", "neptune-touch", "neutral"
 	];
 
-	themes.each(function (n,theme) {
+	themes.forEach( theme => {
 		sql.query("INSERT INTO lookups SET ?",{
 			Enabled: 1,
 			Ref: "theme",
@@ -3793,7 +3793,7 @@ Delivery of  "+swap._Product+" is conditional on NGA/OCIO acceptance of this dev
 			
 			var form_map = {};
 			
-			looks.each(function (n,look) {
+			looks.forEach( look => {
 				if (look.Name)
 					form_map[look.Name] = look.Path;
 			});
@@ -3888,7 +3888,7 @@ function statRepo(sql) {
 			
 		FS.readFile("gitlog", "utf-8", function (err,logs) {
 			
-			logs.split("\n").each( function (n,log) {
+			logs.split("\n").forEach( log => {
 				
 				var	parts = log.split("||"),
 					info = {	
