@@ -5122,7 +5122,7 @@ SELECT.info = function (req,res) {
 									name: key, 
 									size: 10,
 									doc: next + ": " + val ,
-									nodes: toSchema(next, val)
+									children: toSchema(next, val)
 								});
 							
 							else
@@ -5131,7 +5131,7 @@ SELECT.info = function (req,res) {
 									name: key, 
 									size: 10,
 									doc: next + ": " + key.tag( val ),
-									nodes: toSchema(next, val)
+									children: toSchema(next, val)
 								}); 
 							
 							else
@@ -5140,7 +5140,7 @@ SELECT.info = function (req,res) {
 									name: key, 
 									size: 10,
 									doc: next + ": " + key.tag( val ),
-									nodes: toSchema(next, val)
+									children: toSchema(next, val)
 								}); 
 
 							else
@@ -5148,7 +5148,7 @@ SELECT.info = function (req,res) {
 									name: key, 
 									size: 10,
 									doc: next + ": " + val,
-									nodes: toSchema(next, val)
+									children: toSchema(next, val)
 								}); 
 								
 							break;
@@ -5158,7 +5158,7 @@ SELECT.info = function (req,res) {
 								name: key + `[${val.length}]`, 
 								size: 10,
 								doc: next,
-								nodes: toSchema(next, val)
+								children: toSchema(next, val)
 							}); break;
 						
 						case "Object":
@@ -5166,7 +5166,7 @@ SELECT.info = function (req,res) {
 								name: key + ".", 
 								size: 10,
 								doc: next,
-								nodes: toSchema(next, val)
+								children: toSchema(next, val)
 							}); break;
 						
 						case "Function":
@@ -5174,7 +5174,7 @@ SELECT.info = function (req,res) {
 								name: key + "(...)", 
 								size: 10,
 								doc: next.tag( "/api.view" ),
-								nodes: []
+								children: []
 							}); break;
 							
 						default:
@@ -5182,7 +5182,7 @@ SELECT.info = function (req,res) {
 								name: key, 
 								size: 10,
 								doc: "",
-								nodes: []
+								children: []
 							}); break;
 					}
 			});
