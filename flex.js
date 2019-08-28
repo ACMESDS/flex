@@ -910,9 +910,13 @@ Document your usecase using markdown tags:
 					ctx.Host = host;
 					if ( ctx.Config ) config(ctx.Config, ctx);
 
-					sql.getJsonKeys( "app."+host, [], function (keys) {  // parse json keys
-						//Log("json keys", keys);
-						cb( keys.parseJSON( ctx ) );
+					sql.getTypes( `app.${host}`, {Type:"json"}, {}, jsons => {
+						//Log("json keys", host, jsons);
+						Each( jsons, key => {
+							if ( val = ctx[key] ) 
+								ctx[key] = val.parseJSON( );
+						});
+						cb( ctx );
 					});
 				}
 
