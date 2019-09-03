@@ -142,10 +142,7 @@ Document your usecase using markdown tags:
 
 			switch ( attr ) {
 				case "users":
-					cb([
-						// endPartner  // alllows everyone to do a loopback
-						"Brian.D.James@nga.ic.gov", "John.B.Greer@nga.ic.gov"
-					]);
+					cb( ENV.OVERLORDS.split(",") );
 					break;
 					
 				case "md":
@@ -5050,7 +5047,7 @@ function blogKeys(product, prime) {
 		product: product,
 		by: ENV.BYLINE,
 		
-		register: `<!---parms endservice=https://myserivce/${name}--->`,
+		register: `<!---parms endservice=https://myservice/${name}--->`,
 		input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 		
 		status: (x) => ctx.fetch( paths.product + ".status" ),
