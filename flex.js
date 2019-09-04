@@ -70,7 +70,7 @@ var
 	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 
-const { Copy,Each,Log,isObject,isString,isFunction,Serialize } = require("enum");
+const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError } = require("enum");
 
 var
 	FLEX = module.exports = {
@@ -341,20 +341,24 @@ Document your usecase using markdown tags:
 
 							else	// not yet released so ...
 							if ( FLEX.licenseOnDownload ) { // license required to distribute
-								if ( endService )
-									FLEX.licenseCode( sql, eng.Minified, {
-										_Partner: endPartner,
-										_EndService: endService,
-										_Published: new Date(),
-										_Product: product,
-										Path: "/"+product
-									}, pub => {
-										if (pub) // distribute licensed version
-											addTerms( eng.Code, type, pub, cb );
+								if ( endService )	// specified so try to distribute
+									if ( eng.Minified )	// compiled so ok to distribute
+										FLEX.licenseCode( sql, eng.Minified, {
+											_Partner: endPartner,
+											_EndService: endService,
+											_Published: new Date(),
+											_Product: product,
+											Path: "/"+product
+										}, pub => {
+											if (pub) // distribute licensed version
+												addTerms( eng.Code, type, pub, cb );
 
-										else	// failed
-											cb( null );
-									});
+											else	// failed
+												cb( null );
+										});
+								
+									else
+										cb( null );
 
 								else
 									cb( null );
@@ -589,22 +593,27 @@ Document your usecase using markdown tags:
 						if ( code = getter( mod.engine || mod.code) ) {
 
 							FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
+								
+								if ( isError(min) )
+									Log("FAILED PUB", min);
+								
+								else 
 								if ( selfLicense ) // auto license to this service
 									FLEX.licenseCode( sql, min, {
-										_Partner: "totem",
-										_EndService: ENV.SERVICE_MASTER_URL,
-										_Published: new Date(),
-										_Product: product,
-										Path: pathname
-									}, pub => {
-										if (pub)
-											Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
-										
-										else
-											Trace("FAILED SELF LICENSE");
-									});
+											_Partner: "totem",
+											_EndService: ENV.SERVICE_MASTER_URL,
+											_Published: new Date(),
+											_Product: product,
+											Path: pathname
+										}, pub => {
+											if (pub)
+												Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
 
-								// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+											else
+												Trace("FAILED LICENSE");
+										});
+
+									// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
 
 								var 
 									from = type,
@@ -614,7 +623,7 @@ Document your usecase using markdown tags:
 									jsCode = {},
 									rev = {
 										Code: code,
-										Minified: min,
+										Minified: isError(min) ? null : min,
 										Wrap: getter( mod.wrap ) || "",
 										ToU: tou,
 											// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
@@ -680,16 +689,16 @@ Document your usecase using markdown tags:
 					FS.writeFile(e6Tmp, code, "utf8", err => {
 						CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
 							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-								Log("jsmin>>>>", err);
+								//Log("jsmin>>>>", err);
 
 								if (err)
-									cb( null );
+									cb( err );
 
 								else {
 									var min = JSMIN.minify( e5code );
 
-									if (min.error) 
-										cb( null );
+									if (err = min.error) 
+										cb( err );
 
 									else   
 										cb( min.code );
@@ -710,10 +719,10 @@ Document your usecase using markdown tags:
 
 					FS.writeFile(pyTmp, code.replace(/\t/g,"    ").replace(/^\n/gm,""), "utf8", err => {
 						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-							Log("pymin>>>>", err);
+							//Log("pymin>>>>", err);
 
 							if (err)
-								cb(null);
+								cb(err);
 
 							else
 								cb( minCode );
@@ -743,20 +752,20 @@ Document your usecase using markdown tags:
 
 					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
 						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
-							Log("matmin>>>>", err);
+							//Log("matmin>>>>", err);
 
 							if (err)
-								cb( null );
+								cb( err );
 
 							else
 								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
 									if (err) 
-										cb( null );
+										cb( err );
 
 									else
 										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
 											if (err)
-												cb(null);
+												cb(err);
 
 											else
 												cb( minCode );
