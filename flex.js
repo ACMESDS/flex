@@ -83,8 +83,8 @@ var
 		},
 		
 		defaultDocs: {	// default plugin docs (db key comments)
-			export: "switch writes engine results into a file [api](/api.view)",
-			ingest: "switch ingests engine results into the database",
+			export: "switch writes engine results [into a file](/api.view)",
+			ingest: "switch ingests engine results [into the database](/api.view)",
 			share: "switch returns engine results to the status area",
 			pipe: `
 Place a DATASET into a supervised workflow using the Pipe:
@@ -132,6 +132,7 @@ Document your usecase using markdown tags:
 				
 			var
 				errors = FLEX.errors,
+				pocs = FLEX.site.pocs || {},
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
@@ -142,7 +143,7 @@ Document your usecase using markdown tags:
 
 			switch ( attr ) {
 				case "users":
-					cb( ENV.OVERLORDS.split(",") );
+					cb( pocs.overlord.split(";") );
 					break;
 					
 				case "md":
@@ -204,7 +205,7 @@ Document your usecase using markdown tags:
 											url = URL.parse(rec._EndService),
 											host = url.host.split(".")[0];
 
-										rec._License = rec._License.tag("a",{href:urls.totem+`/masters.html?_EndServiceID=${rec._EndServiceID}`});
+										rec._License = rec._License.tag("a",{href:urls.totem+`/releases.html?_EndServiceID=${rec._EndServiceID}`});
 										rec._Product = rec._Product.tag("a", {href:urls.run});
 										rec._Status = "pass";
 										rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
@@ -2254,7 +2255,7 @@ SELECT.likeus = function Xselect(req, res) {
 		pocs = FLEX.site.pocs || {};
 
 	sendMail({
-		to: pocs.admin || "admin@undefined.ic.gov",
+		to: pocs.admin || "admin@undefined",
 		subject: req.client + " likes " + FLEX.site.title + " !!", 
 		body: "Just saying"
 	}, sql );
@@ -4438,8 +4439,8 @@ SELECT.login = function(req,res) {
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
 		isp = {
 			machine: "totem.west.ile.nga.ic.gov",
-			admin: pocs.admin || "admin@undefined.ic.gov",
-			ps: pocs.ps || "projectscientist@undefined.ic.gov",
+			admin: pocs.admin || "admin@undefined",
+			ps: pocs.ps || "projectscientist@undefined",
 			remotein: `${logins}/${user}.rdp`,
 			sudos: [
 				`adduser ${user} -M --gid ${group} -p ${ENV.LOGIN_PASS}`,
@@ -5221,7 +5222,7 @@ function blogKeys(product, prime) {
 		get: site.get,
 		match: site.match,
 		replace: site.replace,
-		pocs: FLEX.site.pocs || {},
+		pocs: site.pocs || {},
 		request: req => {
 			var
 				parts = (req || "").split("/"),

@@ -13,7 +13,7 @@ export CMU=http://cmu.edu
 export ESS=
 export PROTON=
 export BYLINE="[NGA/Research](https://research.nga.ic.gov)"
-export OVERLORDS="Brian.D.James@coe.ic.gov,John.B.Greer@coe.ic.gov"
+export OVERLORDS="Brian.D.James@coe.ic.gov;John.B.Greer@coe.ic.gov"
 
 # services
 export SRV_DGLOBE="http://rdog.digitalglobe.com:80"
