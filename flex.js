@@ -285,6 +285,16 @@ Document your usecase using markdown tags:
 						
 					break;
 
+				case "license":
+				case "release":
+					sql.query(
+						"SELECT _License,_EndService FROM app.releases WHERE ? LIMIT 1", 
+						{_Product: product}, (err,pubs) => {
+							
+						cb( err || pubs );
+					});
+					break;
+					
 				case "js":
 				case "py":
 				case "me":
@@ -324,33 +334,34 @@ Document your usecase using markdown tags:
 						May want to rework this to simply use eng.Code by priming the Code in the publish phase
 						*/
 						FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
-							var code = err ? eng.Code : srcCode;
+							if (!err) eng.Code = srcCode;
 									
-							if ( pub = pubs[0] )
-								addTerms( code, type, pub, cb );
+							if ( pub = pubs[0] )	// already released so simply distribute
+								addTerms( eng.Code, type, pub, cb );
 
-							else
-							if ( FLEX.licenseOnDownload )
+							else	// not yet released so ...
+							if ( FLEX.licenseOnDownload ) { // license required to distribute
 								if ( endService )
-									FLEX.licenseCode( sql, code, {
+									FLEX.licenseCode( sql, eng.Minified, {
 										_Partner: endPartner,
 										_EndService: endService,
 										_Published: new Date(),
 										_Product: product,
 										Path: "/"+product
-									}, (pub) => {
-										if (pub) 
-											addTerms( code, type, pub, cb );
+									}, pub => {
+										if (pub) // distribute licensed version
+											addTerms( eng.Code, type, pub, cb );
 
-										else
+										else	// failed
 											cb( null );
 									});
 
 								else
 									cb( null );
+							}
 
-							else
-								cb( code );
+							else	// no license required
+								cb( eng.Code );
 						});
 					});
 					break;
@@ -369,43 +380,37 @@ Document your usecase using markdown tags:
 			return This = Copy( keys || {}, blogKeys(product), ".");
 		},  */
 		
-		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null)
+		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null) on error
 			
 			function returnLicense(pub) {
 				var
 					product = pub._Product,
 					endService = pub._EndService,
-					parts = product.split("."),
-					type = parts.pop(),
-					name = parts.pop(),
-					secret = product;
+					secret = product + "." + endService;
 				
-				FLEX.genLicense( code, product, type, secret, (minCode, license) => {
-					
-					if (license) {
-						cb( Copy({
-							_License: license,
-							_EndServiceID: FLEX.serviceID( pub._EndService ),
-							_Copies: 1
-						}, pub),  sql );
+				if ( license = FLEX.genLicense( code, secret ) ) {
+					cb( Copy({
+						_License: license,
+						_EndServiceID: FLEX.serviceID( pub._EndService ),
+						_Copies: 1
+					}, pub),  sql );
 
-						sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
-						
-						sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
-							Master: minCode,
-							License: license,
-							EndServiceID: pub._EndServiceID
-						}, {Master: minCode} ] );		
-					}
+					sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
 
-					else 
-						cb( null );
+					sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
+						Master: code,
+						License: license,
+						EndServiceID: pub._EndServiceID
+					}, {Master: code} ] );		
+				}
 
-				});
+				else 
+					cb( null );
 			}
 			
-			if (endService = pub._EndService)
-				FLEX.getSite( endService, null, info => {  // validate end service
+			Log("endserv lic code", pub);
+			if (endService = pub._EndService)  // an end-service specified so validate it
+				FLEX.getSite( endService, null, info => {  // check users provided by end-service
 					var 
 						valid = false, 
 						users = info.parseJSON() || [] ;
@@ -414,17 +419,18 @@ Document your usecase using markdown tags:
 						if (user == pub._Partner) valid = true;
 					});
 					
-					if (valid) 
+					if (valid) // signal valid
 						returnLicense(pub);
-					else
+					
+					else	// signal invalid
 						cb( null  );
 				});	
 			
-			else
+			else	// no end-service so no need to validate
 				returnLicense(pub);
 		},
 		
-		publishPlugin: function (req, name, type, relicense) {  // publish product = name.type
+		publishPlugin: function (req, name, type, selfLicense) {  // publish product = name.type
 			
 			function getter( opt ) {	
 				if (opt) 
@@ -582,53 +588,58 @@ Document your usecase using markdown tags:
 
 						if ( code = getter( mod.engine || mod.code) ) {
 
-							if ( relicense ) 
-								FLEX.licenseCode( sql, code, {
-									_Partner: "totem",
-									_EndService: ENV.SERVICE_MASTER_URL,
-									_Published: new Date(),
-									_Product: product,
-									Path: pathname
-								}, pub => {
-									if (pub)
-										Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`, sql);
-								});
+							FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
+								if ( selfLicense ) // auto license to this service
+									FLEX.licenseCode( sql, min, {
+										_Partner: "totem",
+										_EndService: ENV.SERVICE_MASTER_URL,
+										_Published: new Date(),
+										_Product: product,
+										Path: pathname
+									}, pub => {
+										if (pub)
+											Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
+										
+										else
+											Trace("FAILED SELF LICENSE");
+									});
 
-							// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+								// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
 
-							var 
-								from = type,
-								to = mod.to || from,
-								fromFile = pathname + "." + from,
-								toFile = pathname + "." + to,
-								jsCode = {},
-								rev = {
-									Code: code,
-									Wrap: getter( mod.wrap ) || "",
-									ToU: tou,
-										// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-									State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-								};
+								var 
+									from = type,
+									to = mod.to || from,
+									fromFile = pathname + "." + from,
+									toFile = pathname + "." + to,
+									jsCode = {},
+									rev = {
+										Code: code,
+										Minified: min,
+										Wrap: getter( mod.wrap ) || "",
+										ToU: tou,
+											// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+										State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+									};
 
-							Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
+								Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
 
-							if ( from == to )  { // use code as-is
-								sql.query( 
-									"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-										Name: name,
-										Type: type,
-										Enabled: 1
-									}), rev ] );
+								if ( from == to )  { // use code as-is
+									sql.query( 
+										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+											Name: name,
+											Type: type,
+											Enabled: 1
+										}), rev ] );
 
-								if (from == "js") {	// import js function into $
-									jsCode[name] = mod.engine || mod.code;
-									$(jsCode);
+									if (from == "js") {	// import js function into $
+										jsCode[name] = mod.engine || mod.code;
+										$(jsCode);
+									}
 								}
-							}
 
-							else  // convert code to requested type
-								//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
-								FS.writeFile( fromFile, code, "utf8", err => {
+								else  // convert code to requested type
+									//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+									FS.writeFile( fromFile, code, "utf8", err => {
 									CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
 										if (!err) 
 											FS.readFile( toFile, "utf8", (err,code) => {
@@ -643,6 +654,7 @@ Document your usecase using markdown tags:
 											});									
 									});
 								});	
+							});
 						}
 
 						// CP.exec(`cd ${name}.d; sh publish.sh`);
@@ -650,7 +662,129 @@ Document your usecase using markdown tags:
 				});	
 			});
 		},
+
+		minifyCode: function (code, product, type, cb) {  //< callback cb(minifiedCode, license)
+			//Log("gen lic", secret);
+			switch (type) {
+				case "html":
+					cb( HMIN.minify(code.replace(/<br>/g,""), {
+						removeAttributeQuotes: true
+					}) );
+					break;
+
+				case "js":
+					var
+						e6Tmp = "./temps/e6/" + product,
+						e5Tmp = "./temps/e5/" + product;
+
+					FS.writeFile(e6Tmp, code, "utf8", err => {
+						CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
+							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+								Log("jsmin>>>>", err);
+
+								if (err)
+									cb( null );
+
+								else {
+									var min = JSMIN.minify( e5code );
+
+									if (min.error) 
+										cb( null );
+
+									else   
+										cb( min.code );
+								}
+							});
+						});
+					});
+					break;						
+
+				case "py":
+					/*
+					minifying python is problematic as the pyminifier obvuscator has no option
+					to reseed; thus the pyminifier was modified to reseed its rv generator (see install
+					notes).
+					*/
+					
+					var pyTmp = "./temps/py/" + product;
+
+					FS.writeFile(pyTmp, code.replace(/\t/g,"    ").replace(/^\n/gm,""), "utf8", err => {
+						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+							Log("pymin>>>>", err);
+
+							if (err)
+								cb(null);
+
+							else
+								cb( minCode );
+						});
+					});
+					break;
+
+				case "m":
+				case "me":
+					/*
+					Could use Matlab's pcode generator - but only avail within matlab
+							cd to MATLABROOT (avail w matlabroot cmd)
+							matlab -nosplash -r script.m
+							start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
+
+					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
+
+					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
+					to remove comments - but you're back to enqueue.
+
+					Better option to use smop to convert matlab to python, then pyminify that.
+					*/
+
+					var 
+						mTmp = "./temps/matsrc/" + product,
+						pyTmp = "./temps/matout/" + product;
+
+					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
+						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
+							Log("matmin>>>>", err);
+
+							if (err)
+								cb( null );
+
+							else
+								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
+									if (err) 
+										cb( null );
+
+									else
+										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+											if (err)
+												cb(null);
+
+											else
+												cb( minCode );
+										});										
+								});									
+						});
+					});
+					break;
+
+				case "jade":
+					cb( code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".") );
+					break;
+					
+				default:
+					cb( code );
+			}
+		},
 		
+		genLicense: function (code, secret) {  //< callback cb(minifiedCode, license)
+			Log("gen license for", secret);
+			if (secret)
+				return CRYPTO.createHmac("sha256", secret).update(code).digest("hex");
+			
+			else
+				return null;
+		},
+		
+		/*
 		genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
 			//Log("gen lic", secret);
 			if (secret)
@@ -712,7 +846,7 @@ Document your usecase using markdown tags:
 					case "m":
 					case "me":
 						//cb(null); break;
-						/*
+						/ *
 						Could use Matlab's pcode generator - but only avail within matlab
 								cd to MATLABROOT (avail w matlabroot cmd)
 								matlab -nosplash -r script.m
@@ -724,7 +858,7 @@ Document your usecase using markdown tags:
 						to remove comments - but you're back to enqueue.
 
 						Better option to use smop to convert matlab to python, then pyminify that.
-						*/
+						* /
 
 						var 
 							mTmp = "./temps/matsrc/" + product,
@@ -765,6 +899,7 @@ Document your usecase using markdown tags:
 			else
 				cb( code, CRYPTO.createHmac("sha256", type).update(code).digest("hex") );
 		},
+		*/
 
 		publishPlugins: function ( sql ) { //< publish all plugin products
 			var 
