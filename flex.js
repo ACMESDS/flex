@@ -132,7 +132,7 @@ Document your usecase using markdown tags:
 				
 			var
 				errors = FLEX.errors,
-				pocs = FLEX.site.pocs || {},
+				pocs = FLEX.site.pocs,
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
@@ -718,7 +718,7 @@ Document your usecase using markdown tags:
 					
 					var pyTmp = "./temps/py/" + product;
 
-					FS.writeFile(pyTmp, code.replace(/\t/g,"    ").replace(/^\n/gm,""), "utf8", err => {
+					FS.writeFile(pyTmp, code.replace(/\t/g,"  ").replace(/^\n/gm,""), "utf8", err => {
 						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
 							//Log("pymin>>>>", err);
 
@@ -2252,10 +2252,10 @@ SELECT.likeus = function Xselect(req, res) {
 		sql = req.sql, 
 		log = req.log, 
 		query = req.query, 
-		pocs = FLEX.site.pocs || {};
+		pocs = FLEX.site.pocs;
 
 	sendMail({
-		to: pocs.admin || "admin@undefined",
+		to: pocs.admin,
 		subject: req.client + " likes " + FLEX.site.title + " !!", 
 		body: "Just saying"
 	}, sql );
@@ -4426,7 +4426,7 @@ SELECT.login = function(req,res) {
 		sql = req.sql, 
 		query = req.query,
 		site = FLEX.site,
-		pocs = site.pocs || {},
+		pocs = site.pocs,
 		url = site.urls.worker,
 		nick = site.nick,
 		nickref = nick.tag("a",{href:url}),
@@ -4438,9 +4438,9 @@ SELECT.login = function(req,res) {
 		logins = FLEX.paths.logins,
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
 		isp = {
-			machine: "totem.west.ile.nga.ic.gov",
-			admin: pocs.admin || "admin@undefined",
-			ps: pocs.ps || "projectscientist@undefined",
+			machine: ENV.SERVICE_WORKER_URL,
+			admin: pocs.admin,
+			overlord: pocs.overlord,
 			remotein: `${logins}/${user}.rdp`,
 			sudos: [
 				`adduser ${user} -M --gid ${group} -p ${ENV.LOGIN_PASS}`,
@@ -4505,9 +4505,9 @@ To connect to ${nickref} from Windows:
 					res( FLEX.errors.failedLogin );
 					sendMail({
 						to: isp.admin,
-						cc: isp.ps,
+						cc: isp.overlord,
 						subject: `${nick} login failed`,
-						body: err + `This is an automatted request from ${nick}.  Please provide ${isp.ps} "sudo" for ${prep} on ${isp.machine}`
+						body: err + `This is an automatted request from ${nick}.  Please provide ${isp.overlord} "sudo" for ${prep} on ${isp.machine}`
 					}, sql);
 				}
 
@@ -4516,7 +4516,7 @@ To connect to ${nickref} from Windows:
 					sql.query("UPDATE openv.profiles SET ? WHERE ?", [{User: user}, {Client: client}]);
 					sendMail({
 						to: client,
-						cc: `${isp.ps};${isp.admin}`,
+						cc: `${isp.overlord};${isp.admin}`,
 						subject: `${nick} login established`,
 						body: notice
 					}, sql);
@@ -5202,27 +5202,13 @@ function blogKeys(product, prime) {
 		fetch: (url,tags) => {
 			//console.log(">>>>>", url);
 			return "<!---fetch " + url.tag("?", tags || {} ) + "--->";
-		},
-		
-		/*
-		fetch: (req, opts, input) => {
-			var 
-				url = This.urls[req] || ( (req.charAt(0) == "/") ? `${paths.totem}${req}` : req ),
-				tags = { };
-
-			//Log(urls, url);
-
-			if (opts)
-				Each(opts, ( key, val ) => tags[key] = val );
-
-			return "<!---fetch " + url.tag("?", tags) + "--->" + (input||"");
-		}, */
+		},		
 		gridify: site.gridify,
 		tag: site.tag,
 		get: site.get,
 		match: site.match,
 		replace: site.replace,
-		pocs: site.pocs || {},
+		pocs: site.pocs,
 		request: req => {
 			var
 				parts = (req || "").split("/"),
