@@ -139,7 +139,8 @@ Document your usecase using markdown tags:
 				keys = blogKeys(product),
 				urls = keys.urls;
 			
-			urls.proxy = urls.tou.tag("?", {proxy: proxy});
+			//urls.proxy = urls.tou.tag("?", {proxy: proxy});
+			Log("plugin attrib via proxy", proxy);
 
 			switch ( attr ) {
 				case "users":
@@ -270,7 +271,7 @@ Document your usecase using markdown tags:
 						suits.push( "loopback".tag( urls.loopback ) );
 
 						if (proxy)
-							suits.push( "other".tag( urls.proxy ) );
+							suits.push( "other".tag( "a", {href: urls.tou, proxy: proxy} ) );
 
 						//suits.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
 
@@ -281,6 +282,8 @@ Document your usecase using markdown tags:
 					
 				case "tou":
 				case "help":
+					
+					Log("tou via proxy", proxy);
 					( eng.ToU || "ToU undefined" )
 						.Xfetch( html => html.Xparms( name, html => cb(html) ));
 						
@@ -5180,8 +5183,8 @@ function blogKeys(product, prime) {
 		type = parts.pop() || "",
 		name = parts.pop() || "",
 		paths = {  
-			master: ENV.SERVICE_MASTER_URL,
-			worker: ENV.SERVICE_WORKER_URL,
+			master: ENV.SERVICE_MASTER_URL + "/" + name,
+			worker: ENV.SERVICE_WORKER_URL + "/" + name,
 			product: ENV.SERVICE_WORKER_URL + "/" + name,
 			repo: ENV.PLUGIN_REPO
 		};
@@ -5221,15 +5224,15 @@ function blogKeys(product, prime) {
 
 		now: (new Date())+"",
 		urls: {
-			loopback:  `${paths.worker}/${product}?endservice=${paths.product}.users`,
-			transfer: `${paths.worker}/${product}?endservice=`,
+			loopback:  `${paths.worker}?endservice=${paths.worker}.users`,
+			transfer: `${paths.worker}?endservice=`,
 			product: paths.product,
-			status: paths.product + ".status",
-			md: paths.product + ".md",
-			suitors: paths.product + ".suitors",
-			run: paths.product + ".run",
-			tou: paths.product + ".tou",
-			pub: paths.product + ".pub",
+			status: paths.master + ".status",
+			md: paths.master + ".md",
+			suitors: paths.master + ".suitors",
+			run: paths.worker + ".run",
+			tou: paths.master + ".tou",
+			pub: paths.master + ".pub",
 			Totem: paths.worker,
 			totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
 			repo: paths.repo + name,
