@@ -10,7 +10,6 @@
 @requires fs
 @requires child-process
 @requires os
-@requires stream
 
 @requires enum
 @requires atomic
@@ -29,11 +28,6 @@
 @requires prettydiff
 @requires neo4j
 */
-/* 
-+ Fix addterms.  If tou.txt does not need blog keys, then can simplify and
-move blogKeys to dep method.
-products, partner, published, license, urls (service, tou, repoat) and []() md
-*/
 
 var 
 	// globals
@@ -45,10 +39,10 @@ var
 	READ = require("reader"),	
 	
 	VM = require('vm'), 				// V8 JS compiler
-	STREAM = require("stream"), 	// pipe-able streams
-	CLUSTER = require('cluster'),		// Support for multiple cores	
+	//STR = require("stream"), 	// pipe-able streams
+	CLUS = require('cluster'),		// Support for multiple cores	
 	HTTP = require('http'),				// HTTP interface
-	CRYPTO = require('crypto'),			// Crypto interface
+	CRY = require('crypto'),			// Crypto interface
 	//NET = require('net'), 				// Network interface
 	URL = require('url'), 				// Network interface
 	FS = require('fs'),					// Need filesystem for crawling directory
@@ -125,7 +119,7 @@ Document your usecase using markdown tags:
 		licenseOnRestart: false,
 		
 		serviceID: function (url) {
-			return CRYPTO.createHmac("sha256", "").update(url || "").digest("hex");
+			return CRY.createHmac("sha256", "").update(url || "").digest("hex");
 		},
 		
 		pluginAttribute: function ( sql, attr, endPartner, endService, proxy, eng, cb ) {
@@ -136,7 +130,7 @@ Document your usecase using markdown tags:
 				name = eng.Name,
 				type = eng.Type,
 				product = name + "." + type,
-				keys = blogKeys(product),
+				keys = blogContext(product),
 				urls = keys.urls;
 			
 			//urls.proxy = urls.tou.tag("?", {proxy: proxy});
@@ -158,7 +152,9 @@ Document your usecase using markdown tags:
 					break;
 		
 				case "pub":
-					cb(null);
+					//function (req, name, type, selfLicense)
+					FLEX.publishPlugin(sql, name, type, false);
+					cb( "publishing" );
 					break;
 					
 				case "status":
@@ -269,9 +265,7 @@ Document your usecase using markdown tags:
 							cb( rtns.join(", ") );
 						}); */
 						suits.push( "loopback".tag( urls.loopback ) );
-
-						if (proxy)
-							suits.push( "other".tag( "a", {href: urls.tou, proxy: proxy} ) );
+						suits.push( "other".tag( urls.tou ) );
 
 						//suits.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
 
@@ -385,7 +379,7 @@ Document your usecase using markdown tags:
 			
 		/*
 		pluginKeys: function (product, keys) {
-			return This = Copy( keys || {}, blogKeys(product), ".");
+			return This = Copy( keys || {}, blogContext(product), ".");
 		},  */
 		
 		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null) on error
@@ -438,7 +432,7 @@ Document your usecase using markdown tags:
 				returnLicense(pub);
 		},
 		
-		publishPlugin: function (req, name, type, selfLicense) {  // publish product = name.type
+		publishPlugin: function (sql, name, type, selfLicense) {  // publish product = name.type
 			
 			function getter( opt ) {	
 				if (opt) 
@@ -482,7 +476,6 @@ Document your usecase using markdown tags:
 			}
 
 			var
-				sql = req.sql,
 				modkeys = mod.mods || mod.modkeys || mod._mods,
 				addkeys = mod.adds || mod.addkeys || mod.keys,
 				dockeys = mod.docs || mod.dockeys || {},
@@ -507,12 +500,12 @@ Document your usecase using markdown tags:
 			
 			Each( prokeys, (key,type) => prokeys[key] = type.replace( /comment '((.|\n)*)'/, (pre,com) => { dockeys[key]  += com; return ""; } ) );
 			
-			Serialize( 	// convert markdown keys to html
-					dockeys, 		// markdown-ed dockeys
-					(md,cb) => md.Xblog(req, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
+			Serialize( 	// convert markdown keys to html (with disabled content tracking)
+					dockeys, 		// markdown dockeys 
+					(md,cb) => md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
 						
 				var
-					toukeys = blogKeys( product, {
+					toukeys = blogContext( product, {
 						summary: "summary tbd",
 						reqts: defs.envs[type] || "reqts tbd",
 						ver: "ver tbd",
@@ -791,7 +784,7 @@ Document your usecase using markdown tags:
 		genLicense: function (code, secret) {  //< callback cb(minifiedCode, license)
 			Log("gen license for", secret);
 			if (secret)
-				return CRYPTO.createHmac("sha256", secret).update(code).digest("hex");
+				return CRY.createHmac("sha256", secret).update(code).digest("hex");
 			
 			else
 				return null;
@@ -806,7 +799,7 @@ Document your usecase using markdown tags:
 						var minCode = HMIN.minify(code.replace(/<br>/g,""), {
 							removeAttributeQuotes: true
 						});
-						cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+						cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
 						break;
 
 					case "js":
@@ -830,7 +823,7 @@ Document your usecase using markdown tags:
 											cb( null );
 
 										else   
-											cb( min.code, CRYPTO.createHmac("sha256", secret).update(min.code).digest("hex") );
+											cb( min.code, CRY.createHmac("sha256", secret).update(min.code).digest("hex") );
 									}
 								});
 							});
@@ -851,7 +844,7 @@ Document your usecase using markdown tags:
 									cb(null);
 
 								else
-									cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+									cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
 							});
 						});
 						break;
@@ -895,7 +888,7 @@ Document your usecase using markdown tags:
 													cb(null);
 
 												else
-													cb( minCode, CRYPTO.createHmac("sha256", secret).update(minCode).digest("hex") );
+													cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
 											});										
 									});									
 							});
@@ -906,20 +899,20 @@ Document your usecase using markdown tags:
 					default:
 						//cb(null); break;
 						var min = code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".");
-						cb( min, CRYPTO.createHmac("sha256", secret).update(min).digest("hex") );
+						cb( min, CRY.createHmac("sha256", secret).update(min).digest("hex") );
 				}
 			
 			else
-				cb( code, CRYPTO.createHmac("sha256", type).update(code).digest("hex") );
+				cb( code, CRY.createHmac("sha256", type).update(code).digest("hex") );
 		},
 		*/
 
-		publishPlugins: function ( sql ) { //< publish all plugin products
+		publishPlugins: function ( sql ) { //< publish all plugins
 			var 
 				paths = FLEX.paths.publish;
 			
-			Each( paths, (type, path) => { 		// get plugin file types to publish	
-				FLEX.getIndex( path, files => {	// get plugin file names to publish
+			Each( paths, (type, path) => { 		// get plugin types to publish	
+				FLEX.getIndex( path, files => {	// get plugin names to publish
 					files.forEach( file => {
 						var
 							product = file,
@@ -929,16 +922,7 @@ Document your usecase using markdown tags:
 						
 						switch (filetype) {
 							case "js":
-								var 
-									now = new Date(),
-									ver = "vX",
-									req = {  //< bogus incomplete request
-										sql: sql,
-										client: "totem",
-										group: "app"
-									};
-
-								FLEX.publishPlugin(req, filename, type, FLEX.licenseOnRestart);
+								FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
 								break;
 								
 							case "jade":
@@ -1227,7 +1211,7 @@ Document your usecase using markdown tags:
 			sqlThread( sql => {				
 				READ.config(sql);			
 				
-				if (CLUSTER.isMaster)   					
+				if (CLUS.isMaster)   					
 					FLEX.publishPlugins( sql );
 
 				if (false)
@@ -1243,7 +1227,7 @@ Document your usecase using markdown tags:
 				sql.release();
 			});
 			
-			if (CLUSTER.isMaster) {
+			if (CLUS.isMaster) {
 				
 				NEWSFEED = new FEED({					// Establish news feeder
 					title:          site.nick,
@@ -5155,11 +5139,11 @@ INSERT.blog = function (req,res) {
 	
 	switch (req.type) {
 		case "mu":
-			res( req.post.parseEMAC( blogKeys( "nill", query ) ) );
+			res( req.post.parseEMAC( blogContext( "nill", query ) ) );
 			break;
 			
 		case "":
-			req.post.Xblog(req, query.ds || "nada?id=0", {}, blogKeys( "nill", query) , {}, false, html => res(html) );
+			req.post.Xblog(req, query.ds || "nada?id=0", {}, blogContext( "nill", query) , {}, false, html => res(html) );
 			break;
 			
 		case "py":
@@ -5176,7 +5160,7 @@ function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
 }
 
-function blogKeys(product, prime) {
+function blogContext(product, prime) {
 	var
 		site = FLEX.site,
 		parts = product.split("."),
@@ -5185,7 +5169,7 @@ function blogKeys(product, prime) {
 		paths = {  
 			master: ENV.SERVICE_MASTER_URL + "/" + name,
 			worker: ENV.SERVICE_WORKER_URL + "/" + name,
-			product: ENV.SERVICE_WORKER_URL + "/" + name,
+			//product: ENV.SERVICE_WORKER_URL + "/" + name,
 			repo: ENV.PLUGIN_REPO
 		};
 	
@@ -5198,10 +5182,10 @@ function blogKeys(product, prime) {
 		register: `<!---parms endservice=https://myservice/${name}--->`,
 		input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
 		
-		status: (x) => ctx.fetch( paths.product + ".status" ),
-		toumd: (x) => ctx.fetch( paths.product + ".toumd" ),
-		suitors: (x) => ctx.fetch( paths.product + ".suitors" ),
-		users: (x) => ctx.fetch( paths.product + ".users" ),
+		status: (x) => ctx.fetch( paths.worker + ".status" ),
+		toumd: (x) => ctx.fetch( paths.worker + ".toumd" ),
+		suitors: (x) => ctx.fetch( paths.worker + ".suitors" ),
+		users: (x) => ctx.fetch( paths.worker + ".users" ),
 		fetch: (url,tags) => {
 			//console.log(">>>>>", url);
 			return "<!---fetch " + url.tag("?", tags || {} ) + "--->";
@@ -5226,15 +5210,18 @@ function blogKeys(product, prime) {
 		urls: {
 			loopback:  `${paths.worker}?endservice=${paths.worker}.users`,
 			transfer: `${paths.worker}?endservice=`,
-			product: paths.product,
+			//product: paths.worker,
 			status: paths.master + ".status",
 			md: paths.master + ".md",
-			suitors: paths.master + ".suitors",
+			suitors: paths.worker + ".suitors",
 			run: paths.worker + ".run",
 			tou: paths.master + ".tou",
 			pub: paths.master + ".pub",
-			Totem: paths.worker,
-			totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
+			worker: paths.worker,
+			master: paths.master,
+			totem: ENV.SERVICE_WORKER_URL,
+			//Totem: paths.worker,
+			//totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
 			repo: paths.repo + name,
 			repofiles: paths.repo + name + "/raw/master",
 			relinfo: paths.master + "/releases.html?product=" + product
