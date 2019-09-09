@@ -430,10 +430,11 @@ Document your usecase using markdown tags:
 				FLEX.getSite( endService, null, info => {  // check users provided by end-service
 					var 
 						valid = false, 
+						partner = pub._Partner.toLowerCase(),
 						users = info.parseJSON() || [] ;
 					
 					users.forEach( user => { 
-						if (user == pub._Partner) valid = true;
+						if (user.toLowerCase() == partner) valid = true;
 					});
 					
 					if (valid) // signal valid
@@ -5222,8 +5223,8 @@ function blogContext(product, prime) {
 
 		now: (new Date())+"",
 		urls: {
-			loopback:  `${paths.worker}?endservice=${paths.worker}.users`,
-			transfer: `${paths.worker}?endservice=`,
+			loopback:  `${paths.worker}.${type}?endservice=${paths.worker}.users`,
+			transfer: `${paths.worker}.${type}?endservice=`,
 			//product: paths.worker,
 			status: paths.master + ".status",
 			md: paths.master + ".md",
