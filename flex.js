@@ -134,11 +134,27 @@ Document your usecase using markdown tags:
 				urls = keys.urls;
 			
 			//urls.proxy = urls.tou.tag("?", {proxy: proxy});
-			Log("plugin attrib via proxy", proxy);
+			//Log("plugin attrib via proxy", proxy);
 
 			switch ( attr ) {
 				case "users":
 					cb( pocs.overlord.split(";") );
+					break;
+					
+				case "export":
+					cb( "exporting" );
+					CP.exec(
+						`mysqldump -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --skip-add-drop-table app ${name} >./stores/${name}.sql`,
+						(err,out) => Trace( `EXPORTED ${name} `+ (err||"ok") ) );							
+
+					break;
+					
+				case "import":
+					cb( "importing" );
+					CP.exec(
+						`mysql -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --force app < ./stores/${name}.sql`,
+						(err,out) => Trace( `IMPORTED ${name} `+ (err||"ok") ) );							
+						
 					break;
 					
 				case "md":
@@ -277,7 +293,6 @@ Document your usecase using markdown tags:
 				case "tou":
 				case "help":
 					
-					Log("tou via proxy", proxy);
 					( eng.ToU || "ToU undefined" )
 						.Xfetch( html => html.Xparms( name, html => cb(html) ));
 						
@@ -1211,7 +1226,7 @@ Document your usecase using markdown tags:
 			sqlThread( sql => {				
 				READ.config(sql);			
 				
-				if (CLUS.isMaster)   					
+				if (CLUS.isMaster && 0)   					
 					FLEX.publishPlugins( sql );
 
 				if (false)
@@ -1512,19 +1527,19 @@ SELECT.baseline = function Xselect(req, res) {
 
 	var 
 		query = req.query,
-		sql = req.sql,
-		ex = {
-			gitlogs: 'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog'
-		};
+		sql = req.sql;
 	
-	CP.exec(ex.gitlogs, function (err,log) {
+	CP.exec(
+		'git log --reverse --pretty=format:"%h||%an||%ce||%ad||%s" > gitlog',
+		function (err,log) {
+
+		var recs = [];
 
 		if (err)
-			res(err);
+			res(recs);
+		
 		else
 			FS.readFile("gitlog", "utf-8", function (err,logs) {
-				var recs = [];
-
 				logs.split("\n").forEach( (log,id) => {
 
 					var	parts = log.split("||");
@@ -1537,11 +1552,8 @@ SELECT.baseline = function Xselect(req, res) {
 						made: new Date(parts[3]),
 						cm: parts[4]
 					});
-
 				});
-
 				res(recs);
-
 			});
 	});
 
@@ -1914,6 +1926,7 @@ SELECT.ATOMS = function Xselect(req, res) {
 }
 */
 
+/*
 SELECT.config = function Xselect(req, res) {
 	var 
 		sql = req.sql,
@@ -1966,7 +1979,7 @@ SELECT.config = function Xselect(req, res) {
 			(OS.freemem() / OS.totalmem()).toFixed(2) + " % used" });
 		
 		res(info);
-		/*
+		/ *
 		res({	
 			sw: escape(swconfig)
 					.replace(/\%u2502/g,"")
@@ -1995,13 +2008,14 @@ SELECT.config = function Xselect(req, res) {
 			//routes: JSON.stringify(FLEX.routes),
 			//netif: JSON.stringify(OS.networkInterfaces()), 	//	do not provide in secure mode
 			//temp: TEMPIF.value()  // unavail on vms
-		});  */
+		});  * /
 		
 	});
 	});
 	});
 }
-	
+*/
+
 SELECT.datasets = function Xselect(req, res) {
 	var sql = req.sql, log = req.log, query = req.query;
 	var rtns = [], ID=0;
@@ -5229,6 +5243,91 @@ function blogContext(product, prime) {
 	}, ".");
 }
 
+SELECT.os = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query;
+	
+	CP.exec(
+		"df -h /dev/mapper/centos-root", 
+		(err,dfout,dferr) => {
+			
+		var info = [];
+			
+		if (!err) {
+			info.push({ID: ID++, Type: "disk", Classif: "(U)", Config:  dfout});
+			info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config: "up " + (OS.uptime()/3600/24).toFixed(2)+" days"});
+			info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config: "%util " + OS.loadavg() + "% used at [1,2,3]" });
+			info.push({ID: ID++, Type: "cpu", Classif: "(U)", Config: "cpus " + OS.cpus()[0].model });
+			info.push({ID: ID++, Type: "os", Classif: "(U)", Config: OS.type() });
+			info.push({ID: ID++, Type: "os", Classif: "(U)", Config: OS.platform() });
+			info.push({ID: ID++, Type: "os", Classif: "(U)", Config: OS.arch() });
+			info.push({ID: ID++, Type: "os", Classif: "(U)", Config: OS.hostname() });	
+			info.push({ID: ID++, Type: "ram", Classif: "(U)", Config: ((OS.totalmem()-OS.freemem())*1e-9).toFixed(2) + " GB " });
+			info.push({ID: ID++, Type: "ram", Classif: "(U)", Config: (OS.freemem() / OS.totalmem()).toFixed(2) + " % used" });
+		}
+			
+		res(info);
+	});
+};
+
+SELECT.net = function (req,res) {
+	CP.exec("netstat -tns", function (err,nsout,nserr) {
+		var type="", info = [];
+		
+		if (!err)
+			nsout.split("\n").forEach( ns => {
+				if (ns.endsWith(":"))
+					type = ns;
+				else
+					info.push({ID: ID++, Type: type, Config: ns, Classif: "(U)"});
+			});			
+		
+		res(info);
+	});
+};
+
+SELECT.config = function (req,res) {
+	var
+		sql = req.sql,
+		query = req.query,
+		getSite = FLEX.getSite;
+	
+	if (mod = query.mod) 
+		CP.exec(`cd ../${mod}; npm list`, function (err,swconfig) {			
+			var info = [];
+			
+			if (!err)
+				swconfig.split("\n").forEach( sw => {
+					sw = escape(sw)
+						.replace(/\%u2502/g,"")
+						.replace(/\%u2500/g,">")
+						.replace(/\%u251C/g,"")
+						.replace(/\%u252C/g,"")
+						.replace(/\%u2514/g,"")
+						.replace(/\%0A/g,"")
+						.replace(/\%20/g,"");
+
+					info.push({ID: info.length, Type: "sw", Config: sw, Classif: "(U)"});
+				});
+
+			res(info);
+		});		
+	
+	else 
+		getSite( "/config?mod=enum", null, en => {
+		getSite( "/config?mod=flex", null, flex => {
+		getSite( "/config?mod=totem", null, totem => {
+		getSite( "/config?mod=debe", null, debe => {
+			res({
+				enum: en.parseJSON([]),
+				flex: flex.parseJSON([]),
+				totem: totem.parseJSON([]),
+				debe: debe.parseJSON([])
+			});
+		}); }); }); });
+};
+
 SELECT.info = function (req,res) {
 	function toSchema( path, obj ) {
 		if ( isObject(obj) ) {
@@ -5314,11 +5413,10 @@ SELECT.info = function (req,res) {
 		else 
 			return [];
 	}
-	
+
 	var
 		sql = req.sql,
 		query = req.query,
-		sql = req.sql,
 		pathPrefix = FLEX.site.urls.master,
 		getSite = FLEX.getSite,
 		libs = {
@@ -5330,26 +5428,28 @@ SELECT.info = function (req,res) {
 			}
 		},
 		tables = {}, 
-		xtables = {};
+		xtables = {},
+		ID = 0,
+		info = [];		
 	
 	Each( $.extensions, (name,ex) => {		
 		if ( isFunction(ex) ) {
 			var 
 				parts = name.split("_"),
 				reg = libs.regressors[ parts.pop() ];
-			
+
 			if ( reg ) 
 				reg[ name ] = name;
-			
+
 			else
 			if ( name.endsWith( "dev" ) )
 				libs.generators[ name ] = name;
-			
+
 			else					
 				libs.misc[ name ] = name;
 		}
 	});
-	
+
 	sql.query("SHOW TABLES FROM app")
 	.on("result", rec => {
 		if ( name = rec.Tables_in_app )
@@ -5361,11 +5461,12 @@ SELECT.info = function (req,res) {
 		Each( SELECT, table => {
 			xtables[ table ] = table.tag( `/${table}` );
 		});
-		
-		getSite( "/plugins", null, info => {
+
+		getSite( "/plugins", null, plugins => {
+		getSite( "/config", null, config => {
 			var plugs = {};
 
-			info.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
+			plugins.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
 
 			res( toSchema( "", {
 				totem: {
@@ -5461,6 +5562,7 @@ SELECT.info = function (req,res) {
 						api: "/api.view",
 						"skinning guide": "/skinguide.view",
 						requirements: "/project.view",
+						codebase: config.parseJSON(),
 						developers: {
 							repos: ENV.PLUGIN_REPO,
 							login: "/shares/winlogin.rdp",
@@ -5484,9 +5586,9 @@ SELECT.info = function (req,res) {
 					}
 				}
 			}) );
-		});
+		}); });
 	});	
-}
+};
 
 SELECT.gen = function (req, res) {
 	Log("req", req.query);
