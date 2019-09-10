@@ -1038,7 +1038,7 @@ Document your usecase using markdown tags:
 		thread: () => {Trace("sql thread not configured");},  //< sql threader
 		//skinner: () => {Trace("site skinner not configured");},  //< site skinner
 
-		getContext: function ( sql, host, where, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
+		getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 			
 			function config(js, ctx) {
 				try {
@@ -1049,7 +1049,7 @@ Document your usecase using markdown tags:
 				}
 			}
 			
-			sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,where], function (ctx) {
+			sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,query], ctx => {
 				
 				if (ctx) {
 					ctx.Host = host;
@@ -1058,6 +1058,10 @@ Document your usecase using markdown tags:
 					sql.getTypes( `app.${host}`, {Type:"json"}, {}, jsons => {
 						//Log("json keys", host, jsons);
 						Each( jsons, key => {
+							if ( key.startsWith("Save") )
+								delete ctx[key];
+							
+							else
 							if ( val = ctx[key] ) 
 								ctx[key] = val.parseJSON( );
 						});
@@ -1086,7 +1090,7 @@ Document your usecase using markdown tags:
 		*/
 			
 			//Log("run req",req);
-			FLEX.getContext( req.sql, req.table, req.query, function (ctx) {
+			FLEX.getContext( req.sql, req.table, req.query, ctx => {
 				
 				//Log("get ctx", ctx);	
 				if (ctx) {
@@ -1100,7 +1104,7 @@ Document your usecase using markdown tags:
 					if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
 						viaAgent(req, res);
 
-					else  // in-source the plugin and save returned results
+					else   // in-source the plugin and save returned results
 						//FLEX.runEngine(req, res);
 						ATOM.select(req, res);
 				}
@@ -1121,13 +1125,12 @@ Document your usecase using markdown tags:
 			var
 				getSite = FLEX.getSite,
 				sql = req.sql,
-				query = req.query,
-				thread = "totem."+ req.client + "." + req.table + "." + (query.Name || query.ID || 0);
+				query = req.query;
 
 			//Log({viaagent: query});
 			
 			if (agent = query.agent)   // out-source request
-				getSite(agent.tag( "?", Copy(query,{push:thread})), null, function (jobid) {
+				getSite(agent.tag( "?", query), null, function (jobid) {
 
 					if ( jobid ) {
 						Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -1167,7 +1170,7 @@ Document your usecase using markdown tags:
 					}
 
 				});
-
+			
 			else   // in-source request
 				ATOM.select(req, res);
 		},
