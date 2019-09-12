@@ -169,7 +169,7 @@ Document your usecase using markdown tags:
 		
 				case "pub":
 					//function (req, name, type, selfLicense)
-					FLEX.publishPlugin(sql, name, type, false);
+					FLEX.publishPlugin(sql, "./public/"+type+"/"+name, name, type, false);
 					cb( "publishing" );
 					break;
 					
@@ -448,7 +448,7 @@ Document your usecase using markdown tags:
 				returnLicense(pub);
 		},
 		
-		publishPlugin: function (sql, name, type, selfLicense) {  // publish product = name.type
+		publishPlugin: function (sql, path, name, type, selfLicense) {  // publish product = name.type
 			
 			function getter( opt ) {	
 				if (opt) 
@@ -481,7 +481,7 @@ Document your usecase using markdown tags:
 			}
 				
 			var 
-				pathname = FLEX.paths.publish[type] + name;
+				pathname = path; //FLEX.paths.publish[type] + name;
 			
 			try {
 				var	mod = require(process.cwd() + pathname.substr(1));
@@ -925,39 +925,44 @@ Document your usecase using markdown tags:
 
 		publishPlugins: function ( sql ) { //< publish all plugins
 			var 
-				paths = FLEX.paths.publish;
+				types = FLEX.publish;
 			
-			Each( paths, (type, path) => { 		// get plugin types to publish	
-				FLEX.getIndex( path, files => {	// get plugin names to publish
-					files.forEach( file => {
-						var
-							product = file,
-							parts = product.split("."),
-							filetype = parts.pop(),
-							filename = parts.pop();
-						
-						switch (filetype) {
-							case "js":
-								FLEX.publishPlugin(sql, filename, type, FLEX.licenseOnRestart);
-								break;
-								
-							case "jade":
-								/*
-								FS.readFile( path + file, "utf8", (err,code) => {
-									if (!err)
-										sql.query( 
-											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-												Name: filename,
-												Code: code,
-												Type: filetype,
-												Enabled: 1
-											}, code
-										]);	
-								});*/
-								break;
-								
-						}
-					});	
+			sql.query( "SELECT * FROM app.publisher WHERE Enabled")
+			.on("result", pub => {
+				Trace("PUBLISH "+pub.Path);
+				types.forEach( type => { 	// get plugin types to publish	
+					FLEX.getIndex( "./"+pub.Path+"/"+type, files => {	// get plugin names to publish
+						files.forEach( file => {
+							var
+								product = file,
+								parts = product.split("."),
+								filetype = parts.pop(),
+								filename = parts.pop(),
+								filepath = "./"+pub.Path+"/"+type+"/"+filename;
+
+							switch (filetype) {
+								case "js":
+									FLEX.publishPlugin(sql, filepath, filename, type, FLEX.licenseOnRestart);
+									break;
+
+								case "jade":
+									/*
+									FS.readFile( path + file, "utf8", (err,code) => {
+										if (!err)
+											sql.query( 
+												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+													Name: filename,
+													Code: code,
+													Type: filetype,
+													Enabled: 1
+												}, code
+											]);	
+									});*/
+									break;
+
+							}
+						});	
+					});
 				});
 			});
 		},
@@ -991,17 +996,12 @@ Document your usecase using markdown tags:
 		diag: { // configured for system health info
 		},
 		
+		publish: [ "js", "py", "me", "m", "jade", "R" ],
+		
 		paths: {
 			chips: "./chips/",
 			status: "./shares/status.xlsx",
 			logins: "./shares/logins",
-			publish: {
-				js: "./public/js/",
-				py: "./public/py/",
-				me: "./public/me/",
-				m: "./public/m/",
-				jade: "./public/jade/"
-			},
 			newsread: "http://craphound.com:80/?feed=rss2",
 			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
 			host: ""
@@ -1230,7 +1230,7 @@ Document your usecase using markdown tags:
 			sqlThread( sql => {				
 				READ.config(sql);			
 				
-				if (CLUS.isMaster && 0)   					
+				if (CLUS.isMaster && 1)   					
 					FLEX.publishPlugins( sql );
 
 				if (false)
