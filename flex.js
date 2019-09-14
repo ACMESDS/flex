@@ -83,12 +83,14 @@ var
 			pipe: `
 Place a DATASET into a supervised workflow using the Pipe:
 
-	"/DATASET.TYPE?QUERY"  
-	{ "path": "/DATASET.TYPE?QUERY", "KEY": [VALUE, ...] , ... "norun": true }
+	"/DATASET.TYPE?KEY=VALUE || $.EXPRESSION ..."  
+	{ "$": "SCRIPT" }
+	{ "Pipe": "/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
 
-The 2nd-form generates usecases over the specified context KEYs.  The 1st-form selects the
-workflow based on TYPE = json || jpg || stream || txt || aoi || db using TYPE-specific [QUERY keys](/api.view) 
-and TYPE-specific [supervisor context keys](/api.view).
+The "/DATASET.TYPE" [source pipe](/api.view) selects the TYPE-specific workflow based on TYPE = json || [ jpg | png | nitf ] || stream || [ txt | doc | pdf | xls ] || aoi || db 
+where $ references the TYPE-specific json data || GIMP image || event list || document text || db record.  The {KEY: [VALUE, ...]} [enumeration pipe](/api.view) 
+generates usecases over permuted context KEYs.  The {$: "SCRIPT"} [scripting pipe](/api.view) utilizes the [matlab-like scripting](https://sc.appdev.proj.coe.ic.gov://acmesds/man) 
+to post-process selected KEYs.
 `, 
 
 			description: `
@@ -1050,16 +1052,14 @@ Document your usecase using markdown tags:
 			}
 			
 			sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,query], ctx => {
-				
 				if (ctx) {
 					ctx.Host = host;
 					if ( ctx.Config ) config(ctx.Config, ctx);
 
-					sql.getTypes( `app.${host}`, {Type:"json"}, {}, jsons => {
-						//Log("json keys", host, jsons);
-						Each( jsons, key => {
-							if ( key.startsWith("Save") )
-								delete ctx[key];
+					sql.getJsons( `app.${host}`, keys => {
+						keys.forEach( key => {
+							if ( key.startsWith("Save") ) 
+								ctx[key] = null;
 							
 							else
 							if ( val = ctx[key] ) 
@@ -1091,7 +1091,6 @@ Document your usecase using markdown tags:
 			
 			//Log("run req",req);
 			FLEX.getContext( req.sql, req.table, req.query, ctx => {
-				
 				//Log("get ctx", ctx);	
 				if (ctx) {
 					Copy(ctx,req.query);
@@ -1230,7 +1229,7 @@ Document your usecase using markdown tags:
 			sqlThread( sql => {				
 				READ.config(sql);			
 				
-				if (CLUS.isMaster && 1)   					
+				if (CLUS.isMaster && 0)   					
 					FLEX.publishPlugins( sql );
 
 				if (false)
@@ -5595,8 +5594,14 @@ SELECT.info = function (req,res) {
 };
 
 SELECT.gen = function (req, res) {
-	Log("req", req.query);
-	$.gen(req.query, evs => res(evs) );
+	Log("gen", req.query);
+	$.gen(req.query, evs => {
+		//Log("gen", evs);
+		res({
+			x: evs.x._data,
+			y: evs.y._data
+		});
+	});
 };
 
 [
