@@ -31,7 +31,6 @@
 
 var 
 	// globals
-	TRACE = "X>",
 	ENV = process.env, 					// external variables
 	SUBMITTED = "submitted",
 
@@ -67,1168 +66,62 @@ var
 const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError } = require("enum");
 
 var
-	FLEX = module.exports = {
-		
-		mailer : {						// Email parameters
-			TRACE 	: true,	
-			SOURCE: "tbd",
-			TX: {},
-			RX: {}
-		},
-		
-		defaultDocs: {	// default plugin docs (db key comments)
-			export: "switch writes engine results [into a file](/api.view)",
-			ingest: "switch ingests engine results [into the database](/api.view)",
-			share: "switch returns engine results to the status area",
-			pipe: `
-Place a DATASET into a supervised workflow using the Pipe:
+	FLEX = module.exports = (opts,cb) => {
+	/**
+	@method config
+	Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
+	email sender and news feeder.   
+	*/
+		if (opts) Copy(opts,FLEX,".");
 
-	"/DATASET.TYPE?KEY=VALUE || $.EXPRESSION ..."  
-	{ "$": "SCRIPT" }
-	{ "Pipe": "/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
+		var
+			site = FLEX.site;
 
-The "/DATASET.TYPE" [source pipe](/api.view) selects the TYPE-specific workflow based on TYPE = json || [ jpg | png | nitf ] || stream || [ txt | doc | pdf | xls ] || aoi || db 
-where $ references the TYPE-specific json data || GIMP image || event list || document text || db record.  The {KEY: [VALUE, ...]} [enumeration pipe](/api.view) 
-generates usecases over permuted context KEYs.  The {$: "SCRIPT"} [scripting pipe](/api.view) utilizes the [matlab-like scripting](https://sc.appdev.proj.coe.ic.gov://acmesds/man) 
-to post-process selected KEYs.
-`, 
+		if (email = FLEX.mailer.TX) {
+			//Log("emailset", site.emailhost, "pocs", site.pocs);
 
-			description: `
-Document your usecase using markdown tags:
+			var parts = (site.emailhost||"").split(":");
+			email.HOST = parts[0];
+			email.PORT = parseInt(parts[1]);
 
-	[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
-	[ TEXT ] ( COLOR )  
-	[ TOPIC ] ( ? starts=DATE & ends=DATE )  
-	$ $ inline TeX $ $  ||  n$ $ break TeX $ $ || a$ $ AsciiMath $ $ || m$ $ MathML $ $  
-	[JS || #JS || TeX] OP= [JS || #JS || TeX]  
-	$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
-	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
-	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
+			var parts = (site.emailuser||"").split(":");
+			email.USER = parts[0];
+			email.PASS = parts[1];
 
-`,
+			if (email.PORT) {  		// Establish server's email transport
+				Trace(`MAILHOST ${email.HOST} ON port-${email.PORT}`);
 
-			donfig: "js-script defines a usecase context  ",
-			save: "json aggregates engine results not captured in other Save_KEYs  ",
-			entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
-			exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
-			batch: "value overrides the supervisor's batch size  (0 disabled)  ",
-			symbols: "json overrides the supervisor's state symbols (null defaults)  ",
-			steps: "value overrides the supervisor's observation interval (0 defaults) ",
-			ring: "[[lat,lon], ...] in degs 4+ length vector defining an aoi"
-		},
-
-		licenseOnDownload: true,
-		licenseOnRestart: false,
-		
-		serviceID: function (url) {
-			return CRY.createHmac("sha256", "").update(url || "").digest("hex");
-		},
-		
-		pluginAttribute: function ( sql, attr, endPartner, endService, proxy, eng, cb ) {
-				
-			var
-				errors = FLEX.errors,
-				pocs = FLEX.site.pocs,
-				name = eng.Name,
-				type = eng.Type,
-				product = name + "." + type,
-				keys = blogContext(product),
-				urls = keys.urls;
-			
-			//urls.proxy = urls.tou.tag("?", {proxy: proxy});
-			//Log("plugin attrib via proxy", proxy);
-
-			switch ( attr ) {
-				case "users":
-					cb( pocs.overlord.split(";") );
-					break;
-					
-				case "export":
-					cb( "exporting" );
-					CP.exec(
-						`mysqldump -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --skip-add-drop-table app ${name} >./stores/${name}.sql`,
-						(err,out) => Trace( `EXPORTED ${name} `+ (err||"ok") ) );							
-
-					break;
-					
-				case "import":
-					cb( "importing" );
-					CP.exec(
-						`mysql -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --force app < ./stores/${name}.sql`,
-						(err,out) => Trace( `IMPORTED ${name} `+ (err||"ok") ) );							
-						
-					break;
-					
-				case "md":
-				case "toumd":
-					if ( eng.ToU )
-						eng.ToU.Xfetch( cb );
-					
-					else 
-						cb( null );
-					
-					break;
-		
-				case "pub":
-					//function (req, name, type, selfLicense)
-					FLEX.publishPlugin(sql, "./public/"+type+"/"+name, name, type, false);
-					cb( "publishing" );
-					break;
-					
-				case "status":
-					var 
-						getSite = FLEX.getSite,
-						fetchUsers = function (rec, cb) {	// callback with endservice users
-							getSite(rec._EndService, null, info => { 
-								//Log("status users", info);
-								cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) ;
-							});
-						},
-						fetchMods = function (rec, cb) {	// callback with endservice moderators
-							sql.query(
-								"SELECT group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Mods FROM app.releases WHERE ? LIMIT 1",
-								{ _Product: rec.Name+".html" },
-								(err, mods) => { 
-
-									//Log("status mods", err, mods);
-									if ( mod = mods[0] || { _Mods: "" } )
-										cb( mod._Mods || "" );
-									
-								});
-						};
-
-					sql.query(
-						"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
-						+ " 'fail' AS _Status, _Fails, "
-						+ "group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Partners, sum(_Copies) AS _Copies "
-						+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _License ORDER BY _Published",
-
-						[ {_Product: product}], (err,recs) => {
-
-							//Log("status", err, q.sql);
-							
-							if ( recs.length )
-								recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
-									if (rec) {
-										if ( users )
-											rec._Users = users.mailify( "users", {subject: name+" request"});
-
-										else 
-											sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
-
-										var 
-											url = URL.parse(rec._EndService),
-											host = url.host.split(".")[0];
-
-										rec._License = rec._License.tag("a",{href:urls.totem+`/releases.html?_EndServiceID=${rec._EndServiceID}`});
-										rec._Product = rec._Product.tag("a", {href:urls.run});
-										rec._Status = "pass";
-										rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
-										rec._EndService = host.tag("a",{href:rec._EndService});
-										delete rec._EndServiceID;
-									}
-
-									else
-										recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
-											if (rec) 
-												rec._Mods = mods.mailify( "moderators", {subject: name+" request"});
-
-											else 
-												cb( recs.gridify() );
-										});
-								});
-							
-							else
-								cb( "no transitions found" );
-					});
-					
-					break;
-					
-				case "suitors":
-				case "publist":
-					var 
-						suits = [];
-
-					sql.query(
-						"SELECT Name,Path FROM app.lookups WHERE ?",
-						{Ref: name}, (err,recs) => {
-
-						recs.forEach( rec => {
-							suits.push( rec.Name.tag( `${urls.transfer}${rec.Path}/${name}` ));
-						});
-
-						/*
-						// Extend list of suitors with already  etc
-						sql.query(
-							"SELECT endService FROM app.releases GROUP BY endServiceID", 
-							[],  (err,recs) => {
-
-							recs.forEach( rec => {
-								if ( !sites[rec.endService] ) {
-									var 
-										url = URL.parse(rec.endService),
-										name = (url.host||"none").split(".")[0];
-
-									rtns.push( `<a href="${urls.transfer}${rec.endService}">${name}</a>` );
-								}
-							});
-
-							rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
-								
-							if (proxy)
-								rtns.push( `<a href="${urls.proxy}">other</a>` );
-
-							//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
-
-							cb( rtns.join(", ") );
-						}); */
-						suits.push( "loopback".tag( urls.loopback ) );
-						suits.push( "other".tag( urls.tou ) );
-
-						//suits.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
-
-						cb( suits.join(", ") );
-							
-					});	
-					break;
-					
-				case "tou":
-				case "help":
-					
-					( eng.ToU || "ToU undefined" )
-						.Xfetch( html => html.Xparms( name, html => cb(html) ));
-						
-					break;
-
-				case "license":
-				case "release":
-					sql.query(
-						"SELECT _License,_EndService FROM app.releases WHERE ? LIMIT 1", 
-						{_Product: product}, (err,pubs) => {
-							
-						cb( err || pubs );
-					});
-					break;
-					
-				case "js":
-				case "py":
-				case "me":
-				case "m":
-					sql.query(
-						"SELECT * FROM app.releases WHERE least(?,1) ORDER BY _Published DESC LIMIT 1", {
-							_Partner: endPartner+".forever",
-							_EndServiceID: FLEX.serviceID( endService ),
-							_Product: product
-					}, (err, pubs) => {
-
-						function addTerms(code, type, pub, cb) {
-							var 
-								prefix = {
-									js: "// ",
-									py: "# ",
-									matlab: "% ",
-									jade: "// "
-								},
-								pre = "\n"+(prefix[type] || ">>");
-
-							FS.readFile("./public/md/tou.txt", "utf8", (err, terms) => {
-								if (err) 
-									cb( errors.noLicense );
-								
-								else
-									cb( pre + terms.parseEMAC( Copy({
-										"urls.service": pub._EndService,
-										license: pub._License,
-										published: pub._Published,
-										partner: pub._Partner
-									}, keys, ".")).replace(/\n/g,pre) + "\n" + code);
-							});
+				email.TRAN = email.USER
+					? MAIL.createTransport({ //"SMTP",{
+						host: email.HOST,
+						port: email.PORT,
+						auth: {
+							user: email.USER,
+							pass: email.PASS
 						}
-
-						/*
-						May want to rework this to simply use eng.Code by priming the Code in the publish phase
-						*/
-						FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
-							if (!err) eng.Code = srcCode;
-									
-							if ( pub = pubs[0] )	// already released so simply distribute
-								addTerms( eng.Code, type, pub, cb );
-
-							else	// not yet released so ...
-							if ( FLEX.licenseOnDownload ) { // license required to distribute
-								if ( endService )	// specified so try to distribute
-									if ( eng.Minified )	// compiled so ok to distribute
-										FLEX.licenseCode( sql, eng.Minified, {
-											_Partner: endPartner,
-											_EndService: endService,
-											_Published: new Date(),
-											_Product: product,
-											Path: "/"+product
-										}, pub => {
-											if (pub) // distribute licensed version
-												addTerms( eng.Code, type, pub, cb );
-
-											else	// failed
-												cb( null );
-										});
-								
-									else
-										cb( null );
-
-								else
-									cb( null );
-							}
-
-							else	// no license required
-								cb( eng.Code );
-						});
+					})
+					: MAIL.createTransport({ //"SMTP",{
+						host: email.HOST,
+						port: email.PORT
 					});
-					break;
-					
-				case "jade":
-					cb( (eng.Type == "jade") ? eng.Code : null );
-					break;
-
-				default:
-					cb( null );
-			}
-		},
-			
-		/*
-		pluginKeys: function (product, keys) {
-			return This = Copy( keys || {}, blogContext(product), ".");
-		},  */
-		
-		licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null) on error
-			
-			function returnLicense(pub) {
-				var
-					product = pub._Product,
-					endService = pub._EndService,
-					secret = product + "." + endService;
-				
-				if ( license = FLEX.genLicense( code, secret ) ) {
-					cb( Copy({
-						_License: license,
-						_EndServiceID: FLEX.serviceID( pub._EndService ),
-						_Copies: 1
-					}, pub),  sql );
-
-					sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
-
-					sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
-						Master: code,
-						License: license,
-						EndServiceID: pub._EndServiceID
-					}, {Master: code} ] );		
-				}
-
-				else 
-					cb( null );
-			}
-			
-			Log("endserv lic code", pub);
-			if (endService = pub._EndService)  // an end-service specified so validate it
-				FLEX.getSite( endService, null, info => {  // check users provided by end-service
-					var 
-						valid = false, 
-						partner = pub._Partner.toLowerCase(),
-						users = info.parseJSON() || [] ;
-					
-					users.forEach( user => { 
-						if (user.toLowerCase() == partner) valid = true;
-					});
-					
-					if (valid) // signal valid
-						returnLicense(pub);
-					
-					else	// signal invalid
-						cb( null  );
-				});	
-			
-			else	// no end-service so no need to validate
-				returnLicense(pub);
-		},
-		
-		publishPlugin: function (sql, path, name, type, selfLicense) {  // publish product = name.type
-			
-			function getter( opt ) {	
-				if (opt) 
-					if ( typeof opt == "function" )
-						switch (opt.name) {
-							case "engine":
-							case "tou":
-							case "inits":
-							case "wrap":
-								return opt({
-									path: pathname,
-									read: FS.readFileSync,
-									exec: CP.exec 
-								});
-							default:
-								return opt+"";
-						}
-					else
-						return opt;
-				else
-					return opt;
-			}
-			
-			function genToU( mod, toukeys, cb ) {
-				(getter( mod.tou || mod.readme ) || defs.tou)
-				.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
-				.Xblog(null, `${name}?name=test2`, {}, {}, toukeys, false, tou => {
-					cb( mod, tou );
-				});
-			}
-				
-			var 
-				pathname = path; //FLEX.paths.publish[type] + name;
-			
-			try {
-				var	mod = require(process.cwd() + pathname.substr(1));
-			}
-			catch (err) {
-				Log("PUBLISH", name, err);
-				return;
 			}
 
-			var
-				modkeys = mod.mods || mod.modkeys || mod._mods,
-				addkeys = mod.adds || mod.addkeys || mod.keys,
-				dockeys = mod.docs || mod.dockeys || {},
-				prokeys = modkeys || addkeys || {},
-				product = name + "." + type,
-				defs = {   // defaults
-					tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
-					envs: {
-						js: "nodejs-8.9.x and [man-latest](https://sc.appdev.proj.coe.ic.gov://acmesds/man)",
-						py: "anconda-4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
-						m: "matlab R18, odbc, simulink, stateflow"
-					},
-					docs: FLEX.defaultDocs || {}
-				};
-			
-			// default dockeys
-			
-			for ( var key in prokeys )
-				dockeys[key] = dockeys[key] || defs.docs[key.toLowerCase()] || "";
-			
-			// strip comments from product keys
-			
-			Each( prokeys, (key,type) => prokeys[key] = type.replace( /comment '((.|\n)*)'/, (pre,com) => { dockeys[key]  += com; return ""; } ) );
-			
-			Serialize( 	// convert markdown keys to html (with disabled content tracking)
-					dockeys, 		// markdown dockeys 
-					(md,cb) => md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
-						
-				var
-					toukeys = blogContext( product, {
-						summary: "summary tbd",
-						reqts: defs.envs[type] || "reqts tbd",
-						ver: "ver tbd",
-						//pocs: ["brian.d.james@coe.ic.gov"],
-						interface: () => {
-							var ifs = [];
-							Each( prokeys, (key, type) => {
-								 ifs.push({ 
-									 Key: key, 
-									 Type: type, 
-									 Details: dockeys[key] || "no documentation available" 
-								 });
-							});
-							// Log(">>>>>", product, ifs.length, ifs.gridify().length);
-							// if (product = "regress.js") Log(ifs.gridify() );
-							return ifs.gridify();
-						}
-					});
-
-				genToU(mod, toukeys, (mod, tou) => {
-
-					if ( mod.clear || mod.reset )
-						sql.query("DROP TABLE app.??", name);
-
-					sql.query( 
-						`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
-						[], err => {
-
-						var
-							modkeys = mod.mods || mod.modkeys || mod._mods,
-							addkeys = mod.adds || mod.addkeys || mod.keys;
-
-						if ( modkeys )
-							Each( modkeys, (key,type) => {
-								var 
-									keyId = sql.escapeId(key);
-								
-								/*
-									comment = "",
-
-								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-									comment = com;
-									return "";
-								});
-
-								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-									sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
-								});*/
-								
-								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
-							});
-
-						else
-						if ( addkeys)
-							Each( addkeys, (key,type) => {
-								var 
-									keyId = sql.escapeId(key);
-								
-								/*
-									doc = dockeys[key],
-									comment = "";
-
-								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-									comment = com;
-									return "";
-								});
-
-								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-									sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
-								});*/
-								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
-							});
-
-						if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
-							inits.forEach( init => {
-								sql.query("INSERT INTO app.?? SET ?", init);
-							});
-
-						if  ( readme = mod.readme )
-							FS.writeFile( pathname+".xmd", readme, "utf8" );
-
-						if ( code = getter( mod.engine || mod.code) ) {
-
-							FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
-								
-								if ( isError(min) )
-									Log("FAILED PUB", min);
-								
-								else 
-								if ( selfLicense ) // auto license to this service
-									FLEX.licenseCode( sql, min, {
-											_Partner: "totem",
-											_EndService: ENV.SERVICE_MASTER_URL,
-											_Published: new Date(),
-											_Product: product,
-											Path: pathname
-										}, pub => {
-											if (pub)
-												Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
-
-											else
-												Trace("FAILED LICENSE");
-										});
-
-									// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
-
-								var 
-									from = type,
-									to = mod.to || from,
-									fromFile = pathname + "." + from,
-									toFile = pathname + "." + to,
-									jsCode = {},
-									rev = {
-										Code: code,
-										Minified: isError(min) ? null : min,
-										Wrap: getter( mod.wrap ) || "",
-										ToU: tou,
-											// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-										State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-									};
-
-								Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
-
-								if ( from == to )  { // use code as-is
-									sql.query( 
-										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-											Name: name,
-											Type: type,
-											Enabled: 1
-										}), rev ] );
-
-									if (from == "js") {	// import js function into $
-										jsCode[name] = mod.engine || mod.code;
-										$(jsCode);
-									}
-								}
-
-								else  // convert code to requested type
-									//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
-									FS.writeFile( fromFile, code, "utf8", err => {
-									CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-										if (!err) 
-											FS.readFile( toFile, "utf8", (err,code) => {
-												rev.Code = code;
-												if (!err)
-													sql.query( 
-														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-															Name: name,
-															Type: type,
-															Enabled: 1
-														}), rev ] );
-											});									
-									});
-								});	
-							});
-						}
-
-						// CP.exec(`cd ${name}.d; sh publish.sh`);
-					});
-				});	
-			});
-		},
-
-		minifyCode: function (code, product, type, cb) {  //< callback cb(minifiedCode, license)
-			//Log("gen lic", secret);
-			switch (type) {
-				case "html":
-					cb( HMIN.minify(code.replace(/<br>/g,""), {
-						removeAttributeQuotes: true
-					}) );
-					break;
-
-				case "js":
-					var
-						e6Tmp = "./temps/e6/" + product,
-						e5Tmp = "./temps/e5/" + product;
-
-					FS.writeFile(e6Tmp, code, "utf8", err => {
-						CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
-							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-								//Log("jsmin>>>>", err);
-
-								if (err)
-									cb( err );
-
-								else {
-									var min = JSMIN.minify( e5code );
-
-									if (err = min.error) 
-										cb( err );
-
-									else   
-										cb( min.code );
-								}
-							});
-						});
-					});
-					break;						
-
-				case "py":
-					/*
-					minifying python is problematic as the pyminifier obvuscator has no option
-					to reseed; thus the pyminifier was modified to reseed its rv generator (see install
-					notes).
-					*/
-					
-					var pyTmp = "./temps/py/" + product;
-
-					FS.writeFile(pyTmp, code.replace(/\t/g,"  ").replace(/^\n/gm,""), "utf8", err => {
-						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-							//Log("pymin>>>>", err);
-
-							if (err)
-								cb(err);
-
-							else
-								cb( minCode );
-						});
-					});
-					break;
-
-				case "m":
-				case "me":
-					/*
-					Could use Matlab's pcode generator - but only avail within matlab
-							cd to MATLABROOT (avail w matlabroot cmd)
-							matlab -nosplash -r script.m
-							start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
-
-					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
-
-					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
-					to remove comments - but you're back to enqueue.
-
-					Better option to use smop to convert matlab to python, then pyminify that.
-					*/
-
-					var 
-						mTmp = "./temps/matsrc/" + product,
-						pyTmp = "./temps/matout/" + product;
-
-					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
-						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
-							//Log("matmin>>>>", err);
-
-							if (err)
-								cb( err );
-
-							else
-								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
-									if (err) 
-										cb( err );
-
-									else
-										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-											if (err)
-												cb(err);
-
-											else
-												cb( minCode );
-										});										
-								});									
-						});
-					});
-					break;
-
-				case "jade":
-					cb( code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".") );
-					break;
-					
-				default:
-					cb( code );
-			}
-		},
-		
-		genLicense: function (code, secret) {  //< callback cb(minifiedCode, license)
-			Log("gen license for", secret);
-			if (secret)
-				return CRY.createHmac("sha256", secret).update(code).digest("hex");
-			
 			else
-				return null;
-		},
-		
-		/*
-		genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
-			//Log("gen lic", secret);
-			if (secret)
-				switch (type) {
-					case "html":
-						var minCode = HMIN.minify(code.replace(/<br>/g,""), {
-							removeAttributeQuotes: true
+				email.TRAN = {
+					sendMail: function (opts, cb) {
+						Log(opts);
+						CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, err => {
+							cb( err );
+							//Trace("MAIL "+ (err || opts.to) );
 						});
-						cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-						break;
-
-					case "js":
-						//cb(null); break;
-						var
-							e6Tmp = "./temps/e6/" + product,
-							e5Tmp = "./temps/e5/" + product;
-
-						FS.writeFile(e6Tmp, code, "utf8", err => {
-							CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
-								FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-									Log("jsmin>>>>", err);
-
-									if (err)
-										cb( null );
-
-									else {
-										var min = JSMIN.minify( e5code );
-
-										if (min.error) 
-											cb( null );
-
-										else   
-											cb( min.code, CRY.createHmac("sha256", secret).update(min.code).digest("hex") );
-									}
-								});
-							});
-						});
-						break;						
-
-					case "py":
-						// cb(null); break;
-						// minifying python problematic (as -O obvuscator has no reseeded) so 
-						// pyminifier was modified to reseed its rv generator.
-						var pyTmp = "./temps/" + product;
-
-						FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", err => {					
-							CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-								Log("pymin>>>>", err);
-								
-								if (err)
-									cb(null);
-
-								else
-									cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-							});
-						});
-						break;
-
-					case "m":
-					case "me":
-						//cb(null); break;
-						/ *
-						Could use Matlab's pcode generator - but only avail within matlab
-								cd to MATLABROOT (avail w matlabroot cmd)
-								matlab -nosplash -r script.m
-								start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
-
-						but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
-
-						From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
-						to remove comments - but you're back to enqueue.
-
-						Better option to use smop to convert matlab to python, then pyminify that.
-						* /
-
-						var 
-							mTmp = "./temps/matsrc/" + product,
-							pyTmp = "./temps/matout/" + product;
-
-						FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
-							CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
-								Log("matmin>>>>", err);
-								
-								if (err)
-									cb( null );
-
-								else
-									FS.readFile( pyTmp, "utf8", (err,pyCode) => {
-										if (err) 
-											cb( null );
-
-										else
-											CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-												if (err)
-													cb(null);
-
-												else
-													cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-											});										
-									});									
-							});
-						});
-						break;
-
-					case "jade":
-					default:
-						//cb(null); break;
-						var min = code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".");
-						cb( min, CRY.createHmac("sha256", secret).update(min).digest("hex") );
-				}
-			
-			else
-				cb( code, CRY.createHmac("sha256", type).update(code).digest("hex") );
-		},
-		*/
-
-		publishPlugins: function ( sql ) { //< publish all plugins
-			var 
-				types = FLEX.publish;
-			
-			sql.query( "SELECT * FROM app.publisher WHERE Enabled")
-			.on("result", pub => {
-				Trace("PUBLISH "+pub.Path);
-				types.forEach( type => { 	// get plugin types to publish	
-					FLEX.getIndex( "./"+pub.Path+"/"+type, files => {	// get plugin names to publish
-						files.forEach( file => {
-							var
-								product = file,
-								parts = product.split("."),
-								filetype = parts.pop(),
-								filename = parts.pop(),
-								filepath = "./"+pub.Path+"/"+type+"/"+filename;
-
-							switch (filetype) {
-								case "js":
-									FLEX.publishPlugin(sql, filepath, filename, type, FLEX.licenseOnRestart);
-									break;
-
-								case "jade":
-									/*
-									FS.readFile( path + file, "utf8", (err,code) => {
-										if (!err)
-											sql.query( 
-												"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
-													Name: filename,
-													Code: code,
-													Type: filetype,
-													Enabled: 1
-												}, code
-											]);	
-									});*/
-									break;
-
-							}
-						});	
-					});
-				});
-			});
-		},
-		
-		sendMail: sendMail,
-		
-		errors: {
-			noLicense: new Error("Failed to prepare a product license"),
-			badRequest: new Error("bad/missing request parameter(s)"),
-			noBody: new Error("no body keys"),
-			//noID: new Error("missing record ID"),
-			badBaseline: new Error("baseline could not reset change journal"),
-			disableEngine: new Error("requested engine must be disabled to prime"),
-			noEngine: new Error("requested engine does not exist"),
-			missingEngine: new Error("missing engine query"),
-			protectedQueue: new Error("action not allowed on this job queues"),
-			noCase: new Error("plugin case not found"),
-			badAgent: new Error("agent failed"),
-			badDS: new Error("dataset could not be modified"),
-			badLogin: new Error("invalid login name/password"),
-			failedLogin: new Error("login failed - admin notified"),
-			noUploader: new Error("file uplaoder not available")
-		},
-		
-		attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
-		},
-		
-		site: { // reserved for site context
-		},
-		
-		diag: { // configured for system health info
-		},
-		
-		publish: [ "js", "py", "me", "m", "jade", "R" ],
-		
-		paths: {
-			chips: "./chips/",
-			status: "./shares/status.xlsx",
-			logins: "./shares/logins",
-			newsread: "http://craphound.com:80/?feed=rss2",
-			aoiread: "http://omar.ilabs.ic.gov:80/tbd",
-			host: ""
-		},
-			
-		flatten: { 		// catalog flattening 
-			catalog: {  // default tables to flatten and their fulltext keys
-				files: "Tag,Area,Name",
-				intake: "Special,Name,App,Tech",
-				engines: "Code,engine,Classif,Special",
-				news: "Message",
-				sockets: "Location,Client,Message",
-				detects: "label"
-			},
-			
-			limits: {  // flattening parameters
-				score: 0.1,
-				records: 100,
-				stamp: new Date(),
-				pivots: ""
-			}
-		},
-		
-		// CRUDE interface
-		select: {}, 
-		delete: {}, 
-		update: {}, 
-		insert: {}, 
-		execute: {}, 
-		
-		getSite: () => {Trace("data getSite not configured");},  //< data getSite
-		//uploader: () => {Trace("file uploader not configured");},  //< file uploader
-		//emitter: () => {Trace("client emitter not configured");},  //< client syncer
-		thread: () => {Trace("sql thread not configured");},  //< sql threader
-		//skinner: () => {Trace("site skinner not configured");},  //< site skinner
-
-		getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
-			
-			function config(js, ctx) {
-				try {
-					VM.runInContext( js, VM.createContext(ctx)  );	
-				}
-				catch (err) {
-					Log("config ctx", err);
-				}
-			}
-			
-			sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,query], ctx => {
-				if (ctx) {
-					ctx.Host = host;
-					if ( ctx.Config ) config(ctx.Config, ctx);
-
-					sql.getJsons( `app.${host}`, keys => {
-						keys.forEach( key => {
-							if ( key.startsWith("Save") ) 
-								ctx[key] = null;
-							
-							else
-							if ( val = ctx[key] ) 
-								ctx[key] = val.parseJSON( );
-						});
-						cb( ctx );
-					});
-				}
-
-				else
-					cb( null );	
-			});
-			
-		},
-		
-		runPlugin: function runPlugin(req, res) {  //< callback res(ctx) with resulting ctx or cb(null) if error
-		/**
-		@method runPlugin
-		Run a dataset-engine plugin named X = req.table using parameters Q = req.query
-		or (if Q.id or Q.name specified) dataset X parameters derived from the matched  
-		dataset (with json fields automatically parsed). On running the plugin's engine X, this 
-		method then responds on res(results).   If Q.Save is present, the engine's results are
-		also saved to the plugins dataset.  If Q.Pipe is present, then responds with res(Q.Pipe), 
-		thus allowing the caller to place the request in its job queues.  Otherwise, if Q.Pipe 
-		vacant, then responds with res(results).  If a Q.agent is present, then the plugin is 
-		out-sourced to the requested agent, which is periodically polled for its results, then
-		responds with res(results).  Related comments in FLEX.config.
-		*/
-			
-			//Log("run req",req);
-			FLEX.getContext( req.sql, req.table, req.query, ctx => {
-				//Log("get ctx", ctx);	
-				if (ctx) {
-					Copy(ctx,req.query);
-					//Log("plugin req query", req.query);
-					
-					if ( ctx.Pipe )  // let host chipping-regulating service run this engine
-						res( ctx );
-
-					else
-					if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
-						viaAgent(req, res);
-
-					else   // in-source the plugin and save returned results
-						//FLEX.runEngine(req, res);
-						ATOM.select(req, res);
-				}
-					
-				else
-					res( null );
-			});
-
-		},
-		
-		viaAgent: function( req, res ) {  //< out-source a plugin with callback res(ctx) or res(null) if errror
-		/**
-		@method viaAgent
-		Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
-		plugin. Callsback res(results, sql) with a possibly new sql thread.
-		**/
-
-			var
-				getSite = FLEX.getSite,
-				sql = req.sql,
-				query = req.query;
-
-			//Log({viaagent: query});
-			
-			if (agent = query.agent)   // out-source request
-				getSite(agent.tag( "?", query), null, function (jobid) {
-
-					if ( jobid ) {
-						Trace("FORKED AGENT FOR job-"+jobname,sql);
-
-						sql.query("INSERT INTO queues SET ?", {
-							class: agent,
-							client: req.client,
-							qos: 0,
-							priority: 0,
-							name: job.name
-						});
-
-						if ( poll = parseInt(query.poll) )
-							var timer = setInterval(function (req) { 
-
-								Trace("POLLING AGENT FOR job"+jobid);
-
-								getSite(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
-
-									if ( ctx = ctx.parseJSON() )
-										FLEX.thread( function (sql) {
-											Trace("FREEING AGENT FOR job-"+jobid, sql);
-											sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
-											sql.release();
-											req.cb( ctx );
-										});
-									
-									else {
-										Trace("FAULTING AGENT");
-										clearInterval(timer);
-										req.cb( null );
-									}
-
-								});
-
-							}, poll*1e3, Copy({cb: res}, req));
 					}
-
-				});
-			
-			else   // in-source request
-				ATOM.select(req, res);
-		},
+				};
+		}
 		
-		config: function (opts, cb) {
-		/**
-		@method config
-		Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
-		email sender and news feeder.   
-		*/
-			if (opts) Copy(opts,FLEX,".");
-			
-			var
-				site = FLEX.site;
-							
-			if (email = FLEX.mailer.TX) {
-				//Log("emailset", site.emailhost, "pocs", site.pocs);
-
-				var parts = (site.emailhost||"").split(":");
-				email.HOST = parts[0];
-				email.PORT = parseInt(parts[1]);
-
-				var parts = (site.emailuser||"").split(":");
-				email.USER = parts[0];
-				email.PASS = parts[1];
-
-				if (email.PORT) {  		// Establish server's email transport
-					Trace(`MAILHOST ${email.HOST} ON port-${email.PORT}`);
-
-					email.TRAN = email.USER
-						? MAIL.createTransport({ //"SMTP",{
-							host: email.HOST,
-							port: email.PORT,
-							auth: {
-								user: email.USER,
-								pass: email.PASS
-							}
-						})
-						: MAIL.createTransport({ //"SMTP",{
-							host: email.HOST,
-							port: email.PORT
-						});
-				}
-
-				else
-					email.TRAN = {
-						sendMail: function (opts, cb) {
-							Log(opts);
-							CP.exec(`echo -e "${opts.body||'FYI'}\n" | mail -r "${opts.from}" -s "${opts.subject}" ${opts.to}`, err => {
-								cb( err );
-								//Trace("MAIL "+ (err || opts.to) );
-							});
-						}
-					};
-			
-			if ( sqlThread = FLEX.thread)
+		if ( sqlThread = FLEX.thread)
 			sqlThread( sql => {				
 				READ.config(sql);			
-				
+
 				if (CLUS.isMaster && 0)   					
 					FLEX.publishPlugins( sql );
 
@@ -1241,96 +134,1202 @@ Document your usecase using markdown tags:
 							+ "Description mediumtext)",
 							eng.Name );
 					});
-				
+
 				sql.release();
 			});
-			
-			if (CLUS.isMaster) {
-				
-				NEWSFEED = new FEED({					// Establish news feeder
-					title:          site.nick,
-					description:    site.title,
-					link:           `${FLEX.paths.HOST}/feed.view`,
-					image:          'http://example.com/image.png',
-					copyright:      'All rights reserved 2013',
-					author: {
-						name:       "tbd",
-						email:      "noreply@garbage.com",
-						link:       "tbd"
+
+		if (CLUS.isMaster) {
+			NEWSFEED = new FEED({					// Establish news feeder
+				title:          site.nick,
+				description:    site.title,
+				link:           `${FLEX.paths.HOST}/feed.view`,
+				image:          'http://example.com/image.png',
+				copyright:      'All rights reserved 2013',
+				author: {
+					name:       "tbd",
+					email:      "noreply@garbage.com",
+					link:       "tbd"
+				}
+			});
+
+			/*
+			if (FLEX.likeus.PING)  // setup likeus table hawk
+				setInterval( function() {
+
+					FLEX.thread(function (sql) {
+
+						Trace("PROFILES UPDATED");
+
+						sql.query(
+							"SELECT *, datediff(now(),Updated) AS Age FROM openv.profiles WHERE LikeUs HAVING Age>=?",
+							[FLEX.likeus.BILLING]
+						)
+						.on("result", function (rec) {		
+							sql.query("UPDATE openv.profiles SET LikeUs=LikeUs-1 WHERE ?",{ID:rec.ID} );
+						})
+						.on("end",sql.release);
+
+					});
+
+				}, FLEX.likeus.PING*(3600*24*1000) );
+				*/
+
+			if (email = FLEX.mailer.RX) {
+				if (email.PORT)
+					email.TRAN = new IMAP({
+						  user: email.USER,
+						  password: email.PASS,
+						  host: email.HOST,
+						  port: email.PORT,
+						  secure: true,
+						  //debug: err => { console.warn(ME+">"+err); } ,
+						  connTimeout: 10000
+						});
+
+				else
+					email = {};
+
+				if (email.TRAN)					// Establish server's email inbox			
+					openIMAP( function(err, mailbox) {
+						if (err) killIMAP(err);
+						email.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+
+							if (err) killIMAP(err);
+
+							email.TRAN.fetch(results, { 
+								headers: ['from', 'to', 'subject', 'date'],
+								cb: function(fetch) {
+									fetch.on('message', function(msg) {
+										Log(ME+'Saw message no. ' + msg.seqno);
+										msg.on('headers', function(hdrs) {
+											Log(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
+										});
+										msg.on('end', function() {
+											Log(ME+'Finished message no. ' + msg.seqno);
+										});
+									});
+								}
+							  }, function(err) {
+								if (err) throw err;
+								Log(ME+'Done fetching all messages!');
+								email.TRAN.logout();
+							});
+					  });
+					});
+			}
+		}
+
+		if (cb) cb(null);
+		
+		return FLEX;
+	};
+		
+Copy({
+	mailer : {						// Email parameters
+		TRACE 	: true,	
+		SOURCE: "tbd",
+		TX: {},
+		RX: {}
+	},
+
+	defaultDocs: {	// default plugin docs (db key comments)
+		export: "switch writes engine results [into a file](/api.view)",
+		ingest: "switch ingests engine results [into the database](/api.view)",
+		share: "switch returns engine results to the status area",
+		pipe: `
+Place a DATASET into a supervised workflow using the Pipe:
+
+"/DATASET.TYPE?KEY=VALUE || $.EXPRESSION ..."  
+{ "$": "SCRIPT" }
+{ "Pipe": "/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
+
+The "/DATASET.TYPE" [source pipe](/api.view) selects the TYPE-specific workflow based on TYPE = json || [ jpg | png | nitf ] || stream || [ txt | doc | pdf | xls ] || aoi || db 
+where $ references the TYPE-specific json data || GIMP image || event list || document text || db record.  The {KEY: [VALUE, ...]} [enumeration pipe](/api.view) 
+generates usecases over permuted context KEYs.  The {$: "SCRIPT"} [scripting pipe](/api.view) utilizes the [matlab-like scripting](https://sc.appdev.proj.coe.ic.gov://acmesds/man) 
+to post-process selected KEYs.
+`, 
+
+		description: `
+Document your usecase using markdown tags:
+
+[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
+[ TEXT ] ( COLOR )  
+[ TOPIC ] ( ? starts=DATE & ends=DATE )  
+$ $ inline TeX $ $  ||  n$ $ break TeX $ $ || a$ $ AsciiMath $ $ || m$ $ MathML $ $  
+[JS || #JS || TeX] OP= [JS || #JS || TeX]  
+$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
+KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
+KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
+
+`,
+
+		donfig: "js-script defines a usecase context  ",
+		save: "json aggregates engine results not captured in other Save_KEYs  ",
+		entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
+		exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
+		batch: "value overrides the supervisor's batch size  (0 disabled)  ",
+		symbols: "json overrides the supervisor's state symbols (null defaults)  ",
+		steps: "value overrides the supervisor's observation interval (0 defaults) ",
+		ring: "[[lat,lon], ...] in degs 4+ length vector defining an aoi"
+	},
+
+	licenseOnDownload: true,
+	licenseOnRestart: false,
+
+	serviceID: function (url) {
+		return CRY.createHmac("sha256", "").update(url || "").digest("hex");
+	},
+
+	pluginAttribute: function ( sql, attr, endPartner, endService, proxy, eng, cb ) {
+
+		var
+			errors = FLEX.errors,
+			pocs = FLEX.site.pocs,
+			name = eng.Name,
+			type = eng.Type,
+			product = name + "." + type,
+			keys = blogContext(product),
+			urls = keys.urls;
+
+		//urls.proxy = urls.tou.tag("?", {proxy: proxy});
+		//Log("plugin attrib via proxy", proxy);
+
+		switch ( attr ) {
+			case "users":
+				cb( pocs.overlord.split(";") );
+				break;
+
+			case "export":
+				cb( "exporting" );
+				CP.exec(
+					`mysqldump -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --skip-add-drop-table app ${name} >./stores/${name}.sql`,
+					(err,out) => Trace( `EXPORTED ${name} `+ (err||"ok") ) );							
+
+				break;
+
+			case "import":
+				cb( "importing" );
+				CP.exec(
+					`mysql -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST --force app < ./stores/${name}.sql`,
+					(err,out) => Trace( `IMPORTED ${name} `+ (err||"ok") ) );							
+
+				break;
+
+			case "md":
+			case "toumd":
+				if ( eng.ToU )
+					eng.ToU.Xfetch( cb );
+
+				else 
+					cb( null );
+
+				break;
+
+			case "pub":
+				//function (req, name, type, selfLicense)
+				FLEX.publishPlugin(sql, "./public/"+type+"/"+name, name, type, false);
+				cb( "publishing" );
+				break;
+
+			case "status":
+				var 
+					getSite = FLEX.getSite,
+					fetchUsers = function (rec, cb) {	// callback with endservice users
+						getSite(rec._EndService, null, info => { 
+							//Log("status users", info);
+							cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) ;
+						});
+					},
+					fetchMods = function (rec, cb) {	// callback with endservice moderators
+						sql.query(
+							"SELECT group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Mods FROM app.releases WHERE ? LIMIT 1",
+							{ _Product: rec.Name+".html" },
+							(err, mods) => { 
+
+								//Log("status mods", err, mods);
+								if ( mod = mods[0] || { _Mods: "" } )
+									cb( mod._Mods || "" );
+
+							});
+					};
+
+				sql.query(
+					"SELECT Ver, Comment, _Published, _Product, _License, _EndService, _EndServiceID, 'none' AS _Users, "
+					+ " 'fail' AS _Status, _Fails, "
+					+ "group_concat( DISTINCT _Partner SEPARATOR ';' ) AS _Partners, sum(_Copies) AS _Copies "
+					+ "FROM app.releases WHERE ? GROUP BY _EndServiceID, _License ORDER BY _Published",
+
+					[ {_Product: product}], (err,recs) => {
+
+						//Log("status", err, q.sql);
+
+						if ( recs.length )
+							recs.serialize( fetchUsers, (rec,users) => {  // retain user stats
+								if (rec) {
+									if ( users )
+										rec._Users = users.mailify( "users", {subject: name+" request"});
+
+									else 
+										sql.query("UPDATE app.releases SET ? WHERE ?", [ {_Fails: ++rec._Fails}, {ID: rec.ID}] );
+
+									var 
+										url = URL.parse(rec._EndService),
+										host = url.host.split(".")[0];
+
+									rec._License = rec._License.tag("a",{href:urls.totem+`/releases.html?_EndServiceID=${rec._EndServiceID}`});
+									rec._Product = rec._Product.tag("a", {href:urls.run});
+									rec._Status = "pass";
+									rec._Partners = rec._Partners.mailify( "partners", {subject: name+" request"});
+									rec._EndService = host.tag("a",{href:rec._EndService});
+									delete rec._EndServiceID;
+								}
+
+								else
+									recs.serialize( fetchMods, (rec,mods) => {  // retain moderator stats
+										if (rec) 
+											rec._Mods = mods.mailify( "moderators", {subject: name+" request"});
+
+										else 
+											cb( recs.gridify() );
+									});
+							});
+
+						else
+							cb( "no transitions found" );
+				});
+
+				break;
+
+			case "suitors":
+			case "publist":
+				var 
+					suits = [];
+
+				sql.query(
+					"SELECT Name,Path FROM app.lookups WHERE ?",
+					{Ref: name}, (err,recs) => {
+
+					recs.forEach( rec => {
+						suits.push( rec.Name.tag( `${urls.transfer}${rec.Path}/${name}` ));
+					});
+
+					/*
+					// Extend list of suitors with already  etc
+					sql.query(
+						"SELECT endService FROM app.releases GROUP BY endServiceID", 
+						[],  (err,recs) => {
+
+						recs.forEach( rec => {
+							if ( !sites[rec.endService] ) {
+								var 
+									url = URL.parse(rec.endService),
+									name = (url.host||"none").split(".")[0];
+
+								rtns.push( `<a href="${urls.transfer}${rec.endService}">${name}</a>` );
+							}
+						});
+
+						rtns.push( `<a href="${urls.loopback}">loopback test</a>` );
+
+						if (proxy)
+							rtns.push( `<a href="${urls.proxy}">other</a>` );
+
+						//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
+
+						cb( rtns.join(", ") );
+					}); */
+					suits.push( "loopback".tag( urls.loopback ) );
+					suits.push( "other".tag( urls.tou ) );
+
+					//suits.push( `<a href="${urls.totem}/lookups.view?Ref=${product}">suitors</a>` );
+
+					cb( suits.join(", ") );
+
+				});	
+				break;
+
+			case "tou":
+			case "help":
+
+				( eng.ToU || "ToU undefined" )
+					.Xfetch( html => html.Xparms( name, html => cb(html) ));
+
+				break;
+
+			case "license":
+			case "release":
+				sql.query(
+					"SELECT _License,_EndService FROM app.releases WHERE ? LIMIT 1", 
+					{_Product: product}, (err,pubs) => {
+
+					cb( err || pubs );
+				});
+				break;
+
+			case "js":
+			case "py":
+			case "me":
+			case "m":
+				sql.query(
+					"SELECT * FROM app.releases WHERE least(?,1) ORDER BY _Published DESC LIMIT 1", {
+						_Partner: endPartner+".forever",
+						_EndServiceID: FLEX.serviceID( endService ),
+						_Product: product
+				}, (err, pubs) => {
+
+					function addTerms(code, type, pub, cb) {
+						var 
+							prefix = {
+								js: "// ",
+								py: "# ",
+								matlab: "% ",
+								jade: "// "
+							},
+							pre = "\n"+(prefix[type] || ">>");
+
+						FS.readFile("./public/md/tou.txt", "utf8", (err, terms) => {
+							if (err) 
+								cb( errors.noLicense );
+
+							else
+								cb( pre + terms.parseEMAC( Copy({
+									"urls.service": pub._EndService,
+									license: pub._License,
+									published: pub._Published,
+									partner: pub._Partner
+								}, keys, ".")).replace(/\n/g,pre) + "\n" + code);
+						});
+					}
+
+					/*
+					May want to rework this to simply use eng.Code by priming the Code in the publish phase
+					*/
+					FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
+						if (!err) eng.Code = srcCode;
+
+						if ( pub = pubs[0] )	// already released so simply distribute
+							addTerms( eng.Code, type, pub, cb );
+
+						else	// not yet released so ...
+						if ( FLEX.licenseOnDownload ) { // license required to distribute
+							if ( endService )	// specified so try to distribute
+								if ( eng.Minified )	// compiled so ok to distribute
+									FLEX.licenseCode( sql, eng.Minified, {
+										_Partner: endPartner,
+										_EndService: endService,
+										_Published: new Date(),
+										_Product: product,
+										Path: "/"+product
+									}, pub => {
+										if (pub) // distribute licensed version
+											addTerms( eng.Code, type, pub, cb );
+
+										else	// failed
+											cb( null );
+									});
+
+								else
+									cb( null );
+
+							else
+								cb( null );
+						}
+
+						else	// no license required
+							cb( eng.Code );
+					});
+				});
+				break;
+
+			case "jade":
+				cb( (eng.Type == "jade") ? eng.Code : null );
+				break;
+
+			default:
+				cb( null );
+		}
+	},
+
+	/*
+	pluginKeys: function (product, keys) {
+		return This = Copy( keys || {}, blogContext(product), ".");
+	},  */
+
+	licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null) on error
+
+		function returnLicense(pub) {
+			var
+				product = pub._Product,
+				endService = pub._EndService,
+				secret = product + "." + endService;
+
+			if ( license = FLEX.genLicense( code, secret ) ) {
+				cb( Copy({
+					_License: license,
+					_EndServiceID: FLEX.serviceID( pub._EndService ),
+					_Copies: 1
+				}, pub),  sql );
+
+				sql.query( "INSERT INTO app.releases SET ? ON DUPLICATE KEY UPDATE _Copies=_Copies+1", pub );
+
+				sql.query( "INSERT INTO app.masters SET ? ON DUPLICATE KEY UPDATE ?", [{
+					Master: code,
+					License: license,
+					EndServiceID: pub._EndServiceID
+				}, {Master: code} ] );		
+			}
+
+			else 
+				cb( null );
+		}
+
+		Log("endserv lic code", pub);
+		if (endService = pub._EndService)  // an end-service specified so validate it
+			FLEX.getSite( endService, null, info => {  // check users provided by end-service
+				var 
+					valid = false, 
+					partner = pub._Partner.toLowerCase(),
+					users = info.parseJSON() || [] ;
+
+				users.forEach( user => { 
+					if (user.toLowerCase() == partner) valid = true;
+				});
+
+				if (valid) // signal valid
+					returnLicense(pub);
+
+				else	// signal invalid
+					cb( null  );
+			});	
+
+		else	// no end-service so no need to validate
+			returnLicense(pub);
+	},
+
+	publishPlugin: function (sql, path, name, type, selfLicense) {  // publish product = name.type
+
+		function getter( opt ) {	
+			if (opt) 
+				if ( typeof opt == "function" )
+					switch (opt.name) {
+						case "engine":
+						case "tou":
+						case "inits":
+						case "wrap":
+							return opt({
+								path: pathname,
+								read: FS.readFileSync,
+								exec: CP.exec 
+							});
+						default:
+							return opt+"";
+					}
+				else
+					return opt;
+			else
+				return opt;
+		}
+
+		function genToU( mod, toukeys, cb ) {
+			(getter( mod.tou || mod.readme ) || defs.tou)
+			.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
+			.Xblog(null, `${name}?name=test2`, {}, {}, toukeys, false, tou => {
+				cb( mod, tou );
+			});
+		}
+
+		var 
+			pathname = path; //FLEX.paths.publish[type] + name;
+
+		try {
+			var	mod = require(process.cwd() + pathname.substr(1));
+		}
+		catch (err) {
+			Log("PUBLISH", name, err);
+			return;
+		}
+
+		var
+			modkeys = mod.mods || mod.modkeys || mod._mods,
+			addkeys = mod.adds || mod.addkeys || mod.keys,
+			dockeys = mod.docs || mod.dockeys || {},
+			prokeys = modkeys || addkeys || {},
+			product = name + "." + type,
+			defs = {   // defaults
+				tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
+				envs: {
+					js: "nodejs-8.9.x and [man-latest](https://sc.appdev.proj.coe.ic.gov://acmesds/man)",
+					py: "anconda-4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
+					m: "matlab R18, odbc, simulink, stateflow"
+				},
+				docs: FLEX.defaultDocs || {}
+			};
+
+		// default dockeys
+
+		for ( var key in prokeys )
+			dockeys[key] = dockeys[key] || defs.docs[key.toLowerCase()] || "";
+
+		// strip comments from product keys
+
+		Each( prokeys, (key,type) => prokeys[key] = type.replace( /comment '((.|\n)*)'/, (pre,com) => { dockeys[key]  += com; return ""; } ) );
+
+		Serialize( 	// convert markdown keys to html (with disabled content tracking)
+				dockeys, 		// markdown dockeys 
+				(md,cb) => md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
+
+			var
+				toukeys = blogContext( product, {
+					summary: "summary tbd",
+					reqts: defs.envs[type] || "reqts tbd",
+					ver: "ver tbd",
+					//pocs: ["brian.d.james@coe.ic.gov"],
+					interface: () => {
+						var ifs = [];
+						Each( prokeys, (key, type) => {
+							 ifs.push({ 
+								 Key: key, 
+								 Type: type, 
+								 Details: dockeys[key] || "no documentation available" 
+							 });
+						});
+						// Log(">>>>>", product, ifs.length, ifs.gridify().length);
+						// if (product = "regress.js") Log(ifs.gridify() );
+						return ifs.gridify();
 					}
 				});
 
-				/*
-				if (FLEX.likeus.PING)  // setup likeus table hawk
-					setInterval( function() {
-						
-						FLEX.thread(function (sql) {
-							
-							Trace("PROFILES UPDATED");
-							
-							sql.query(
-								"SELECT *, datediff(now(),Updated) AS Age FROM openv.profiles WHERE LikeUs HAVING Age>=?",
-								[FLEX.likeus.BILLING]
-							)
-							.on("result", function (rec) {		
-								sql.query("UPDATE openv.profiles SET LikeUs=LikeUs-1 WHERE ?",{ID:rec.ID} );
-							})
-							.on("end",sql.release);
-							
-						});
-						
-					}, FLEX.likeus.PING*(3600*24*1000) );
-					*/
-				
-				if (email = FLEX.mailer.RX)
-					if (email.PORT)
-						email.TRAN = new IMAP({
-							  user: email.USER,
-							  password: email.PASS,
-							  host: email.HOST,
-							  port: email.PORT,
-							  secure: true,
-							  //debug: err => { console.warn(ME+">"+err); } ,
-							  connTimeout: 10000
+			genToU(mod, toukeys, (mod, tou) => {
+
+				if ( mod.clear || mod.reset )
+					sql.query("DROP TABLE app.??", name);
+
+				sql.query( 
+					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
+					[], err => {
+
+					var
+						modkeys = mod.mods || mod.modkeys || mod._mods,
+						addkeys = mod.adds || mod.addkeys || mod.keys;
+
+					if ( modkeys )
+						Each( modkeys, (key,type) => {
+							var 
+								keyId = sql.escapeId(key);
+
+							/*
+								comment = "",
+
+							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+								comment = com;
+								return "";
 							});
-					
-					else
-						email = {};
 
-					if (email.TRAN)					// Establish server's email inbox			
-						openIMAP( function(err, mailbox) {
-							if (err) killIMAP(err);
-						  	email.TRAN.search([ 'UNSEEN', ['SINCE', 'May 20, 2012'] ], function(err, results) {
+							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
+							});*/
 
-								if (err) killIMAP(err);
-							
-								email.TRAN.fetch(results, { 
-									headers: ['from', 'to', 'subject', 'date'],
-									cb: function(fetch) {
-										fetch.on('message', function(msg) {
-											Log(ME+'Saw message no. ' + msg.seqno);
-											msg.on('headers', function(hdrs) {
-												Log(ME+'Headers for no. ' + msg.seqno + ': ' + showIMAP(hdrs));
-											});
-											msg.on('end', function() {
-												Log(ME+'Finished message no. ' + msg.seqno);
-											});
-										});
-									}
-								  }, function(err) {
-									if (err) throw err;
-									Log(ME+'Done fetching all messages!');
-									email.TRAN.logout();
-								});
-						  });
+							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
 						});
-				}
+
+					else
+					if ( addkeys)
+						Each( addkeys, (key,type) => {
+							var 
+								keyId = sql.escapeId(key);
+
+							/*
+								doc = dockeys[key],
+								comment = "";
+
+							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+								comment = com;
+								return "";
+							});
+
+							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
+							});*/
+							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
+						});
+
+					if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
+						inits.forEach( init => {
+							sql.query("INSERT INTO app.?? SET ?", init);
+						});
+
+					if  ( readme = mod.readme )
+						FS.writeFile( pathname+".xmd", readme, "utf8" );
+
+					if ( code = getter( mod.engine || mod.code) ) {
+
+						FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
+
+							if ( isError(min) )
+								Log("FAILED PUB", min);
+
+							else 
+							if ( selfLicense ) // auto license to this service
+								FLEX.licenseCode( sql, min, {
+										_Partner: "totem",
+										_EndService: ENV.SERVICE_MASTER_URL,
+										_Published: new Date(),
+										_Product: product,
+										Path: pathname
+									}, pub => {
+										if (pub)
+											Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
+
+										else
+											Trace("FAILED LICENSE");
+									});
+
+								// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+
+							var 
+								from = type,
+								to = mod.to || from,
+								fromFile = pathname + "." + from,
+								toFile = pathname + "." + to,
+								jsCode = {},
+								rev = {
+									Code: code,
+									Minified: isError(min) ? null : min,
+									Wrap: getter( mod.wrap ) || "",
+									ToU: tou,
+										// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+									State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+								};
+
+							Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
+
+							if ( from == to )  { // use code as-is
+								sql.query( 
+									"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+										Name: name,
+										Type: type,
+										Enabled: 1
+									}), rev ] );
+
+								if (from == "js") {	// import js function into $
+									jsCode[name] = mod.engine || mod.code;
+									$(jsCode);
+								}
+							}
+
+							else  // convert code to requested type
+								//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+								FS.writeFile( fromFile, code, "utf8", err => {
+								CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+									if (!err) 
+										FS.readFile( toFile, "utf8", (err,code) => {
+											rev.Code = code;
+											if (!err)
+												sql.query( 
+													"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+														Name: name,
+														Type: type,
+														Enabled: 1
+													}), rev ] );
+										});									
+								});
+							});	
+						});
+					}
+
+					// CP.exec(`cd ${name}.d; sh publish.sh`);
+				});
+			});	
+		});
+	},
+
+	minifyCode: function (code, product, type, cb) {  //< callback cb(minifiedCode, license)
+		//Log("gen lic", secret);
+		switch (type) {
+			case "html":
+				cb( HMIN.minify(code.replace(/<br>/g,""), {
+					removeAttributeQuotes: true
+				}) );
+				break;
+
+			case "js":
+				var
+					e6Tmp = "./temps/e6/" + product,
+					e5Tmp = "./temps/e5/" + product;
+
+				FS.writeFile(e6Tmp, code, "utf8", err => {
+					CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
+						FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+							//Log("jsmin>>>>", err);
+
+							if (err)
+								cb( err );
+
+							else {
+								var min = JSMIN.minify( e5code );
+
+								if (err = min.error) 
+									cb( err );
+
+								else   
+									cb( min.code );
+							}
+						});
+					});
+				});
+				break;						
+
+			case "py":
+				/*
+				minifying python is problematic as the pyminifier obvuscator has no option
+				to reseed; thus the pyminifier was modified to reseed its rv generator (see install
+				notes).
+				*/
+
+				var pyTmp = "./temps/py/" + product;
+
+				FS.writeFile(pyTmp, code.replace(/\t/g,"  ").replace(/^\n/gm,""), "utf8", err => {
+					CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+						//Log("pymin>>>>", err);
+
+						if (err)
+							cb(err);
+
+						else
+							cb( minCode );
+					});
+				});
+				break;
+
+			case "m":
+			case "me":
+				/*
+				Could use Matlab's pcode generator - but only avail within matlab
+						cd to MATLABROOT (avail w matlabroot cmd)
+						matlab -nosplash -r script.m
+						start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
+
+				but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
+
+				From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
+				to remove comments - but you're back to enqueue.
+
+				Better option to use smop to convert matlab to python, then pyminify that.
+				*/
+
+				var 
+					mTmp = "./temps/matsrc/" + product,
+					pyTmp = "./temps/matout/" + product;
+
+				FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
+					CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
+						//Log("matmin>>>>", err);
+
+						if (err)
+							cb( err );
+
+						else
+							FS.readFile( pyTmp, "utf8", (err,pyCode) => {
+								if (err) 
+									cb( err );
+
+								else
+									CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+										if (err)
+											cb(err);
+
+										else
+											cb( minCode );
+									});										
+							});									
+					});
+				});
+				break;
+
+			case "jade":
+				cb( code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".") );
+				break;
+
+			default:
+				cb( code );
+		}
+	},
+
+	genLicense: function (code, secret) {  //< callback cb(minifiedCode, license)
+		Log("gen license for", secret);
+		if (secret)
+			return CRY.createHmac("sha256", secret).update(code).digest("hex");
+
+		else
+			return null;
+	},
+
+	/*
+	genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
+		//Log("gen lic", secret);
+		if (secret)
+			switch (type) {
+				case "html":
+					var minCode = HMIN.minify(code.replace(/<br>/g,""), {
+						removeAttributeQuotes: true
+					});
+					cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
+					break;
+
+				case "js":
+					//cb(null); break;
+					var
+						e6Tmp = "./temps/e6/" + product,
+						e5Tmp = "./temps/e5/" + product;
+
+					FS.writeFile(e6Tmp, code, "utf8", err => {
+						CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
+							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+								Log("jsmin>>>>", err);
+
+								if (err)
+									cb( null );
+
+								else {
+									var min = JSMIN.minify( e5code );
+
+									if (min.error) 
+										cb( null );
+
+									else   
+										cb( min.code, CRY.createHmac("sha256", secret).update(min.code).digest("hex") );
+								}
+							});
+						});
+					});
+					break;						
+
+				case "py":
+					// cb(null); break;
+					// minifying python problematic (as -O obvuscator has no reseeded) so 
+					// pyminifier was modified to reseed its rv generator.
+					var pyTmp = "./temps/" + product;
+
+					FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", err => {					
+						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+							Log("pymin>>>>", err);
+
+							if (err)
+								cb(null);
+
+							else
+								cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
+						});
+					});
+					break;
+
+				case "m":
+				case "me":
+					//cb(null); break;
+					/ *
+					Could use Matlab's pcode generator - but only avail within matlab
+							cd to MATLABROOT (avail w matlabroot cmd)
+							matlab -nosplash -r script.m
+							start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
+
+					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
+
+					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
+					to remove comments - but you're back to enqueue.
+
+					Better option to use smop to convert matlab to python, then pyminify that.
+					* /
+
+					var 
+						mTmp = "./temps/matsrc/" + product,
+						pyTmp = "./temps/matout/" + product;
+
+					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
+						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
+							Log("matmin>>>>", err);
+
+							if (err)
+								cb( null );
+
+							else
+								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
+									if (err) 
+										cb( null );
+
+									else
+										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
+											if (err)
+												cb(null);
+
+											else
+												cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
+										});										
+								});									
+						});
+					});
+					break;
+
+				case "jade":
+				default:
+					//cb(null); break;
+					var min = code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".");
+					cb( min, CRY.createHmac("sha256", secret).update(min).digest("hex") );
 			}
-			
-			if (cb) cb(null);
+
+		else
+			cb( code, CRY.createHmac("sha256", type).update(code).digest("hex") );
+	},
+	*/
+
+	publishPlugins: function ( sql ) { //< publish all plugins
+		var 
+			types = FLEX.publish;
+
+		sql.query( "SELECT * FROM app.publisher WHERE Enabled")
+		.on("result", pub => {
+			Trace("PUBLISH "+pub.Path);
+			types.forEach( type => { 	// get plugin types to publish	
+				FLEX.getIndex( "./"+pub.Path+"/"+type, files => {	// get plugin names to publish
+					files.forEach( file => {
+						var
+							product = file,
+							parts = product.split("."),
+							filetype = parts.pop(),
+							filename = parts.pop(),
+							filepath = "./"+pub.Path+"/"+type+"/"+filename;
+
+						switch (filetype) {
+							case "js":
+								FLEX.publishPlugin(sql, filepath, filename, type, FLEX.licenseOnRestart);
+								break;
+
+							case "jade":
+								/*
+								FS.readFile( path + file, "utf8", (err,code) => {
+									if (!err)
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE Code=?", [{
+												Name: filename,
+												Code: code,
+												Type: filetype,
+												Enabled: 1
+											}, code
+										]);	
+								});*/
+								break;
+
+						}
+					});	
+				});
+			});
+		});
+	},
+
+	sendMail: sendMail,
+
+	errors: {
+		noLicense: new Error("Failed to prepare a product license"),
+		badRequest: new Error("bad/missing request parameter(s)"),
+		noBody: new Error("no body keys"),
+		//noID: new Error("missing record ID"),
+		badBaseline: new Error("baseline could not reset change journal"),
+		disableEngine: new Error("requested engine must be disabled to prime"),
+		noEngine: new Error("requested engine does not exist"),
+		missingEngine: new Error("missing engine query"),
+		protectedQueue: new Error("action not allowed on this job queues"),
+		noCase: new Error("plugin case not found"),
+		badAgent: new Error("agent failed"),
+		badDS: new Error("dataset could not be modified"),
+		badLogin: new Error("invalid login name/password"),
+		failedLogin: new Error("login failed - admin notified"),
+		noUploader: new Error("file uplaoder not available")
+	},
+
+	attrs: {  // static table attributes (e.g. geo:"fieldname" to geojson a field)
+	},
+
+	site: { // reserved for site context
+	},
+
+	diag: { // configured for system health info
+	},
+
+	publish: [ "js", "py", "me", "m", "jade", "R" ],
+
+	paths: {
+		chips: "./chips/",
+		status: "./shares/status.xlsx",
+		logins: "./shares/logins",
+		newsread: "http://craphound.com:80/?feed=rss2",
+		aoiread: "http://omar.ilabs.ic.gov:80/tbd",
+		host: ""
+	},
+
+	flatten: { 		// catalog flattening 
+		catalog: {  // default tables to flatten and their fulltext keys
+			files: "Tag,Area,Name",
+			intake: "Special,Name,App,Tech",
+			engines: "Code,engine,Classif,Special",
+			news: "Message",
+			sockets: "Location,Client,Message",
+			detects: "label"
+		},
+
+		limits: {  // flattening parameters
+			score: 0.1,
+			records: 100,
+			stamp: new Date(),
+			pivots: ""
+		}
+	},
+
+	// CRUDE interface
+	select: {}, 
+	delete: {}, 
+	update: {}, 
+	insert: {}, 
+	execute: {}, 
+
+	getSite: () => {Trace("data getSite not configured");},  //< data getSite
+	//uploader: () => {Trace("file uploader not configured");},  //< file uploader
+	//emitter: () => {Trace("client emitter not configured");},  //< client syncer
+	thread: () => {Trace("sql thread not configured");},  //< sql threader
+	//skinner: () => {Trace("site skinner not configured");},  //< site skinner
+
+	getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
+
+		function config(js, ctx) {
+			try {
+				VM.runInContext( js, VM.createContext(ctx)  );	
+			}
+			catch (err) {
+				Log("config ctx", err);
+			}
 		}
 
-};
+		sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,query], ctx => {
+			if (ctx) {
+				ctx.Host = host;
+				if ( ctx.Config ) config(ctx.Config, ctx);
+
+				sql.getJsons( `app.${host}`, keys => {
+					keys.forEach( key => {
+						if ( key.startsWith("Save") ) 
+							ctx[key] = null;
+
+						else
+						if ( val = ctx[key] ) 
+							ctx[key] = val.parseJSON( );
+					});
+					cb( ctx );
+				});
+			}
+
+			else
+				cb( null );	
+		});
+
+	},
+
+	runPlugin: function runPlugin(req, res) {  //< callback res(ctx) with resulting ctx or cb(null) if error
+	/**
+	@method runPlugin
+	Run a dataset-engine plugin named X = req.table using parameters Q = req.query
+	or (if Q.id or Q.name specified) dataset X parameters derived from the matched  
+	dataset (with json fields automatically parsed). On running the plugin's engine X, this 
+	method then responds on res(results).   If Q.Save is present, the engine's results are
+	also saved to the plugins dataset.  If Q.Pipe is present, then responds with res(Q.Pipe), 
+	thus allowing the caller to place the request in its job queues.  Otherwise, if Q.Pipe 
+	vacant, then responds with res(results).  If a Q.agent is present, then the plugin is 
+	out-sourced to the requested agent, which is periodically polled for its results, then
+	responds with res(results).  Related comments in FLEX.config.
+	*/
+
+		//Log("run req",req);
+		FLEX.getContext( req.sql, req.table, req.query, ctx => {
+			//Log("get ctx", ctx);	
+			if (ctx) {
+				Copy(ctx,req.query);
+				//Log("plugin req query", req.query);
+
+				if ( ctx.Pipe )  // let host chipping-regulating service run this engine
+					res( ctx );
+
+				else
+				if ( viaAgent = FLEX.viaAgent )  // allow out-sourcing to agents if installed
+					viaAgent(req, res);
+
+				else   // in-source the plugin and save returned results
+					//FLEX.runEngine(req, res);
+					ATOM.select(req, res);
+			}
+
+			else
+				res( null );
+		});
+
+	},
+
+	viaAgent: function( req, res ) {  //< out-source a plugin with callback res(ctx) or res(null) if errror
+	/**
+	@method viaAgent
+	Out-source the plugin to an agent = req.query.agent, if specified; otherwise, in-source the
+	plugin. Callsback res(results, sql) with a possibly new sql thread.
+	**/
+
+		var
+			getSite = FLEX.getSite,
+			sql = req.sql,
+			query = req.query;
+
+		//Log({viaagent: query});
+
+		if (agent = query.agent)   // out-source request
+			getSite(agent.tag( "?", query), null, function (jobid) {
+
+				if ( jobid ) {
+					Trace("FORKED AGENT FOR job-"+jobname,sql);
+
+					sql.query("INSERT INTO queues SET ?", {
+						class: agent,
+						client: req.client,
+						qos: 0,
+						priority: 0,
+						name: job.name
+					});
+
+					if ( poll = parseInt(query.poll) )
+						var timer = setInterval(function (req) { 
+
+							Trace("POLLING AGENT FOR job"+jobid);
+
+							getSite(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
+
+								if ( ctx = ctx.parseJSON() )
+									FLEX.thread( function (sql) {
+										Trace("FREEING AGENT FOR job-"+jobid, sql);
+										sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
+										sql.release();
+										req.cb( ctx );
+									});
+
+								else {
+									Trace("FAULTING AGENT");
+									clearInterval(timer);
+									req.cb( null );
+								}
+
+							});
+
+						}, poll*1e3, Copy({cb: res}, req));
+				}
+
+			});
+
+		else   // in-source request
+			ATOM.select(req, res);
+	}
+}, FLEX);
 
 var
 	SELECT = FLEX.select,
@@ -5174,7 +5173,7 @@ INSERT.blog = function (req,res) {
 //===================== execution tracing
 
 function Trace(msg,sql) {
-	TRACE.trace(msg,sql);
+	"X>".trace(msg,sql);
 }
 
 function blogContext(product, prime) {
