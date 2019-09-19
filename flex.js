@@ -66,7 +66,7 @@ var
 const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError } = require("enum");
 
 var
-	FLEX = module.exports = (opts,cb) => {
+	FLEX = module.exports = opts => {
 	/**
 	@method config
 	Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
@@ -119,8 +119,8 @@ var
 		}
 		
 		if ( sqlThread = FLEX.thread)
-			sqlThread( sql => {				
-				READ.config(sql);			
+			sqlThread( sql => {	
+				READ( {}, sql );
 
 				if (CLUS.isMaster && 0)   					
 					FLEX.publishPlugins( sql );
@@ -219,8 +219,6 @@ var
 			}
 		}
 
-		if (cb) cb(null);
-		
 		return FLEX;
 	};
 		
