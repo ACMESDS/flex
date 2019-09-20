@@ -35,7 +35,7 @@ var
 	SUBMITTED = "submitted",
 
 	// totem bindings required before others due to dependent module issues
-	READ = require("reader"),	
+	//READ = require("reader")(),		// NLP partial config now to avoid prototype collisions
 	
 	VM = require('vm'), 				// V8 JS compiler
 	//STR = require("stream"), 	// pipe-able streams
@@ -120,7 +120,7 @@ var
 		
 		if ( sqlThread = FLEX.thread)
 			sqlThread( sql => {	
-				READ( {}, sql );
+				//READ( null, sql );
 
 				if (CLUS.isMaster && 0)   					
 					FLEX.publishPlugins( sql );
