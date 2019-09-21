@@ -65,13 +65,13 @@ var
 
 const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError } = require("enum");
 
-var
-	FLEX = module.exports = opts => {
-	/**
-	@method config
-	Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
-	email sender and news feeder.   
-	*/
+var FLEX = module.exports = {
+	config: opts => {
+		/**
+		@method config
+		Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
+		email sender and news feeder.   
+		*/
 		if (opts) Copy(opts,FLEX,".");
 
 		var
@@ -218,11 +218,8 @@ var
 					});
 			}
 		}
-
-		return FLEX;
-	};
-		
-Copy({
+	},
+	
 	mailer : {						// Email parameters
 		TRACE 	: true,	
 		SOURCE: "tbd",
@@ -1327,7 +1324,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 		else   // in-source request
 			ATOM.select(req, res);
 	}
-}, FLEX);
+};
 
 var
 	SELECT = FLEX.select,
