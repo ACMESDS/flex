@@ -63,7 +63,7 @@ var
 	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 
-const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError } = require("enum");
+const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError,isEmpty } = require("enum");
 
 var FLEX = module.exports = {
 	config: opts => {
@@ -275,6 +275,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 		return CRY.createHmac("sha256", "").update(url || "").digest("hex");
 	},
 
+	/*
 	pluginAttribute: function ( sql, attr, endPartner, endService, proxy, eng, cb ) {
 
 		var
@@ -283,13 +284,18 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 			name = eng.Name,
 			type = eng.Type,
 			product = name + "." + type,
-			keys = blogContext(product),
+			keys = productKeys(product),
 			urls = keys.urls;
 
 		//urls.proxy = urls.tou.tag("?", {proxy: proxy});
 		//Log("plugin attrib via proxy", proxy);
 
 		switch ( attr ) {
+			case "use":
+			case "usage":
+			case "help":
+				break;
+				
 			case "users":
 				cb( pocs.overlord.split(";") );
 				break;
@@ -321,6 +327,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 				break;
 
 			case "pub":
+			case "publish":
 				//function (req, name, type, selfLicense)
 				FLEX.publishPlugin(sql, "./public/"+type+"/"+name, name, type, false);
 				cb( "publishing" );
@@ -408,7 +415,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 						suits.push( rec.Name.tag( `${urls.transfer}${rec.Path}/${name}` ));
 					});
 
-					/*
+					/ *
 					// Extend list of suitors with already  etc
 					sql.query(
 						"SELECT endService FROM app.releases GROUP BY endServiceID", 
@@ -432,7 +439,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 						//rtns.push( `<a href="${site.urls.worker}/lookups.view?Ref=${product}">add</a>` );
 
 						cb( rtns.join(", ") );
-					}); */
+					}); * /
 					suits.push( "loopback".tag( urls.loopback ) );
 					suits.push( "other".tag( urls.tou ) );
 
@@ -496,9 +503,9 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 						});
 					}
 
-					/*
+					/ *
 					May want to rework this to simply use eng.Code by priming the Code in the publish phase
-					*/
+					* /
 					FS.readFile( `./public/${type}/${name}.d/source`, "utf8", (err, srcCode) => {
 						if (!err) eng.Code = srcCode;
 
@@ -543,11 +550,11 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 			default:
 				cb( null );
 		}
-	},
+	},  */
 
 	/*
 	pluginKeys: function (product, keys) {
-		return This = Copy( keys || {}, blogContext(product), ".");
+		return This = Copy( keys || {}, productKeys(product), ".");
 	},  */
 
 	licenseCode: function (sql, code, pub, cb ) {  //< callback cb(pub) or cb(null) on error
@@ -674,7 +681,7 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 				(md,cb) => md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
 
 			var
-				toukeys = blogContext( product, {
+				toukeys = productKeys( product, {
 					summary: "summary tbd",
 					reqts: defs.envs[type] || "reqts tbd",
 					ver: "ver tbd",
@@ -1178,6 +1185,8 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 		}
 	},
 
+	productKeys: productKeys,
+	
 	// CRUDE interface
 	select: {}, 
 	delete: {}, 
@@ -1483,7 +1492,7 @@ EXECUTE.baseline = function Xexecute(req,res) {  // baseline changes
 	var
 		login = `-u${ENV.MYSQL_USER} -p${ENV.MYSQL_PASS}`,
 		ex = {
-			group: `mysqldump ${login} ${req.group} >admins/db/${req.group}.sql`,
+			group: `mysqldump ${login} app >admins/db/app.sql`,
 			openv: `mysqldump ${login} openv >admins/db/openv.sql`,
 			clear: `mysql ${login} -e "drop database baseline"`,
 			prime: `mysql ${login} -e "create database baseline"`,
@@ -2481,11 +2490,14 @@ SELECT.plugins = function Xselect(req,res) {
 	var sql = req.sql, query = req.query;
 	var plugins = [];
 	
+	Log(query, isEmpty(query) );
 	sql.query(
 		"SELECT Name, Type, JIRA, RAS, Task "
-		+ "FROM ??.engines LEFT JOIN openv.milestones ON milestones.Plugin=engines.Name "
-		+ "WHERE Enabled ORDER BY Type,Name", 
-		[req.group], (err,engs) => {
+		+ "FROM app.engines LEFT JOIN openv.milestones ON milestones.Plugin=engines.Name "
+		+ ( isEmpty(query) 
+		   		? "WHERE Enabled ORDER BY Type,Name"
+		   		: "WHERE Enabled AND least(?,1) ORDER BY Type,Name" ),
+		[query], (err,engs) => {
 		
 		if ( err )
 			res( err );
@@ -2494,8 +2506,7 @@ SELECT.plugins = function Xselect(req,res) {
 			engs.forEach( (eng,id) => {
 				if ( eng.Type != "jade" && eng.Name.indexOf("demo")<0 )
 					plugins.push({
-						ID: id,
-						Name: `${eng.Name}.${eng.Type}`,
+						Use: `/${eng.Name}.use`.tag("a",{href: `/${eng.Name}.use`}),
 						Run: `/${eng.Name}.run`.tag("a",{href: `/${eng.Name}.run`}),
 						View: `/${eng.Name}.view`.tag("a",{href: `/${eng.Name}.view`}),
 						ToU: `/${eng.Name}.tou`.tag("a",{href: `/${eng.Name}.tou`}),
@@ -2747,11 +2758,11 @@ EXECUTE.uploads = function Xexecute(req, res) {
 DELETE.keyedit = function Xdelete(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	Log(["delkey",req.group, query]);
+	Log(["delkey", query]);
 	try {
 		sql.query(
-			"ALTER TABLE ??.?? DROP ??", 
-			[req.group, query.ds, query.ID],
+			"ALTER TABLE app.?? DROP ??", 
+			[query.ds, query.ID],
 			err => {
 				res( {data: {}, success:true, msg:"ok"}  );
 		});
@@ -2766,11 +2777,11 @@ DELETE.keyedit = function Xdelete(req, res) {
 INSERT.keyedit = function Xinsert(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query;
 	
-	Log(["addkey",req.group, query, body]);
+	Log(["addkey",query, body]);
 	try {
 		sql.query(
-			"ALTER TABLE ??.?? ADD ?? "+body.Type,
-			[req.group, query.ds, body.Key],
+			"ALTER TABLE app.?? ADD ?? "+body.Type,
+			[query.ds, body.Key],
 			err => {
 				res( {data: {insertID: body.Key}, success:true, msg:"ok"} );
 		});
@@ -2784,11 +2795,11 @@ INSERT.keyedit = function Xinsert(req, res) {
 UPDATE.keyedit = function Xupdate(req, res) { 
 	var sql = req.sql, body = req.body, query = req.query, body = req.body;
 	
-	Log(["updkey",req.group, query, body]);
+	Log(["updkey", query, body]);
 	try {
 		sql.query(
-			"ALTER TABLE ??.?? CHANGE ?? ?? "+body.Type, 
-			[req.group, query.ds, query.ID, query.ID],
+			"ALTER TABLE app.?? CHANGE ?? ?? "+body.Type, 
+			[query.ds, query.ID, query.ID],
 			err => {
 				res( {data: {}, success:true, msg:"ok"}  );
 		});
@@ -2803,10 +2814,10 @@ UPDATE.keyedit = function Xupdate(req, res) {
 SELECT.keyedit = function Xselect(req, res) { 
 	var sql = req.sql, query = req.query;
 	
-	Log(["getkey",req.group, query]);
+	Log(["getkey",query]);
 	
 	try {
-		sql.query("DESCRIBE ??.??", [req.group, query.ds || ""], function (err, parms) {
+		sql.query("DESCRIBE app.??", [query.ds || ""], function (err, parms) {
 			if (err) return res(err);
 
 			var recs = [{
@@ -2832,8 +2843,8 @@ SELECT.keyedit = function Xselect(req, res) {
 EXECUTE.keyedit = function Xexecute(req, res) { 
 	var sql = req.sql, log = req.log, query = req.query;
 	
-	Log(["exekey",req.group, query]);
-	res("monted");
+	Log(["editkey", query]);
+	res("unsupported");
 }
 
 // Execute interfaces
@@ -4430,8 +4441,8 @@ SELECT.login = function(req,res) {
 		nickref = nick.tag("a",{href:url}),
 		client = req.client,
 		user = userID(client),
-		group = req.group,
 		profile = req.profile,
+		group = profile.group,
 		userHome = `/local/users/${user}`,
 		logins = FLEX.paths.logins,
 		sudoJoin = `echo "${ENV.ADMIN_PASS} " | sudo -S `,
@@ -5150,11 +5161,11 @@ INSERT.blog = function (req,res) {
 	
 	switch (req.type) {
 		case "mu":
-			res( req.post.parseEMAC( blogContext( "nill", query ) ) );
+			res( req.post.parseEMAC( productKeys( "nill", query ) ) );
 			break;
 			
 		case "":
-			req.post.Xblog(req, query.ds || "nada?id=0", {}, blogContext( "nill", query) , {}, false, html => res(html) );
+			req.post.Xblog(req, query.ds || "nada?id=0", {}, productKeys( "nill", query) , {}, false, html => res(html) );
 			break;
 			
 		case "py":
@@ -5171,7 +5182,7 @@ function Trace(msg,sql) {
 	"X>".trace(msg,sql);
 }
 
-function blogContext(product, prime) {
+function productKeys(product, prime) {
 	var
 		site = FLEX.site,
 		parts = product.split("."),
