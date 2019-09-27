@@ -63,7 +63,7 @@ var
 	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 
-const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError,isEmpty } = require("enum");
+const { Copy,Each,Log,isKeyed,isString,isFunction,Serialize,isError,isEmpty } = require("enum");
 
 var FLEX = module.exports = {
 	config: opts => {
@@ -5338,7 +5338,7 @@ SELECT.config = function (req,res) {
 
 SELECT.info = function (req,res) {
 	function toSchema( path, obj ) {
-		if ( isObject(obj) ) {
+		if ( isKeyed(obj) ) {
 			var objs = [];
 			Each(obj, (key,val) => {
 				var next = path+"/"+key;
