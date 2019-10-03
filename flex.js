@@ -245,16 +245,16 @@ to post-process selected KEYs.
 `, 
 
 		description: `
-Document your usecase using markdown tags:
+Document your usecase using markdown:
 
-[ TEXT ] ( PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... )  
-[ TEXT ] ( COLOR )  
-[ TOPIC ] ( ? starts=DATE & ends=DATE )  
-$ $ inline TeX $ $  ||  n$ $ break TeX $ $ || a$ $ AsciiMath $ $ || m$ $ MathML $ $  
-[JS || #JS || TeX] OP= [JS || #JS || TeX]  
-$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
-KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
-KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
+	%{ PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... }  
+	~{ TOPIC ? starts=DATE & ends=DATE ... }  
+	[ LINK ] ( URL )  
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
+	[JS || #JS || TeX] OP= [JS || #JS || TeX]  
+	$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
+	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
+	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
 
 `,
 
@@ -635,7 +635,8 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 		function genToU( mod, toukeys, cb ) {
 			(getter( mod.tou || mod.readme ) || defs.tou)
 			.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
-			.Xblog(null, `${name}?name=test2`, {}, {}, toukeys, false, tou => {
+			//.Xblog(null, `${name}?name=test2`, {}, {}, toukeys, false, tou => {
+			.Xblog(null, "", {}, {}, toukeys, tou => {	// should be changed to debe skin render
 				cb( mod, tou );
 			});
 		}
@@ -678,8 +679,10 @@ KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 
 		Serialize( 	// convert markdown keys to html (with disabled content tracking)
 				dockeys, 		// markdown dockeys 
-				(md,cb) => md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
-
+				(md,cb) => 
+					// md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
+					md.Xblog(null, "", {}, {}, {}, html => cb(html)), dockeys => {			// html-ed dockeys
+						
 			var
 				toukeys = productKeys( product, {
 					summary: "summary tbd",
@@ -4351,6 +4354,7 @@ SELECT.test = function(req,res) {
 	req.sql.serialize([{save: "news"},{save:"lookups"}, {save:"/news"} ], {}, res );
 } */
 
+/*
 INSERT.blog = function (req,res) {
 	var
 		query = req.query;
@@ -4370,7 +4374,7 @@ INSERT.blog = function (req,res) {
 			break;
 			
 	}			
-}
+}  */
 
 //===================== execution tracing
 
