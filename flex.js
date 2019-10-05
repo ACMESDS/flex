@@ -63,7 +63,7 @@ var
 	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 
-const { Copy,Each,Log,isObject,isString,isFunction,Serialize,isError,isEmpty } = require("enum");
+const { Copy,Each,Log,isObject,isString,isFunction,Stream,isError,isEmpty } = require("enum");
 
 var FLEX = module.exports = {
 	config: opts => {
@@ -335,9 +335,9 @@ Document your usecase using markdown:
 
 			case "status":
 				var 
-					getSite = FLEX.getSite,
+					probeSite = FLEX.probeSite,
 					fetchUsers = function (rec, cb) {	// callback with endservice users
-						getSite(rec._EndService, null, info => { 
+						probeSite(rec._EndService, null, info => { 
 							//Log("status users", info);
 							cb( (info.toLowerCase().parseJSON() || [] ).join(";") ) ;
 						});
@@ -587,7 +587,7 @@ Document your usecase using markdown:
 
 		Log("endserv lic code", pub);
 		if (endService = pub._EndService)  // an end-service specified so validate it
-			FLEX.getSite( endService, null, info => {  // check users provided by end-service
+			FLEX.probeSite( endService, info => {  // check users provided by end-service
 				var 
 					valid = false, 
 					partner = pub._Partner.toLowerCase(),
@@ -676,175 +676,178 @@ Document your usecase using markdown:
 		// strip comments from product keys
 
 		Each( prokeys, (key,type) => prokeys[key] = type.replace( /comment '((.|\n)*)'/, (pre,com) => { dockeys[key]  += com; return ""; } ) );
+		
+		// Expand markdown in dockeys
+		
+		Stream( dockeys, (md,cb) => {	// convert markdown keys to html
+			if ( md )
+				md.Xblog(null, "", {}, {}, {}, html => cb(html)); // disable tracking etc
 
-		Serialize( 	// convert markdown keys to html (with disabled content tracking)
-				dockeys, 		// markdown dockeys 
-				(md,cb) => 
-					// md.Xblog(null, "", {}, {}, {}, false, html => cb(html)), dockeys => {			// html-ed dockeys
-					md.Xblog(null, "", {}, {}, {}, html => cb(html)), dockeys => {			// html-ed dockeys
-						
-			var
-				toukeys = productKeys( product, {
-					summary: "summary tbd",
-					reqts: defs.envs[type] || "reqts tbd",
-					ver: "ver tbd",
-					//pocs: ["brian.d.james@coe.ic.gov"],
-					interface: () => {
-						var ifs = [];
-						Each( prokeys, (key, type) => {
-							 ifs.push({ 
-								 Key: key, 
-								 Type: type, 
-								 Details: dockeys[key] || "no documentation available" 
-							 });
-						});
-						// Log(">>>>>", product, ifs.length, ifs.gridify().length);
-						// if (product = "regress.js") Log(ifs.gridify() );
-						return ifs.gridify();
-					}
-				});
-
-			genToU(mod, toukeys, (mod, tou) => {
-
-				if ( mod.clear || mod.reset )
-					sql.query("DROP TABLE app.??", name);
-
-				sql.query( 
-					`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
-					[], err => {
-
-					var
-						modkeys = mod.mods || mod.modkeys || mod._mods,
-						addkeys = mod.adds || mod.addkeys || mod.keys;
-
-					if ( modkeys )
-						Each( modkeys, (key,type) => {
-							var 
-								keyId = sql.escapeId(key);
-
-							/*
-								comment = "",
-
-							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-								comment = com;
-								return "";
+			else {
+				var 
+					dockeys = cb,  // html-ed dockeys
+					toukeys = productKeys( product, {
+						summary: "summary tbd",
+						reqts: defs.envs[type] || "reqts tbd",
+						ver: "ver tbd",
+						//pocs: ["brian.d.james@coe.ic.gov"],
+						interface: () => {
+							var ifs = [];
+							Each( prokeys, (key, type) => {
+								 ifs.push({ 
+									 Key: key, 
+									 Type: type, 
+									 Details: dockeys[key] || "no documentation available" 
+								 });
 							});
+							// Log(">>>>>", product, ifs.length, ifs.gridify().length);
+							// if (product = "regress.js") Log(ifs.gridify() );
+							return ifs.gridify();
+						}
+					});
 
-							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
-							});*/
+				genToU(mod, toukeys, (mod, tou) => {
 
-							sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
-						});
+					if ( mod.clear || mod.reset )
+						sql.query("DROP TABLE app.??", name);
 
-					else
-					if ( addkeys)
-						Each( addkeys, (key,type) => {
-							var 
-								keyId = sql.escapeId(key);
+					sql.query( 
+						`CREATE TABLE app.${name} (ID float unique auto_increment, Name varchar(32) unique key)` , 
+						[], err => {
 
-							/*
-								doc = dockeys[key],
-								comment = "";
+						var
+							modkeys = mod.mods || mod.modkeys || mod._mods,
+							addkeys = mod.adds || mod.addkeys || mod.keys;
 
-							type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-								comment = com;
-								return "";
-							});
+						if ( modkeys )
+							Each( modkeys, (key,type) => {
+								var 
+									keyId = sql.escapeId(key);
 
-							(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
-							});*/
-							sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
-						});
+								/*
+									comment = "",
 
-					if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
-						inits.forEach( init => {
-							sql.query("INSERT INTO app.?? SET ?", init);
-						});
-
-					if  ( readme = mod.readme )
-						FS.writeFile( pathname+".xmd", readme, "utf8" );
-
-					if ( code = getter( mod.engine || mod.code) ) {
-
-						FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
-
-							if ( isError(min) )
-								Log("FAILED PUB", min);
-
-							else 
-							if ( selfLicense ) // auto license to this service
-								FLEX.licenseCode( sql, min, {
-										_Partner: "totem",
-										_EndService: ENV.SERVICE_MASTER_URL,
-										_Published: new Date(),
-										_Product: product,
-										Path: pathname
-									}, pub => {
-										if (pub)
-											Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
-
-										else
-											Trace("FAILED LICENSE");
-									});
-
-								// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
-
-							var 
-								from = type,
-								to = mod.to || from,
-								fromFile = pathname + "." + from,
-								toFile = pathname + "." + to,
-								jsCode = {},
-								rev = {
-									Code: code,
-									Minified: isError(min) ? null : min,
-									Wrap: getter( mod.wrap ) || "",
-									ToU: tou,
-										// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-									State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-								};
-
-							Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
-
-							if ( from == to )  { // use code as-is
-								sql.query( 
-									"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-										Name: name,
-										Type: type,
-										Enabled: 1
-									}), rev ] );
-
-								if (from == "js") {	// import js function into $
-									jsCode[name] = mod.engine || mod.code;
-									$(jsCode);
-								}
-							}
-
-							else  // convert code to requested type
-								//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
-								FS.writeFile( fromFile, code, "utf8", err => {
-								CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-									if (!err) 
-										FS.readFile( toFile, "utf8", (err,code) => {
-											rev.Code = code;
-											if (!err)
-												sql.query( 
-													"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-														Name: name,
-														Type: type,
-														Enabled: 1
-													}), rev ] );
-										});									
+								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+									comment = com;
+									return "";
 								});
-							});	
-						});
-					}
 
-					// CP.exec(`cd ${name}.d; sh publish.sh`);
-				});
-			});	
+								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+									sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
+								});*/
+
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
+							});
+
+						else
+						if ( addkeys)
+							Each( addkeys, (key,type) => {
+								var 
+									keyId = sql.escapeId(key);
+
+								/*
+									doc = dockeys[key],
+									comment = "";
+
+								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
+									comment = com;
+									return "";
+								});
+
+								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
+									sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
+								});*/
+								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
+							});
+
+						if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
+							inits.forEach( init => {
+								sql.query("INSERT INTO app.?? SET ?", init);
+							});
+
+						if  ( readme = mod.readme )
+							FS.writeFile( pathname+".xmd", readme, "utf8" );
+
+						if ( code = getter( mod.engine || mod.code) ) {
+
+							FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
+
+								if ( isError(min) )
+									Log("FAILED PUB", min);
+
+								else 
+								if ( selfLicense ) // auto license to this service
+									FLEX.licenseCode( sql, min, {
+											_Partner: "totem",
+											_EndService: ENV.SERVICE_MASTER_URL,
+											_Published: new Date(),
+											_Product: product,
+											Path: pathname
+										}, pub => {
+											if (pub)
+												Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
+
+											else
+												Trace("FAILED LICENSE");
+										});
+
+									// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+
+								var 
+									from = type,
+									to = mod.to || from,
+									fromFile = pathname + "." + from,
+									toFile = pathname + "." + to,
+									jsCode = {},
+									rev = {
+										Code: code,
+										Minified: isError(min) ? null : min,
+										Wrap: getter( mod.wrap ) || "",
+										ToU: tou,
+											// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+										State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+									};
+
+								Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
+
+								if ( from == to )  { // use code as-is
+									sql.query( 
+										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+											Name: name,
+											Type: type,
+											Enabled: 1
+										}), rev ] );
+
+									if (from == "js") {	// import js function into $
+										jsCode[name] = mod.engine || mod.code;
+										$(jsCode);
+									}
+								}
+
+								else  // convert code to requested type
+									//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+									FS.writeFile( fromFile, code, "utf8", err => {
+									CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+										if (!err) 
+											FS.readFile( toFile, "utf8", (err,code) => {
+												rev.Code = code;
+												if (!err)
+													sql.query( 
+														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+															Name: name,
+															Type: type,
+															Enabled: 1
+														}), rev ] );
+											});									
+									});
+								});	
+							});
+						}
+
+						// CP.exec(`cd ${name}.d; sh publish.sh`);
+					});
+				});		
+			}
 		});
 	},
 
@@ -969,123 +972,6 @@ Document your usecase using markdown:
 			return null;
 	},
 
-	/*
-	genLicense: function (code, product, type, secret, cb) {  //< callback cb(minifiedCode, license)
-		//Log("gen lic", secret);
-		if (secret)
-			switch (type) {
-				case "html":
-					var minCode = HMIN.minify(code.replace(/<br>/g,""), {
-						removeAttributeQuotes: true
-					});
-					cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-					break;
-
-				case "js":
-					//cb(null); break;
-					var
-						e6Tmp = "./temps/e6/" + product,
-						e5Tmp = "./temps/e5/" + product;
-
-					FS.writeFile(e6Tmp, code, "utf8", err => {
-						CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
-							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-								Log("jsmin>>>>", err);
-
-								if (err)
-									cb( null );
-
-								else {
-									var min = JSMIN.minify( e5code );
-
-									if (min.error) 
-										cb( null );
-
-									else   
-										cb( min.code, CRY.createHmac("sha256", secret).update(min.code).digest("hex") );
-								}
-							});
-						});
-					});
-					break;						
-
-				case "py":
-					// cb(null); break;
-					// minifying python problematic (as -O obvuscator has no reseeded) so 
-					// pyminifier was modified to reseed its rv generator.
-					var pyTmp = "./temps/" + product;
-
-					FS.writeFile(pyTmp, code.replace(/\t/g,"  "), "utf8", err => {					
-						CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-							Log("pymin>>>>", err);
-
-							if (err)
-								cb(null);
-
-							else
-								cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-						});
-					});
-					break;
-
-				case "m":
-				case "me":
-					//cb(null); break;
-					/ *
-					Could use Matlab's pcode generator - but only avail within matlab
-							cd to MATLABROOT (avail w matlabroot cmd)
-							matlab -nosplash -r script.m
-							start matlab -nospash -nodesktop -minimize -r script.m -logfile tmp.log
-
-					but, if not on a matlab machine, we need to enqueue this matlab script from another machine via curl to totem
-
-					From a matlab machine, use mcc source, then use gcc (gcc -fpreprocessed -dD -E  -P source_code.c > source_code_comments_removed.c)
-					to remove comments - but you're back to enqueue.
-
-					Better option to use smop to convert matlab to python, then pyminify that.
-					* /
-
-					var 
-						mTmp = "./temps/matsrc/" + product,
-						pyTmp = "./temps/matout/" + product;
-
-					FS.writeFile(mTmp, code.replace(/\t/g,"  "), "utf8", err => {
-						CP.execFile("python", ["matlabtopython.py", "smop", mTmp, "-o", pyTmp], err => {	
-							Log("matmin>>>>", err);
-
-							if (err)
-								cb( null );
-
-							else
-								FS.readFile( pyTmp, "utf8", (err,pyCode) => {
-									if (err) 
-										cb( null );
-
-									else
-										CP.exec(`pyminifier -O ${pyTmp}`, (err,minCode) => {
-											if (err)
-												cb(null);
-
-											else
-												cb( minCode, CRY.createHmac("sha256", secret).update(minCode).digest("hex") );
-										});										
-								});									
-						});
-					});
-					break;
-
-				case "jade":
-				default:
-					//cb(null); break;
-					var min = code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".");
-					cb( min, CRY.createHmac("sha256", secret).update(min).digest("hex") );
-			}
-
-		else
-			cb( code, CRY.createHmac("sha256", type).update(code).digest("hex") );
-	},
-	*/
-
 	publishPlugins: function ( sql ) { //< publish all plugins
 		var 
 			types = FLEX.publish;
@@ -1136,7 +1022,6 @@ Document your usecase using markdown:
 		noLicense: new Error("Failed to prepare a product license"),
 		badRequest: new Error("bad/missing request parameter(s)"),
 		noBody: new Error("no body keys"),
-		//noID: new Error("missing record ID"),
 		badBaseline: new Error("baseline could not reset change journal"),
 		disableEngine: new Error("requested engine must be disabled to prime"),
 		noEngine: new Error("requested engine does not exist"),
@@ -1197,11 +1082,8 @@ Document your usecase using markdown:
 	insert: {}, 
 	execute: {}, 
 
-	getSite: () => {Trace("data getSite not configured");},  //< data getSite
-	//uploader: () => {Trace("file uploader not configured");},  //< file uploader
-	//emitter: () => {Trace("client emitter not configured");},  //< client syncer
-	thread: () => {Trace("sql thread not configured");},  //< sql threader
-	//skinner: () => {Trace("site skinner not configured");},  //< site skinner
+	probeSite: () => Trace("probeSite not configured"),  //< data probeSite
+	thread: () => Trace("thread not configured"),  //< sql threader
 
 	getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 
@@ -1285,14 +1167,14 @@ Document your usecase using markdown:
 	**/
 
 		var
-			getSite = FLEX.getSite,
+			probeSite = FLEX.probeSite,
 			sql = req.sql,
 			query = req.query;
 
 		//Log({viaagent: query});
 
 		if (agent = query.agent)   // out-source request
-			getSite(agent.tag( "?", query), null, function (jobid) {
+			probeSite(agent.tag( "?", query), jobid => {
 
 				if ( jobid ) {
 					Trace("FORKED AGENT FOR job-"+jobname,sql);
@@ -1306,14 +1188,14 @@ Document your usecase using markdown:
 					});
 
 					if ( poll = parseInt(query.poll) )
-						var timer = setInterval(function (req) { 
+						var timer = setInterval( req => { 
 
 							Trace("POLLING AGENT FOR job"+jobid);
 
-							getSite(req.agent.tag("?",{pull:jobid}), null, function (ctx) {
+							probeSite(req.agent.tag("?",{pull:jobid}), ctx => {
 
 								if ( ctx = ctx.parseJSON() )
-									FLEX.thread( function (sql) {
+									FLEX.thread( sql => {
 										Trace("FREEING AGENT FOR job-"+jobid, sql);
 										sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
 										sql.release();
@@ -3821,7 +3703,7 @@ SELECT.wms = function (req,res) {
 	var 
 		sql = req.sql,
 		query = req.query,
-		getSite = FLEX.getSite,
+		probeSite = FLEX.probeSite,
 		src = query.src || "";
 	
 	switch (src) {
@@ -3834,14 +3716,14 @@ SELECT.wms = function (req,res) {
 	res("ok");
 	
 	if ( url = ENV[`WMS_${src.toUpperCase()}`] ) 
-		getSite(url.tag("?", query), null, rtn => Log("wms returned", rtn) )
+		probeSite(url.tag("?", query), rtn => Log("wms returned", rtn) )
 }
 
 SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	var 
 		sql = req.sql,
 		query = req.query,
-		getSite = FLEX.getSite,
+		probeSite = FLEX.probeSite,
 		site = FLEX.site,
 		chip = {	// chip attributes
 			width: query.width || 100, // chip pixels lat,
@@ -3865,7 +3747,7 @@ SELECT.wfs = function (req,res) {  //< Respond with ess-compatible image catalog
 	delete query.src;
 	
 	if ( url = ENV[`WFS_${src}`] )
-		getSite( url.tag("?", query), null, cat => {  // query catalog for desired data channel
+		probeSite( url.tag("?", query), cat => {  // query catalog for desired data channel
 			if ( cat = cat.parseJSON() ) {
 				switch ( src ) {  // normalize cat response to ess
 					case "DGLOBE":
@@ -4499,7 +4381,7 @@ SELECT.config = function (req,res) {
 	var
 		sql = req.sql,
 		query = req.query,
-		getSite = FLEX.getSite;
+		probeSite = FLEX.probeSite;
 	
 	if (mod = query.mod) 
 		CP.exec(`cd ../${mod}; npm list`, function (err,swconfig) {			
@@ -4523,10 +4405,10 @@ SELECT.config = function (req,res) {
 		});		
 	
 	else 
-		getSite( "/config?mod=enum", null, en => {
-		getSite( "/config?mod=flex", null, flex => {
-		getSite( "/config?mod=totem", null, totem => {
-		getSite( "/config?mod=debe", null, debe => {
+		probeSite( "/config?mod=enum", en => {
+		probeSite( "/config?mod=flex", flex => {
+		probeSite( "/config?mod=totem", totem => {
+		probeSite( "/config?mod=debe", debe => {
 			res({
 				enum: en.parseJSON([]),
 				flex: flex.parseJSON([]),
@@ -4626,7 +4508,7 @@ SELECT.info = function (req,res) {
 		sql = req.sql,
 		query = req.query,
 		pathPrefix = FLEX.site.urls.master,
-		getSite = FLEX.getSite,
+		probeSite = FLEX.probeSite,
 		libs = {
 			misc: {},
 			generators: {},
@@ -4670,8 +4552,8 @@ SELECT.info = function (req,res) {
 			xtables[ table ] = table.tag( `/${table}` );
 		});
 
-		getSite( "/plugins", null, plugins => {
-		getSite( "/config", null, config => {
+		probeSite( "/plugins", plugins => {
+		probeSite( "/config", config => {
 			var plugs = {};
 
 			plugins.parseJSON( [] ).forEach( plug => plugs[plug.Name] = plug );
