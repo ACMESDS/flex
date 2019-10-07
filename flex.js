@@ -2066,6 +2066,13 @@ SELECT.ESS = function Xselect(req, res) {
 */
 
 // Uploads/Stores file interface
+/*
+INSERT.uploads = function Xinsert(req,res) {
+	const { table, type, sql, query, body } = req;
+	
+	Log("insert !", table, type);
+	res("ok");
+}*/
 
 SELECT.uploads = 
 SELECT.stores = 
