@@ -210,16 +210,15 @@ var FLEX = module.exports = {
 		ingest: "switch ingests engine results [into the database](/api.view)",
 		share: "switch returns engine results to the status area",
 		pipe: `
-Place a DATASET into a supervised workflow using the Pipe:
+Place a DATASET into a TYPE-specific supervised workflow using the Pipe:
 
-	"/DATASET.TYPE?KEY=VALUE || $.EXPRESSION ..."  
-	{ "$": "SCRIPT" }
-	{ "Pipe": "/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
+	"/PATH/DATASET.TYPE?KEY=VALUE || $.JS ..."  
+	{ "$": "MATHJS" }
+	{ "Pipe": "/PATH/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
 
-The "/DATASET.TYPE" [source pipe](/api.view) selects the TYPE-specific workflow based on TYPE = json || [ jpg | png | nitf ] || stream || [ txt | doc | pdf | xls ] || aoi || db 
-where $ references the TYPE-specific json data || GIMP image || event list || document text || db record.  The {KEY: [VALUE, ...]} [enumeration pipe](/api.view) 
-generates usecases over permuted context KEYs.  The {$: "SCRIPT"} [scripting pipe](/api.view) utilizes the [matlab-like scripting](https://sc.appdev.proj.coe.ic.gov://acmesds/man) 
-to post-process selected KEYs.
+The "/PATH/DATASET.TYPE" [source pipe](/api.view) defines the workflow based on TYPE = json || jpg | png | nitf || stream | export  || txt | doc | pdf | xls  || aoi || db,
+where $ references the TYPE-specific json data || GIMP image || event list || document text || db record.  The { KEY: [VALUE, ...] } [enumeration pipe](/api.view) 
+generates usecases over permuted context KEYs.  The $ json can be post-processed by a JS script or by a { $: "MATHJS" } [matlab-js scripting pipe](/api.view).
 `, 
 
 		description: `
