@@ -69,7 +69,7 @@ var FLEX = module.exports = {
 	config: opts => {
 		/**
 		@method config
-		Configure module with spcified options, publish plugins under TYPE/PLUGIN.js, establish
+		Configure module with spcified options, publish plugins under TYPE/NOTEBOOK.js, establish
 		email sender and news feeder.   
 		*/
 		if (opts) Copy(opts,FLEX,".");
@@ -777,8 +777,8 @@ Document your usecase using markdown:
 	insert: {}, 
 	execute: {}, 
 
-	probeSite: () => Trace("probeSite not configured"),  //< data probeSite
-	thread: () => Trace("thread not configured"),  //< sql threader
+	probeSite: (url,opt) => { throw new Error("probeSite not configured"); } ,  //< data probeSite
+	thread: () => { throw new Error("sql thread not configured"); },  //< sql threader
 
 	getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 
@@ -2220,7 +2220,7 @@ EXECUTE.uploads = function Xexecute(req, res) {
 }*/
 
 // CRUDE interfaces
-// PLUGIN usecase editors
+// Notebook usecase editors
 
 DELETE.keyedit = function Xdelete(req, res) { 
 	var sql = req.sql, query = req.query;
@@ -3962,8 +3962,8 @@ INSERT.blog = function (req,res) {
 
 //===================== execution tracing
 
-function Trace(msg,sql) {
-	"X>".trace(msg,sql);
+function Trace(msg,req,fwd) {
+	"X>".trace(msg,req,fwd);
 }
 
 function productKeys(product, prime) {
