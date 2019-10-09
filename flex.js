@@ -63,6 +63,10 @@ var
 	ATOM = require("atomic");		// tauif simulation engines
 	//RAN = require("randpr"), 		// random process
 
+function Trace(msg,req,fwd) {
+	"flex".trace(msg,req,fwd);
+}
+
 const { Copy,Each,Log,isObject,isString,isFunction,Stream,isError,isEmpty } = require("enum");
 
 var FLEX = module.exports = {
@@ -3958,12 +3962,6 @@ INSERT.blog = function (req,res) {
 			
 	}			
 }  */
-
-//===================== execution tracing
-
-function Trace(msg,req,fwd) {
-	"X>".trace(msg,req,fwd);
-}
 
 function productKeys(product, prime) {
 	var
