@@ -210,13 +210,15 @@ var FLEX = module.exports = {
 	},
 
 	defaultDocs: {	// default plugin docs (db key comments)
-		export: "switch writes engine results [into a file](/api.view)",
-		ingest: "switch ingests engine results [into the database](/api.view)",
-		share: "switch returns engine results to the status area",
-		pipe: `
+		nodoc: "no documentation provided",
+
+		Export: "switch writes engine results [into a file](/api.view)",
+		Ingest: "switch ingests engine results [into the database](/api.view)",
+		Share: "switch returns engine results to the status area",
+		Pipe: `
 Place a DATASET into a TYPE-specific supervised workflow using the Pipe:
 
-	"/PATH/DATASET.TYPE?KEY=VALUE || $.JS ..."  
+	"/PATH/DATASET.TYPE?KEY=VALUE || $.JS ..."
 	{ "$": "MATHJS" }
 	{ "Pipe": "/PATH/DATASET.TYPE?..." ,  "KEY": [VALUE, ...] , ... }
 
@@ -225,28 +227,29 @@ where $ references the TYPE-specific json data || GIMP image || event list || do
 generates usecases over permuted context KEYs.  The $ json can be post-processed by a JS script or by a { $: "MATHJS" } [matlab-js scripting pipe](/api.view).
 `, 
 
-		description: `
+		Description: `
 Document your usecase using markdown:
 
-	%{ PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... }  
-	~{ TOPIC ? starts=DATE & ends=DATE ... }  
-	[ LINK ] ( URL )  
-	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$  
-	[JS || #JS || TeX] OP= [JS || #JS || TeX]  
-	$ { KEY } || $ { JS } || $ {doc( JS , "INDEX" )}  
-	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS  
-	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)  
+	%{ PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... }
+	~{ TOPIC ? starts=DATE & ends=DATE ... }
+	\${ KEY } || \${ JS } || \${doc( JS , "INDEX" )}
+	[ LINK ] ( URL )
+	$$ inline TeX $$  ||  n$$ break TeX $$ || a$$ AsciiMath $$ || m$$ MathML $$
+	[JS || #JS || TeX] OP= [JS || #JS || TeX]
+	KEY,X,Y >= SKIN,WIDTH,HEIGHT,OPTS
+	KEY <= VALUE || OP <= EXPR(lhs),EXPR(rhs)
 
 `,
 
-		donfig: "js-script defines a usecase context  ",
-		save: "json aggregates engine results not captured in other Save_KEYs  ",
-		entry: 'json primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
-		exit: 'json saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
-		batch: "value overrides the supervisor's batch size  (0 disabled)  ",
-		symbols: "json overrides the supervisor's state symbols (null defaults)  ",
-		steps: "value overrides the supervisor's observation interval (0 defaults) ",
-		ring: "[[lat,lon], ...] in degs 4+ length vector defining an aoi"
+		Config: "js-script defines a usecase context  ",
+		Save: "aggregates notebook results not captured in other Save_KEYs  ",
+		Entry: 'primes context KEYs on entry using { KEY: "SELECT ....", ...}  ',
+		Exit: 'saves context KEYs on exit using { KEY: "UPDATE ....", ...}  ',
+		Ring: "[[lat,lon], ...] in degs 4+ length vector defining an aoi",
+		
+		Save_end: "aggregates notebook results when stream finished",
+		Save_config: "aggregates notebook resuts when stream configured",
+		Save_batch: "aggregates notebook resuts when stream at batch points"
 	},
 
 	licenseOnDownload: true,
@@ -332,13 +335,25 @@ Document your usecase using markdown:
 		}
 
 		function genToU( mod, toukeys, cb ) {
-			(getter( mod.tou || mod.readme ) || defs.tou)
+			var tou = (getter( mod.tou || mod.readme ) || infokeys.tou);
+			
+			tou
 			.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
-			.Xblog(null, "", {}, {}, toukeys, tou => {	// should be changed to debe skin render
+			.XblogSimple( toukeys, tou => {	// should be changed to debe skin render
+				//Log("tou>>>", tou);
 				cb( mod, tou );
 			});
 		}
 
+		function getComment( sql, cb ) {
+			var com = sql.replace( /(.*) comment '((.|\n)*)'/, (str,spec,doc) => { 
+				cb( spec, doc );
+				return "#";
+			});
+
+			if ( !com.startsWith("#") ) cb( sql, "" );			
+		}
+		
 		var 
 			pathname = path; //FLEX.paths.publish[type] + name;
 
@@ -353,58 +368,66 @@ Document your usecase using markdown:
 		var
 			modkeys = mod.mods || mod.modkeys || mod._mods,
 			addkeys = mod.adds || mod.addkeys || mod.keys,
-			dockeys = mod.docs || mod.dockeys || {},
 			prokeys = modkeys || addkeys || {},
 			product = name + "." + type,
-			defs = {   // defaults
+			infokeys = {   // defaults
 				tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
 				envs: {
 					js: "nodejs-8.9.x and [man-latest](https://sc.appdev.proj.coe.ic.gov://acmesds/man)",
 					py: "anconda-4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
 					m: "matlab R18, odbc, simulink, stateflow"
-				},
-				docs: FLEX.defaultDocs || {}
-			};
-
-		// default dockeys
-
-		for ( var key in prokeys )
-			dockeys[key] = dockeys[key] || defs.docs[key.toLowerCase()] || "";
-
-		// strip comments from product keys
-
-		Each( prokeys, (key,type) => prokeys[key] = type.replace( /comment '((.|\n)*)'/, (pre,com) => { dockeys[key]  += com; return ""; } ) );
-		
-		// Expand markdown in dockeys
-		
-		Stream( dockeys, (md,cb) => {	// convert markdown keys to html
-			if ( md )
-				md.Xblog(null, "", {}, {}, {}, html => cb(html)); // disable tracking etc
-
-			else {
-				var 
-					dockeys = cb,  // html-ed dockeys
-					toukeys = productKeys( product, {
-						summary: "summary tbd",
-						reqts: defs.envs[type] || "reqts tbd",
-						ver: "ver tbd",
-						//pocs: ["brian.d.james@coe.ic.gov"],
-						interface: () => {
-							var ifs = [];
-							Each( prokeys, (key, type) => {
-								 ifs.push({ 
-									 Key: key, 
-									 Type: type, 
-									 Details: dockeys[key] || "no documentation available" 
-								 });
-							});
-							// Log(">>>>>", product, ifs.length, ifs.gridify().length);
-							// if (product = "regress.js") Log(ifs.gridify() );
-							return ifs.gridify();
-						}
+				}
+			},
+			defaultDocs = FLEX.defaultDocs || {},
+			blogctx = productKeys( product, {
+				summary: "summary tbd",
+				reqts: infokeys.envs[type] || "reqts tbd",
+				ver: "ver tbd",
+				//pocs: ["brian.d.james@coe.ic.gov"],
+				speckeys: {},
+				dockeys: {},
+				interface: () => {
+					var 
+						ifs = [], 
+						speckeys = blogctx.speckeys, 
+						dockeys = blogctx.dockeys;
+					
+					Each( speckeys, (key, def) => {
+						 ifs.push({ 
+							 Key: key, 
+							 Type: def, 
+							 Details: dockeys[key] || "no documentation available" 
+						 });
 					});
+					// Log(">>>>>", product, ifs.length, ifs.gridify().length);
+					// if (product = "regress.js") Log(ifs.gridify() );
+					return ifs.gridify();
+				}
+			}),
+			dockeys = blogctx.dockeys, 
+			speckeys = blogctx.speckeys;
 
-				genToU(mod, toukeys, (mod, tou) => {
+		// expand product key comments
+
+		Stream( prokeys, (def,key,cb) => {
+			if ( cb )	// define a doc for each and every key
+				getComment( def, (spec, doc) => {
+					var
+						com = defaultDocs[key] || "",
+						com = com + doc,
+						com = com || defaultDocs.nodoc,
+						com = com || "missing documentation";
+					
+					com.XblogSimple( blogctx, html => { 
+						//Log("gen", key,spec,html.substr(0,100));
+						speckeys[key] = spec;
+						dockeys[key] = html;
+						cb();
+					});
+				});
+			
+			else // all keys expanded so ...
+				genToU(mod, blogctx, (mod, tou) => {	// generate ToU in this blogctx
 
 					if ( mod.clear || mod.reset )
 						sql.query("DROP TABLE app.??", name);
@@ -418,44 +441,25 @@ Document your usecase using markdown:
 							addkeys = mod.adds || mod.addkeys || mod.keys;
 
 						if ( modkeys )
-							Each( modkeys, (key,type) => {
+							Each( modkeys, key => {
 								var 
-									keyId = sql.escapeId(key);
+									keyId = sql.escapeId(key),
+									spec = speckeys[key],
+									doc = dockeys[key];
 
-								/*
-									comment = "",
-
-								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-									comment = com;
-									return "";
-								});
-
-								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-									sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [html] );
-								});*/
-
-								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
+								//Log("mod", key, dockeys[key].substr(0,100));
+								sql.query( `ALTER TABLE app.${name} MODIFY ${keyId} ${spec} comment ?`, [ doc ] );
 							});
 
 						else
 						if ( addkeys)
-							Each( addkeys, (key,type) => {
+							Each( addkeys, key => {
 								var 
-									keyId = sql.escapeId(key);
-
-								/*
-									doc = dockeys[key],
-									comment = "";
-
-								type = type.replace(/comment '((.|\n)*)'/, (pre,com) => {
-									comment = com;
-									return "";
-								});
-
-								(doc+"\n"+comment).Xblog(req, "", {}, {}, dockeys, false, html => {
-									sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [html] );
-								});*/
-								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${type} comment ?`, [ dockeys[key] || "" ] );
+									keyId = sql.escapeId(key),
+									spec = speckeys[key],
+									doc = dockeys[doc];
+									
+								sql.query( `ALTER TABLE app.${name} ADD ${keyId} ${spec} comment ?`, [ doc ] );
 							});
 
 						if ( inits = getter( mod.inits || mod.initial || mod.initialize ) )
@@ -544,8 +548,7 @@ Document your usecase using markdown:
 
 						// CP.exec(`cd ${name}.d; sh publish.sh`);
 					});
-				});		
-			}
+				});	
 		});
 	},
 
