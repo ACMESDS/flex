@@ -216,7 +216,7 @@ var FLEX = module.exports = {
 		Ingest: "switch ingests engine results [into the database](/api.view)",
 		Share: "switch returns engine results to the status area",
 		Pipe: `
-Place a DATASET into a TYPE-specific supervised workflow using the Pipe:
+Places a DATASET into a TYPE-specific supervised workflow:
 
 	"/PATH/DATASET.TYPE?KEY=VALUE || $.JS ..."
 	{ "$": "MATHJS" }
