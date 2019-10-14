@@ -122,7 +122,7 @@ var FLEX = module.exports = {
 				};
 		}
 		
-		if ( sqlThread = FLEX.thread)
+		if ( sqlThread = FLEX.sqlThread)
 			sqlThread( sql => {	
 				//READ( null, sql );
 
@@ -138,8 +138,6 @@ var FLEX = module.exports = {
 							+ "Description mediumtext)",
 							eng.Name );
 					});
-
-				sql.release();
 			});
 
 		if (CLUS.isMaster) {
@@ -783,8 +781,8 @@ Document your usecase using markdown:
 	insert: {}, 
 	execute: {}, 
 
-	probeSite: (url,opt) => { throw new Error("probeSite not configured"); } ,  //< data probeSite
-	thread: () => { throw new Error("sql thread not configured"); },  //< sql threader
+	probeSite: (url,opt) => { throw new Error("flex never configured probeSite method"); } ,  //< data probeSite
+	sqlThread: () => { throw new Error("flex never configured sqlThread method"); },  //< sql threader
 
 	getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 
@@ -896,10 +894,9 @@ Document your usecase using markdown:
 							probeSite(req.agent.tag("?",{pull:jobid}), ctx => {
 
 								if ( ctx = ctx.parseJSON() )
-									FLEX.thread( sql => {
+									FLEX.sqlThread( sql => {
 										Trace("FREEING AGENT FOR job-"+jobid, sql);
 										sql.query("DELETE FROM app.queues WHERE ?", {Name: plugin.name});								
-										sql.release();
 										req.cb( ctx );
 									});
 
