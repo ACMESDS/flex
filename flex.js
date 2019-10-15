@@ -228,7 +228,7 @@ generates usecases over permuted context KEYs.  The $ json can be post-processed
 		Description: `
 Document your usecase using markdown:
 
-	%{ PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... }
+	% { PATH.TYPE ? w=WIDTH & h=HEIGHT & x=KEY$INDEX & y=KEY$INDEX ... }
 	~{ TOPIC ? starts=DATE & ends=DATE ... }
 	\${ KEY } || \${ JS } || \${doc( JS , "INDEX" )}
 	[ LINK ] ( URL )
@@ -332,15 +332,12 @@ Document your usecase using markdown:
 				return opt;
 		}
 
-		function genToU( mod, toukeys, cb ) {
+		function genToU( mod, ctx, cb ) {
 			var tou = (getter( mod.tou || mod.readme ) || infokeys.tou);
 			
 			tou
 			.replace( /\r\n/g, "\n") // tou may have been sourced from a editor that saves \r\n vs \n
-			.XblogSimple( toukeys, tou => {	// should be changed to debe skin render
-				//Log("tou>>>", tou);
-				cb( mod, tou );
-			});
+			.Xskin( ctx, html => cb(mod,html) );
 		}
 
 		function getComment( sql, cb ) {
@@ -369,7 +366,7 @@ Document your usecase using markdown:
 			prokeys = modkeys || addkeys || {},
 			product = name + "." + type,
 			infokeys = {   // defaults
-				tou: FS.readFileSync( "./public/md/tou.md", "utf8" ),
+				tou: FS.readFileSync( "./jades/tou.jade", "utf8" ),
 				envs: {
 					js: "nodejs-8.9.x and [man-latest](https://sc.appdev.proj.coe.ic.gov://acmesds/man)",
 					py: "anconda-4.9.1 (iPython 5.1.0 debugger), numpy 1.11.3, scipy 0.18.1, utm 0.4.2, Python 2.7.13",
@@ -378,10 +375,10 @@ Document your usecase using markdown:
 			},
 			defaultDocs = FLEX.defaultDocs || {},
 			blogctx = productKeys( product, {
+				filename: "./jades/ref.jade",
 				summary: "summary tbd",
 				reqts: infokeys.envs[type] || "reqts tbd",
 				ver: "ver tbd",
-				//pocs: ["brian.d.james@coe.ic.gov"],
 				speckeys: {},
 				dockeys: {},
 				interface: () => {
@@ -397,8 +394,6 @@ Document your usecase using markdown:
 							 Details: dockeys[key] || "no documentation available" 
 						 });
 					});
-					// Log(">>>>>", product, ifs.length, ifs.gridify().length);
-					// if (product = "regress.js") Log(ifs.gridify() );
 					return ifs.gridify();
 				}
 			}),
@@ -3974,62 +3969,72 @@ function productKeys(product, prime) {
 			worker: ENV.SERVICE_WORKER_URL + "/" + name,
 			//product: ENV.SERVICE_WORKER_URL + "/" + name,
 			repo: ENV.PLUGIN_REPO
-		};
-	
-	return ctx = Copy(prime || {}, {
-		Name: name.toUpperCase(),
-		name: name,
-		product: product,
-		by: ENV.BYLINE,
-		
-		register: `<!---parms endservice=https://myservice/${name}--->`,
-		input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
-		
-		status: (x) => ctx.fetch( paths.worker + ".status" ),
-		toumd: (x) => ctx.fetch( paths.worker + ".toumd" ),
-		suitors: (x) => ctx.fetch( paths.worker + ".suitors" ),
-		users: (x) => ctx.fetch( paths.worker + ".users" ),
-		fetch: (url,tags) => {
-			//console.log(">>>>>", url);
-			return "<!---fetch " + url.tag("?", tags || {} ) + "--->";
-		},		
-		gridify: site.gridify,
-		tag: site.tag,
-		get: site.get,
-		match: site.match,
-		replace: site.replace,
-		pocs: site.pocs,
-		request: req => {
-			var
-				parts = (req || "").split("/"),
-				label = parts[0] || "request",
-				body = parts[1] || "request for information",
-				pocs = ctx.pocs || {};
-			
-			return (pocs.admin||"").mailify( label, {subject: name+" request", body: body} );
 		},
+		ctx = Copy(prime || {}, {
+			Name: name.toUpperCase(),
+			name: name,
+			product: product,
+			by: ENV.BYLINE,
 
-		now: (new Date())+"",
-		urls: {
-			loopback:  `${paths.worker}.${type}?endservice=${paths.worker}.users`,
-			transfer: `${paths.worker}.${type}?endservice=`,
-			//product: paths.worker,
-			status: paths.master + ".status",
-			md: paths.master + ".md",
-			suitors: paths.worker + ".suitors",
-			run: paths.worker + ".run",
-			tou: paths.master + ".tou",
-			pub: paths.master + ".pub",
-			worker: paths.worker,
-			master: paths.master,
-			totem: ENV.SERVICE_WORKER_URL,
-			//Totem: paths.worker,
-			//totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
-			repo: paths.repo + name,
-			repofiles: paths.repo + name + "/raw/master",
-			relinfo: paths.master + "/releases.html?product=" + product
-		}
-	}, ".");
+			register: () => `<!---parms endservice=https://myservice/${ctx.name}--->` + ctx.input({a:"aTest", b:"bTest"}),
+			input: tags => "<!---parms " + "".tag("&", tags || {}).substr(1) + "--->",
+
+			/*
+			status: () => ctx.fetch( paths.master + ".status" ),
+			toumd: () => ctx.fetch( paths.master + ".toumd" ),
+			suitors: () => ctx.fetch( paths.master + ".suitors" ),
+			users: () => ctx.fetch( paths.master + ".users" ),
+			fetch: (url,tags) => {
+				//console.log(">>>>>", url);
+				return "<!---fetch " + url.tag("?", tags || {} ) + "--->";
+			},	*/
+			gridify: site.gridify,
+			tag: site.tag,
+			get: site.get,
+			match: site.match,
+			replace: site.replace,
+			pocs: site.pocs,
+			reqs: {
+				info: "request for information/please provide some information",
+				help: "need help/please provde me some help on this notebook"
+			},
+			request: req => {
+				var
+					parts = (req || ctx.reqs.info || "request/need information").split("/"),
+					label = parts[0] || "request",
+					body = parts[1] || "request for information",
+					pocs = ctx.pocs || {};
+
+				//Log("pocs", pocs, label, body, name, req);
+				return (pocs.admin||"").mailify( label, {subject: name, body: body} );
+			},
+
+			now: (new Date())+"",
+			urls: {
+				loopback:  `${paths.worker}.${type}?endservice=${paths.worker}.users`,
+				transfer: `${paths.worker}.${type}?endservice=`,
+				//product: paths.worker,
+				status: paths.master + ".status",
+				md: paths.master + ".md",
+				suitors: paths.master + ".suitors",
+				run: paths.worker + ".run",
+				tou: paths.master + ".tou",
+				pub: paths.master + ".pub",
+				worker: paths.worker,
+				master: paths.master,
+				totem: ENV.SERVICE_WORKER_URL,
+				//Totem: paths.worker,
+				//totem: paths.master,  // generally want these set to the master on 8080 so that a curl to totem on 8080 can return stuff
+				repo: paths.repo + name,
+				repofiles: paths.repo + name + "/raw/master",
+				relinfo: paths.master + "/releases.html?product=" + product
+			}
+		}, "."),
+		urls = ctx.urls;
+	
+	Each( urls, (key,url) => ctx["_"+key] = `%{${url}}` );	
+	
+	return ctx;
 }
 
 SELECT.os = function (req,res) {
