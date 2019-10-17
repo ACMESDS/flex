@@ -250,7 +250,7 @@ Document your usecase using markdown:
 		Save_batch: "aggregates notebook resuts when stream at batch points"
 	},
 
-	licenseOnDownload: true,
+	licenseOnDownload: false,
 	licenseOnRestart: false,
 
 	serviceID: function (url) {
@@ -319,7 +319,7 @@ Document your usecase using markdown:
 						case "inits":
 						case "wrap":
 							return opt({
-								path: pathname,
+								path: path,
 								read: FS.readFileSync,
 								exec: CP.exec 
 							});
@@ -349,11 +349,8 @@ Document your usecase using markdown:
 			if ( !com.startsWith("#") ) cb( sql, "" );			
 		}
 		
-		var 
-			pathname = path; //FLEX.paths.publish[type] + name;
-
 		try {
-			var	mod = require(process.cwd() + pathname.substr(1));
+			var	mod = require(process.cwd() + path.substr(1));
 		}
 		catch (err) {
 			Log("PUBLISH", name, err);
@@ -461,81 +458,79 @@ Document your usecase using markdown:
 							});
 
 						if  ( readme = mod.readme )
-							FS.writeFile( pathname+".xmd", readme, "utf8" );
+							FS.writeFile( path+".md", readme, "utf8" );
 
 						if ( code = getter( mod.engine || mod.code) ) {
 
 							FLEX.minifyCode( code, product, FLEX.licenseOnDownload ? type : "", min => {
+								if ( min ) {
+									if ( selfLicense ) // auto license to this service
+										FLEX.licenseCode( sql, min, {
+												_Partner: "totem",
+												_EndService: ENV.SERVICE_MASTER_URL,
+												_Published: new Date(),
+												_Product: product,
+												Path: path
+											}, pub => {
+												if (pub)
+													Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
 
-								if ( isError(min) )
-									Log("FAILED PUB", min);
+												else
+													Trace("FAILED LICENSE");
+											});
 
-								else 
-								if ( selfLicense ) // auto license to this service
-									FLEX.licenseCode( sql, min, {
-											_Partner: "totem",
-											_EndService: ENV.SERVICE_MASTER_URL,
-											_Published: new Date(),
-											_Product: product,
-											Path: pathname
-										}, pub => {
-											if (pub)
-												Trace(`LICENSED ${pub.Product} TO ${pub.EndUser}`);
+									var 
+										from = type,
+										to = mod.to || from,
+										fromFile = path + "." + from,
+										toFile = path + "." + to,
+										jsCode = {},
+										rev = {
+											Code: code,
+											Minified: isError(min) ? null : min,
+											Wrap: getter( mod.wrap ) || "",
+											ToU: tou,
+												// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
+											State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
+										};
 
-											else
-												Trace("FAILED LICENSE");
-										});
+									Trace( `CONVERT ${name} ${from}=>${to}` );
 
-									// Log("spoof", subkeys.product, subkeys.register, subkeys.input);
+									if ( from == to )  { // use code as-is
+										sql.query( 
+											"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+												Name: name,
+												Type: type,
+												Enabled: 1
+											}), rev ], err => Trace( err || `PUBLISHED ${name}` ) );
 
-								var 
-									from = type,
-									to = mod.to || from,
-									fromFile = pathname + "." + from,
-									toFile = pathname + "." + to,
-									jsCode = {},
-									rev = {
-										Code: code,
-										Minified: isError(min) ? null : min,
-										Wrap: getter( mod.wrap ) || "",
-										ToU: tou,
-											// (getter( mod.tou || mod.readme ) || defs.tou).parseEMAC(subkeys),
-										State: JSON.stringify(mod.state || mod.context || mod.ctx || {})
-									};
-
-								Trace( `PUBLISHING ${name} CONVERT ${from}=>${to}` , sql );
-
-								if ( from == to )  { // use code as-is
-									sql.query( 
-										"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-											Name: name,
-											Type: type,
-											Enabled: 1
-										}), rev ] );
-
-									if (from == "js") {	// import js function into $
-										jsCode[name] = mod.engine || mod.code;
-										$(jsCode);
+										if (from == "js") {	// import js function into $
+											jsCode[name] = mod.engine || mod.code;
+											$(jsCode);
+										}
 									}
-								}
 
-								else  // convert code to requested type
-									//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
-									FS.writeFile( fromFile, code, "utf8", err => {
-									CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
-										if (!err) 
-											FS.readFile( toFile, "utf8", (err,code) => {
-												rev.Code = code;
-												if (!err)
-													sql.query( 
-														"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
-															Name: name,
-															Type: type,
-															Enabled: 1
-														}), rev ] );
-											});									
-									});
-								});	
+									else  // convert code to requested type
+										//CP.execFile("python", ["matlabtopython.py", "smop", fromFile, "-o", toFile], err => {
+										FS.writeFile( fromFile, code, "utf8", err => {
+											CP.exec( `sh ${from}to${to}.sh ${fromFile} ${toFile}`, (err, out) => {
+												if (!err) 
+													FS.readFile( toFile, "utf8", (err,code) => {
+														rev.Code = code;
+														if (!err)
+															sql.query( 
+																"INSERT INTO app.engines SET ? ON DUPLICATE KEY UPDATE ?", [ Copy(rev, {
+																	Name: name,
+																	Type: type,
+																	Enabled: 1
+																}), rev ] );
+													});									
+											});
+										});	
+								}
+								
+								else
+									Trace( `FAILED PUBLISHING ${name}` );
 							});
 						}
 
@@ -561,22 +556,27 @@ Document your usecase using markdown:
 
 				FS.writeFile(e6Tmp, code, "utf8", err => {
 					CP.exec( `cd /local/babel/node_modules/; .bin/babel ${e6Tmp} -o ${e5Tmp} --presets es2015,latest`, (err,log) => {
-						FS.readFile(e5Tmp, "utf8", (err,e5code) => {
-							//Log("jsmin>>>>", err);
+						try {
+							FS.readFile(e5Tmp, "utf8", (err,e5code) => {
+								//Log("jsmin>>>>", err);
 
-							if (err)
-								cb( err );
+								if ( err ) 
+									cb( null );
 
-							else {
-								var min = JSMIN.minify( e5code );
+								else {
+									var min = JSMIN.minify( e5code );
 
-								if (err = min.error) 
-									cb( err );
+									if ( min.error ) 
+										cb( null );
 
-								else   
-									cb( min.code );
-							}
-						});
+									else   
+										cb( min.code );
+								}
+							});
+						}
+						catch (err) {
+							cb( null );
+						}
 					});
 				});
 				break;						
@@ -652,6 +652,7 @@ Document your usecase using markdown:
 				cb( code.replace(/\n/g," ").replace(/\t/g," ").replace(/  /g,"").replace(/, /g,",").replace(/\. /g,".") );
 				break;
 
+			case "":
 			default:
 				cb( code );
 		}
