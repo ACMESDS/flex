@@ -6,7 +6,6 @@ Provides CRUD interface to virtual datasets as documented in README.md.
 
 @requires vm
 @requires http
-@requires crypto
 @requires url
 @requires cluster
 @requires fs
@@ -43,7 +42,6 @@ var
 	//STR = require("stream"), 	// pipe-able streams
 	CLUS = require('cluster'),		// Support for multiple cores	
 	HTTP = require('http'),				// HTTP interface
-	CRY = require('crypto'),			// Crypto interface
 	//NET = require('net'), 				// Network interface
 	URL = require('url'), 				// Network interface
 	FS = require('fs'),					// Need filesystem for crawling directory
@@ -207,12 +205,8 @@ var FLEX = module.exports = {
 		RX: {}
 	},
 
-	licenseOnDownload: false,
-	licenseOnRestart: false,
-
-	serviceID: function (url) {
-		return CRY.createHmac("sha256", "").update(url || "").digest("hex");
-	},
+	//licenseOnDownload: false,
+	//licenseOnRestart: false,
 
 	publishPlugins: function ( sql ) { //< publish all plugins
 		var 
@@ -262,7 +256,7 @@ var FLEX = module.exports = {
 	sendMail: sendMail,
 
 	errors: {
-		noLicense: new Error("Failed to prepare a product license"),
+		//noLicense: new Error("Failed to prepare a product license"),
 		badRequest: new Error("bad/missing request parameter(s)"),
 		noBody: new Error("no body keys"),
 		badBaseline: new Error("baseline could not reset change journal"),
