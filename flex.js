@@ -1,7 +1,9 @@
 ﻿// UNCLASSIFIED
 
 /*
-@class flex
+@class FLEX
+Provides CRUD interface to virtual datasets as documented in README.md.
+
 @requires vm
 @requires http
 @requires crypto
