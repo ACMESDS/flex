@@ -371,10 +371,23 @@ var FLEX = module.exports = {
 
 		//Log("run req",req);
 		FLEX.getContext( req.sql, req.table, req.query, ctx => {
+			function logger () {	// notebook logger
+				var args = [], msg = "";
+				for (var key in arguments) 
+					if ( key == "0" ) 
+						msg = arguments[0]+"";
+					else
+						args.push( arguments[key] );
+
+				"pipe".trace( msg+JSON.stringify(args), req, console.log );
+			}
+					
 			//Log("get ctx", ctx);	
 			if (ctx) {
 				Copy(ctx,req.query);
 				//Log("plugin req query", req.query);
+
+				ctx.Trace = logger;
 
 				if ( ctx.Pipe )  // let host chipping-regulating service run this engine
 					res( ctx );
