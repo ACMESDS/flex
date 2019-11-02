@@ -379,15 +379,15 @@ var FLEX = module.exports = {
 					else
 						args.push( arguments[key] );
 
-				"pipe".trace( msg+JSON.stringify(args), req, console.log );
+				req.table.trace( msg+JSON.stringify(args), req, console.log );
 			}
 					
 			//Log("get ctx", ctx);	
 			if (ctx) {
+				ctx.Trace = logger;
+
 				Copy(ctx,req.query);
 				//Log("plugin req query", req.query);
-
-				ctx.Trace = logger;
 
 				if ( ctx.Pipe )  // let host chipping-regulating service run this engine
 					res( ctx );
