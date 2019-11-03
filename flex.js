@@ -379,7 +379,7 @@ var FLEX = module.exports = {
 					else
 						args.push( arguments[key] );
 
-				req.table.trace( msg+JSON.stringify(args), req, console.log );
+				msg.trace( JSON.stringify(args), req, console.log );
 			}
 					
 			//Log("get ctx", ctx);	
