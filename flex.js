@@ -3859,6 +3859,7 @@ SELECT.info = function (req,res) {
 	});	
 };
 
+/*
 SELECT.gen = function (req, res) {
 	Log("gen", req.query);
 	$.gen(req.query, evs => {
@@ -3868,7 +3869,7 @@ SELECT.gen = function (req, res) {
 			y: evs.y._data
 		});
 	});
-};
+};  */
 
 [
 	function mailify( label, tags ) {
