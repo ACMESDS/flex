@@ -322,6 +322,7 @@ var FLEX = module.exports = {
 
 	getContext: function ( sql, host, query, cb ) {  //< callback cb(ctx) with primed plugin context or cb(null) if error
 
+		/*
 		function config(js, ctx) {
 			try {
 				VM.runInContext( js, VM.createContext(ctx)  );	
@@ -329,12 +330,12 @@ var FLEX = module.exports = {
 			catch (err) {
 				Log("config ctx", err);
 			}
-		}
+		} */
 
 		sql.forFirst("", "SELECT * FROM app.?? WHERE least(?,1) LIMIT 1", [host,query], ctx => {
 			if (ctx) {
 				ctx.Host = host;
-				if ( ctx.Config ) config(ctx.Config, ctx);
+				// if ( ctx.Config ) config(ctx.Config, ctx);
 
 				sql.getJsons( `app.${host}`, keys => {
 					keys.forEach( key => {
