@@ -3872,6 +3872,41 @@ SELECT.gen = function (req, res) {
 	});
 };  */
 
+SELECT.costs = function (req,res) {
+	const {sql,query} = req;
+	const {years, lag, vms} = query;
+	var 
+		docRate = 10e3,	// docs/yr
+		doc$ = 100e3*(2/2e3), // $/doc
+		minYr = 60*24*365, // mins/yr
+		cycleT = 5, // mins
+		boostT = 1,  // mins per boost cycle
+		batch = 5e3, 	// docs/cycle
+		Rcycles = docRate * lag / batch,	// cycles/yr in R state
+		Ocycles = docRate * 1 / batch,	// cycles/yr in Oper state
+		vmU = n => (cycleT + boostT*n) / minYr, 	// cpu utilization
+		vm$ = n => 5e3 * vms * vmU(n),	// $/cycle
+		R$ = n => vm$(n) * Rcycles, 		// $/yr
+		O$ = n => vm$(n) * Ocycles,			// $/yr
+		labU = 0.1,		// % docs labelled
+		lab$ = docRate * labU * (0.25/2e3),	// $/yr
+		x = [ 0 ],
+		y = [ [R$(1), doc$, 0] ];
+	
+	for (var n = 1; n<years; n++) {
+		var 
+			$ = lab$ + O$(n),  	// $/yr
+			$doc = $/docRate,	// $/doc process
+			y0 = y[n-1][0]+$,		// cum proc
+			y1 = y[n-1][1]+doc$; 	// cum acq
+				
+		x.push( n );
+		y.push( [y0, y1, y1/y0] );
+	} 
+	
+	res([x,y]);
+};
+
 [
 	function mailify( label, tags ) {
 		return this ? label.tag( "mailto:"+this.tag("?", tags || {}) ) : "missing email list";
