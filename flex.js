@@ -3876,8 +3876,9 @@ SELECT.costs = function (req,res) {
 	const {sql,query} = req;
 	const {years, lag, vms} = query;
 	var 
-		docRate = 10e3,	// docs/yr
-		doc$ = 100e3*(2/2e3), // $/doc assuming analyst spends 2 hrs/doc to create
+		docRate = 140e3/30 + 110*4,	// docs/yr chome+pulse 
+		nre$ = 2*2*100e3, 		// nre costs assuming 2 yrs dev by 2 FTEs if insourced (x3 if outsourced)
+		doc$ = 100e3*(10/2e3), // $/doc assuming analyst spends 2 hrs/doc to create (conservative but should not include mission etc costs)
 		minYr = 60*24*365, // mins/yr
 		cycleT = 5, // mins
 		boostT = 1,  // mins per boost cycle
@@ -3887,18 +3888,19 @@ SELECT.costs = function (req,res) {
 		vmU = n => (cycleT + boostT*n) / minYr, 	// cpu utilization with boosting overhead
 		vm$ = n => 5e3 * vms * vmU(n),	// $/cycle
 		labU = 0.1,		// % docs labelled
+		$nre = nre$ / years, 	//	simple amort
 		$lab = docRate * labU * 100e3 * (0.25/2e3),	// $/yr assuming analyst spends 1/4 hr to label
 		$proc = vm$(Rcycles),	// process 
 		x = [ 0 ],
-		y = [ [$proc, $proc+$lab, doc$*docRate] ];
+		y = [ [$proc, $proc+$lab, $proc+$lab+$nre, doc$*docRate] ];
 	
 	for (var n = 1; n<years; n++) {
 		var 
 			$proc = vm$(n*Ocycles),  	// $/yr process
 			$acq = doc$*docRate; 	// $/yr acquistion
-				
+
 		x.push( n );
-		y.push( [ y[n-1][0]+$proc, y[n-1][1]+$proc+$lab, y[n-1][2]+$acq] );
+		y.push( [ y[n-1][0]+$proc, y[n-1][1]+$proc+$lab, y[n-1][1]+$proc+$lab+$nre, y[n-1][3]+$acq] );
 	} 
 	
 	res([x,y]);
