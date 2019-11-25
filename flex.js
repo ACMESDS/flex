@@ -3877,31 +3877,28 @@ SELECT.costs = function (req,res) {
 	const {years, lag, vms} = query;
 	var 
 		docRate = 10e3,	// docs/yr
-		doc$ = 100e3*(2/2e3), // $/doc
+		doc$ = 100e3*(2/2e3), // $/doc assuming analyst spends 2 hrs/doc to create
 		minYr = 60*24*365, // mins/yr
 		cycleT = 5, // mins
 		boostT = 1,  // mins per boost cycle
 		batch = 5e3, 	// docs/cycle
 		Rcycles = docRate * lag / batch,	// cycles/yr in R state
 		Ocycles = docRate * 1 / batch,	// cycles/yr in Oper state
-		vmU = n => (cycleT + boostT*n) / minYr, 	// cpu utilization
+		vmU = n => (cycleT + boostT*n) / minYr, 	// cpu utilization with boosting overhead
 		vm$ = n => 5e3 * vms * vmU(n),	// $/cycle
-		R$ = n => vm$(n) * Rcycles, 		// $/yr
-		O$ = n => vm$(n) * Ocycles,			// $/yr
 		labU = 0.1,		// % docs labelled
-		lab$ = docRate * labU * (0.25/2e3),	// $/yr
+		$lab = docRate * labU * 100e3 * (0.25/2e3),	// $/yr assuming analyst spends 1/4 hr to label
+		$proc = vm$(Rcycles),	// process 
 		x = [ 0 ],
-		y = [ [R$(1), doc$, 0] ];
+		y = [ [$proc, $proc+$lab, doc$*docRate] ];
 	
 	for (var n = 1; n<years; n++) {
 		var 
-			$ = lab$ + O$(n),  	// $/yr
-			$doc = $/docRate,	// $/doc process
-			y0 = y[n-1][0]+$,		// cum proc
-			y1 = y[n-1][1]+doc$; 	// cum acq
+			$proc = vm$(n*Ocycles),  	// $/yr process
+			$acq = doc$*docRate; 	// $/yr acquistion
 				
 		x.push( n );
-		y.push( [y0, y1, y1/y0] );
+		y.push( [ y[n-1][0]+$proc, y[n-1][1]+$proc+$lab, y[n-1][2]+$acq] );
 	} 
 	
 	res([x,y]);
