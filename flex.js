@@ -3890,20 +3890,10 @@ SELECT.costs = function (req,res) {
 		labU = 0.1,		// % docs labelled
 		$nre = nre$ / years, 	//	simple amort
 		$lab = docRate * labU * 100e3 * (0.25/2e3),	// $/yr assuming analyst spends 1/4 hr to label
-		$proc = vm$(Rcycles),	// process 
-		x = [ 0 ],
-		y = [ [$proc, $proc+$lab, $proc+$lab+$nre, doc$*docRate] ];
+		$acq = doc$*docRate, 	// doc acquistion
+		rtn = $(years, (n,rtn) => rtn[n] = {ID:n, yr: n, proc: n ? vm$(n*Ocycles)  : vm$(Rcycles), lab: $lab, nre: $nre, acq: $acq} );
 	
-	for (var n = 1; n<years; n++) {
-		var 
-			$proc = vm$(n*Ocycles),  	// $/yr process
-			$acq = doc$*docRate; 	// $/yr acquistion
-
-		x.push( n );
-		y.push( [ y[n-1][0]+$proc, y[n-1][1]+$proc+$lab, y[n-1][1]+$proc+$lab+$nre, y[n-1][3]+$acq] );
-	} 
-	
-	res([x,y]);
+	res(rtn);
 };
 
 [
