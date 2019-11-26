@@ -3890,10 +3890,14 @@ SELECT.costs = function (req,res) {
 		labU = 0.1,		// % docs labelled
 		$nre = nre$ / years, 	//	simple amort
 		$lab = docRate * labU * 100e3 * (0.25/2e3),	// $/yr assuming analyst spends 1/4 hr to label
-		$acq = doc$*docRate, 	// doc acquistion
-		rtn = $(years, (n,rtn) => rtn[n] = {ID:n, yr: n, proc: n ? vm$(n*Ocycles)  : vm$(Rcycles), lab: $lab, nre: $nre, acq: $acq} );
+		$acq = doc$*docRate; 	// doc acquistion
 	
-	res(rtn);
+		try {
+			res( $(years, (n,rtn) => rtn[n] = {ID:n, yr: n, proc: n ? vm$(n*Ocycles)  : vm$(Rcycles), lab: $lab, nre: $nre, acq: $acq} ));
+		}
+		catch (err) {
+			res( new Error("bad parameters") );
+		}
 };
 
 [
