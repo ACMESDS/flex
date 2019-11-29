@@ -3901,8 +3901,7 @@ SELECT.costs = function (req,res) {
 		cost = 0,
 		acq$ = 0,
 		lab$ = 0,
-		proc$ = 0,
-		nre$ = 0;
+		proc$ = 0;
 	
 		try {
 			res( $(samples, (k,rtn) => {
@@ -3911,7 +3910,7 @@ SELECT.costs = function (req,res) {
 				queue += floor(docRate * dt);
 				acq$ += $acq * dt,
 				lab$ += $lab * dt,
-				nre$ += $nre * dt;
+				nre$ -= (nre$>0) ? $nre * dt : 0;
 				
 				if ( queue >= batch ) {
 					cycles++;
