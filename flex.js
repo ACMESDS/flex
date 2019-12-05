@@ -3879,7 +3879,7 @@ SELECT.costs = function (req,res) {
 		floor = Math.floor,
 		docRate = 140e3/30 + 110*4,	// docs/yr chome+pulse 
 		$vm = 5e3, 		// $/yr vm cost
-		nre$ = 2*2*100e3, 		// nre costs assuming 2 yrs dev by 2 FTEs if insourced (x3 if outsourced)
+		nre$ = 2*(2*100e3+4*$vm), 		// nre costs assuming 2 yrs dev by 2 in-sourced FTEs (x3 if outsourced) + 4 VMs at 100%
 		doc$ = 100e3*(10/2e3), // $/doc assuming analyst spends 2 hrs/doc to create (conservative but should not include mission etc costs)
 		minYr = 60*24*365, // mins/yr
 		cycleT = 5, // mins
@@ -3903,13 +3903,15 @@ SELECT.costs = function (req,res) {
 		lab$ = 0,
 		proc$ = 0;
 	
+	// http://localhost:8080/plot.view?debug=0&w=500&h=500&min=0,-10&max=25,600&src=/costs?lag=10&vms=10&years=20&ups=24&_calc={Q:[yr,queue*1e-2],%20prc:%20[yr,(proc+lab)*1e-3],%20acq:%20[yr,acq*1e-6]}
+	
 		try {
 			res( $(samples, (k,rtn) => {
-				rtn[ k ] = {ID:k, yr: t, lambda: docRate, cycles: cycles, queue: queue, proc: proc$, lab: lab$, nre: nre$, acq: acq$}
+				rtn[ k ] = {ID:k, yr: t, lambda: docRate, cycles: cycles, queue: queue, proc: proc$, lab: lab$, nre: nre$, acq: acq$};
 				t += dt;
 				queue += floor(docRate * dt);
-				acq$ += $acq * dt,
-				lab$ += $lab * dt,
+				acq$ += $acq * dt;
+				lab$ += $lab * dt;
 				nre$ -= (nre$>0) ? $nre * dt : 0;
 				
 				if ( queue >= batch ) {
