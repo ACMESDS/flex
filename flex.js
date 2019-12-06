@@ -3880,7 +3880,7 @@ SELECT.costs = function (req,res) {
 		docRate = 140e3/30 + 110*4,	// docs/yr chome+pulse 
 		$vm = 5e3, 		// $/yr vm cost
 		nre$ = 2*(2*100e3+4*$vm), 		// nre costs assuming 2 yrs dev by 2 in-sourced FTEs (x3 if outsourced) + 4 VMs at 100%
-		doc$ = 100e3*(10/2e3), // $/doc assuming analyst spends 2 hrs/doc to create (conservative but should not include mission etc costs)
+		doc$ = 100e3*(10/2e3), // $/doc assuming 10 hrs/doc reporters time (conservative - could include mission costs)
 		minYr = 60*24*365, // mins/yr
 		cycleT = 5, // mins
 		boostT = 1,  // mins per boost cycle
@@ -3903,7 +3903,10 @@ SELECT.costs = function (req,res) {
 		lab$ = 0,
 		proc$ = 0;
 	
-	// http://localhost:8080/plot.view?debug=0&w=500&h=500&min=0,-10&max=25,600&src=/costs?lag=10&vms=10&years=20&ups=24&_calc={Q:[yr,queue*1e-2],%20prc:%20[yr,(proc+lab)*1e-3],%20acq:%20[yr,acq*1e-6]}
+	// http://localhost:8080/plot.view?debug=0&w=500&h=500&min=0,-10&max=25,600&ds=/costs?lag=10&vms=10&years=20&ups=24&_calc={Q:[yr,queue*1e-2],prc:[yr,(proc+lab)*1e-3],acq:[yr,acq*1e-6]}
+	// http://localhost:8080/plot.view?debug=0&w=500&h=500&line=red,blue,green,black,orange,yellow&min=-2,-0.1&max=22,1.1&ds=/costs?lag=30&vms=10&years=20&ups=24&_calc={BKLOG:[yr,queue/150e3],PROC:[yr,proc/150],LAB:[yr,lab/150e3],ACQ:[yr,acq/50e6],CY:[yr,cycles/50],NRE:[yr-2,nre/450e3]}
+	
+	Log(docRate, lag, queue);
 	
 		try {
 			res( $(samples, (k,rtn) => {
