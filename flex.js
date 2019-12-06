@@ -3903,9 +3903,7 @@ SELECT.costs = function (req,res) {
 		lab$ = 0,
 		proc$ = 0;
 	
-	// http://localhost:8080/plot.view?debug=0&w=500&h=500&min=0,-10&max=25,600&ds=/costs?lag=10&vms=10&years=20&ups=24&_calc={Q:[yr,queue*1e-2],prc:[yr,(proc+lab)*1e-3],acq:[yr,acq*1e-6]}
-	// http://localhost:8080/plot.view?debug=0&w=500&h=500&line=red,blue,green,black,orange,yellow&min=-2,-0.1&max=22,1.1&ds=/costs?lag=30&vms=10&years=20&ups=24&_calc={BKLOG:[yr,queue/150e3],PROC:[yr,proc/150],LAB:[yr,lab/150e3],ACQ:[yr,acq/50e6],CY:[yr,cycles/50],NRE:[yr-2,nre/450e3]}
-	
+	// http://localhost:8080/plot.view?debug=0&w=500&h=500&line=red,blue,green,black,orange,yellow&min=-2,-0.1&max=22,1.1&ds=/costs?lag=30&vms=10&years=20&ups=24&_calc={BKLOG:[yr,queue/150e3],PROC:[yr,proc/100e3],LAB:[yr,lab/150e3],ACQ:[yr,acq/50e6],CY:[yr,cycles/50],NRE:[yr-2,nre/450e3]}
 	Log(docRate, lag, queue);
 	
 		try {
@@ -3920,7 +3918,7 @@ SELECT.costs = function (req,res) {
 				if ( queue >= batch ) {
 					cycles++;
 					queue -= batch;
-					proc$ += vm$(cycles);
+					proc$ += (t<2) ? 4 * $vm * dt : vm$(cycles);	// assuming 4 vms at 100% util during research phase
 				}
 				//Log(k,floor(t), cycles,queue);
 			}));
