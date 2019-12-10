@@ -3872,6 +3872,7 @@ SELECT.gen = function (req, res) {
 	});
 };  */
 
+/*
 SELECT.costs = function (req,res) {
 	const {sql,query} = req;
 	const {years, lag, vms, ups} = query;
@@ -3927,6 +3928,7 @@ SELECT.costs = function (req,res) {
 			res( new Error("bad parameters") );
 		}
 };
+*/
 
 [
 	function mailify( label, tags ) {
